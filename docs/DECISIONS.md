@@ -22,3 +22,7 @@ Pending verification (record results here):
 - Bedrock model IDs and region (section 11.3); Gemini free-tier model/limits.
 - Exact versions of Next.js, Zod, AI SDK, discord.js and the Kubernetes client. Vitest is not used at scaffold time.
 - Crew app manifest details and socket-proxy restart granularity.
+
+## Pending decisions
+
+- ORM for `packages/store`: the bootstrap names Drizzle. Prisma 7 was considered and deferred. The team library baseline assigns Prisma 7 to NestJS APIs only, and Bun-first favors `Bun.SQL`. Keep Drizzle with Bun drivers (`drizzle-orm/bun-sqlite`, `drizzle-orm/bun-sql`) as the working assumption. Revisit when `packages/store` is implemented; open a wayfinder ticket then. Owner has not confirmed a final choice.

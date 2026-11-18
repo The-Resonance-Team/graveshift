@@ -35,6 +35,14 @@ approve | Bless | Ban phước | Approve a runtime action
 reject | Banish | Trục xuất | Reject a runtime action
 silence | Salt line | Vòng muối | Silence signals for a service
 postmortem | Autopsy | Khám nghiệm | Postmortem report
+dashboard | Graveyard | Nghĩa địa | Dashboard that shows every watched service
+diagnosis | Diagnosis | Chẩn đoán | Stated root cause with evidence and confidence
+audit log | Audit chain | Chuỗi kiểm toán | Ordered, tamper-evident record of decisions
+agent | Ghost | Hồn ma | An AI agent in the crew
+watcher | Wraith | Ma theo dõi | The ghost that watches signals
+diagnoser | Medium | Thầy đồng | The ghost that builds a diagnosis
+fixer | Exorcist | Thầy trừ tà | The ghost that prepares a draft fix pull request
+notifier | Banshee | Ma khóc | The ghost that notifies people and collects approvals
 
 ## Responsive rules
 
