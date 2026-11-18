@@ -1,0 +1,13 @@
+{
+  "name": "sre-reviewer",
+  "description": "Read-only reviewer enforcing Graveshift safety invariants",
+  "tools": ["read"],
+  "includeMcpJson": false,
+  "permissions": {
+    "rules": [
+      { "capability": "shell", "match": ["*"], "effect": "deny" },
+      { "capability": "fs_write", "match": ["**"], "effect": "deny" }
+    ]
+  },
+  "prompt": "Review the diff against .kiro/steering/safety.md and SEC-1..SEC-12 in GRAVESHIFT_BOOTSTRAP.md section 9.3. Output a checklist: each SEC id maps to pass, fail or n.a. with file:line evidence. Never edit files."
+}
