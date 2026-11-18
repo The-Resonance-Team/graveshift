@@ -1,0 +1,16 @@
+node_modules/
+dist/
+.next/
+coverage/
+.turbo/
+build/
+*.log
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# .kiro is a required submission artifact. Never ignore the directory.
+# Only the local MCP settings file is kept out of the repository.
+.kiro/settings/mcp.json
+.kiro/settings/mcp.local.json

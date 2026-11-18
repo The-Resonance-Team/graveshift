@@ -1,0 +1,8 @@
+# SCAFFOLD ONLY - kustomize base. Add overlays/kind later (bootstrap doc section 6).
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+resources:
+  - rbac.yaml
+  - networkpolicy.yaml
+  # - deployment.yaml   # TODO (real stack): graveshift Deployment
+  # - actuator.yaml     # TODO (real stack): graveshift-actuator Deployment

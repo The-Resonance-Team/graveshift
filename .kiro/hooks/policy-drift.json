@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "policy-drift",
+      "description": "Re-check policy requirements when policy source is saved",
+      "trigger": "PostFileSave",
+      "matcher": "policy\\.example\\.yaml|packages/policy/.*",
+      "action": {
+        "type": "agent",
+        "prompt": "Re-read .kiro/specs/policy-engine/requirements.md, list unmet requirements, update tests."
+      }
+    }
+  ]
+}

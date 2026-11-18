@@ -1,0 +1,20 @@
+# SCAFFOLD ONLY - demo app skeleton (haunted-candy-shop). Not working.
+services:
+  api:
+    # Fastify api: /healthz + /metrics; fault via POST /__haunt.
+    image: haunted-candy-shop/api:PLACEHOLDER
+    ports: ['3000:3000']
+
+  worker:
+    # Background worker: memory-leech / restart-loop scenarios.
+    image: haunted-candy-shop/worker:PLACEHOLDER
+
+  postgres:
+    image: postgres:PLACEHOLDER
+    environment:
+      POSTGRES_PASSWORD: '<set via env, never commit>'
+
+  prometheus:
+    image: prom/prometheus:PLACEHOLDER
+    volumes:
+      - ../compose/prometheus.yml:/etc/prometheus/prometheus.yml:ro

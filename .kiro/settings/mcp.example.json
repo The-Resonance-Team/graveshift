@@ -1,0 +1,32 @@
+{
+  "mcpServers": {
+    "fetch": { "command": "uvx", "args": ["mcp-server-fetch"], "disabled": false },
+    "github": {
+      "command": "docker",
+      "args": [
+        "run",
+        "-i",
+        "--rm",
+        "-e",
+        "GITHUB_PERSONAL_ACCESS_TOKEN",
+        "ghcr.io/github/github-mcp-server"
+      ],
+      "env": { "GITHUB_PERSONAL_ACCESS_TOKEN": "<set locally, never commit>" },
+      "disabled": false
+    },
+    "kubernetes": { "command": "<VERIFY: a Kubernetes MCP server>", "args": [], "disabled": true },
+    "graveshift": {
+      "command": "bun",
+      "args": ["run", "--filter", "@graveshift/mcp-server", "start:stdio"],
+      "disabled": false,
+      "autoApprove": [
+        "list_services",
+        "list_incidents",
+        "get_incident",
+        "get_diagnosis",
+        "get_audit_log",
+        "verify_audit_chain"
+      ]
+    }
+  }
+}

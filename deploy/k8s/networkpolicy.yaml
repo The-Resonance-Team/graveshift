@@ -1,0 +1,14 @@
+# SCAFFOLD ONLY - egress allowlist skeleton (SEC-8). Not a working policy.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: graveshift-egress
+  namespace: graveshift
+spec:
+  podSelector:
+    matchLabels:
+      app: graveshift
+  policyTypes: [Egress]
+  egress:
+    # TODO: allow only kube-apiserver, Prometheus, LLM / GitHub / Discord endpoints.
+    - {}

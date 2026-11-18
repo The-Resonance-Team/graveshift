@@ -1,0 +1,16 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "pbt-on-guardrails",
+      "description": "Run guardrail property tests when a guardrail source file is saved",
+      "trigger": "PostFileSave",
+      "matcher": "packages/(policy|redactor|actuator|fixer)/|packages/core/src/state",
+      "action": {
+        "type": "command",
+        "command": "bun test --check packages/policy packages/redactor packages/actuator packages/core/src/state packages/fixer"
+      },
+      "timeout": 180
+    }
+  ]
+}

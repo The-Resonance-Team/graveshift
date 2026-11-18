@@ -1,0 +1,7 @@
+# SCAFFOLD ONLY - default values. No real secrets.
+replicaCount: 1
+image:
+  repository: graveshift/daemon
+  tag: PLACEHOLDER
+mode: propose # dry-run | propose | act
+resources: {}

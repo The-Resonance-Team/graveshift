@@ -1,0 +1,13 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "typecheck-on-save",
+      "description": "Typecheck + lint after the agent saves a TS file",
+      "trigger": "PostFileSave",
+      "matcher": "\\.(ts|tsx)$",
+      "action": { "type": "command", "command": "bun check && bun lint --no-script" },
+      "timeout": 180
+    }
+  ]
+}
