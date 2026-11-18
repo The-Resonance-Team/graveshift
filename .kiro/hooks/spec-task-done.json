@@ -1,0 +1,14 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "spec-task-done",
+      "description": "Record each completed spec task in the Kiro usage build log",
+      "trigger": "PostTaskExec",
+      "action": {
+        "type": "agent",
+        "prompt": "Append to KIRO_USAGE.md#build-log: date (ICT), spec, task, what Kiro generated, what you corrected and why."
+      }
+    }
+  ]
+}

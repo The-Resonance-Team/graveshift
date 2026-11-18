@@ -1,0 +1,23 @@
+# SCAFFOLD / EXAMPLE - from bootstrap doc section 11.4. No real secrets.
+# Replace all PLACEHOLDER model IDs and prices after verifying the provider catalogs.
+llm:
+  chain: [bedrock, gemini, ollama] # fallback: bedrock -> gemini -> ollama -> rules-only
+  bedrock:
+    region: ap-southeast-1 # verify model availability in this region
+    models:
+      fast: '<PLACEHOLDER_MODEL_ID>' # e.g. Claude Haiku / Nova Lite class
+      smart: '<PLACEHOLDER_MODEL_ID>' # e.g. Claude Sonnet class
+  gemini:
+    models:
+      fast: '<PLACEHOLDER_MODEL_ID>'
+      smart: '<PLACEHOLDER_MODEL_ID>'
+  ollama:
+    baseUrl: 'http://ollama:11434'
+    models:
+      fast: '<PLACEHOLDER_MODEL>'
+      smart: '<PLACEHOLDER_MODEL>'
+  timeoutMs: 30000
+  maxRetries: 1
+  priceTableUsdPer1M:
+    # "<model>": { in: 0, out: 0 }   # fill from provider pricing pages
+    '<PLACEHOLDER_MODEL_ID>': { in: 0, out: 0 }

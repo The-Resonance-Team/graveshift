@@ -1,0 +1,44 @@
+# SCAFFOLD / EXAMPLE - trimmed from bootstrap doc section 9.1. No real secrets.
+version: 1
+mode: propose # dry-run | propose | act (env may only move toward safer modes)
+approvers:
+  discordUserIds: ['123456789012345678'] # placeholder id - replace
+  discordRoleIds: []
+limits:
+  maxOpenPrsPerHour: 3
+  maxActionsPerServicePer10Min: 1
+  maxDiagnosisLoops: 2
+  llmDailyBudgetUsd: 2.00
+llm:
+  minConfidenceForPr: 0.6
+  minConfidenceForAction: 0.75
+github:
+  repos:
+    - repo: 'xiro/haunted-candy-shop'
+      services: ['api', 'worker']
+      baseBranch: main
+      branchPrefix: 'graveshift/'
+      draft: true
+      allowedPaths: ['src/**', 'config/**', 'migrations/**', 'test/**']
+      forbiddenPaths: ['.github/**', '**/*.pem', '**/.env*', 'deploy/**', 'policy*.yaml']
+      maxFilesChanged: 5
+      maxLinesChanged: 200
+rules: # first match wins; a deny on the target service always wins; default = deny
+  - id: pr-for-code-bugs
+    action: open_pr
+    when: { category: [code_bug, config_error, deploy_regression] }
+    effect: allow
+  - id: restart-on-crashloop
+    action: [restart_service, rollout_restart]
+    when: { services: [api, worker], signals: [restart_loop, oom_killed] }
+    effect: require_approval
+  - id: scale-bounded
+    action: scale
+    when: { services: [worker] }
+    params: { replicas: { min: 1, max: 3 } }
+    effect: require_approval
+  - id: never-touch-db
+    action: '*'
+    when: { services: [postgres] }
+    effect: deny
+default: deny

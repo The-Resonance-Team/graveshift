@@ -1,0 +1,13 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "block-dangerous-shell",
+      "description": "Block destructive shell commands during development (exit code 2 blocks the tool)",
+      "trigger": "PreToolUse",
+      "matcher": "shell",
+      "action": { "type": "command", "command": "node scripts/kiro/guard-shell.mjs" },
+      "timeout": 10
+    }
+  ]
+}

@@ -1,0 +1,15 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "test-companion",
+      "description": "Create or update the sibling test when a new source file is saved",
+      "trigger": "PostFileSave",
+      "matcher": "packages/[^/]+/src/.*\\.ts$",
+      "action": {
+        "type": "agent",
+        "prompt": "Create or update the sibling *.test.ts. For guardrail packages add fast-check properties matching .kiro/specs/<pkg>/requirements.md."
+      }
+    }
+  ]
+}

@@ -1,0 +1,7 @@
+# SCAFFOLD ONLY - Helm chart (stretch goal). Not a working chart.
+apiVersion: v2
+name: graveshift
+description: 'Scaffold: self-hosted AI SRE crew. Not a working chart.'
+type: application
+version: 0.1.0
+appVersion: '0.0.0-PLACEHOLDER'
