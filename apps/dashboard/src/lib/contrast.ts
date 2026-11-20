@@ -1,5 +1,5 @@
 // WCAG 2.1 relative luminance and contrast ratio formula.
-const LINEAR_THRESHOLD = 0.03928;
+const LINEAR_THRESHOLD = 0.04045;
 const LINEAR_DIVISOR = 12.92;
 const GAMMA_OFFSET = 0.055;
 const GAMMA_DIVISOR = 1.055;
