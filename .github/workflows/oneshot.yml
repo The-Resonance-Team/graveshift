@@ -13,15 +13,23 @@ on:
         required: true
         type: string
       branch_slug:
-        description: Safe git branch slug for the draft pull request.
+        description: Graveshift branch slug that receives the patch.
         required: true
         type: string
       patch_payload:
         description: Guarded patch payload supplied by the platform.
         required: true
         type: string
+      policy_decision:
+        description: Recorded policy decision; effect must be allow for open_pr.
+        required: true
+        type: string
       pr_title:
         description: Title of the draft pull request.
+        required: true
+        type: string
+      base_ref:
+        description: Base branch for the draft pull request, including stacked PRs.
         required: true
         type: string
 
@@ -29,7 +37,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: oneshot-dispatch-${{ github.ref }}
+  group: oneshot-dispatch-${{ inputs.work_item_id }}
   cancel-in-progress: false
 
 jobs:
@@ -40,7 +48,9 @@ jobs:
       incident_ref: ${{ inputs.incident_ref }}
       branch_slug: ${{ inputs.branch_slug }}
       patch_payload: ${{ inputs.patch_payload }}
+      policy_decision: ${{ inputs.policy_decision }}
       pr_title: ${{ inputs.pr_title }}
+      base_ref: ${{ inputs.base_ref }}
     secrets:
       model_api_key: ${{ secrets.MODEL_API_KEY }}
-      github_token: ${{ secrets.GRAVESHIFT_PR_TOKEN }}
+      pr_token: ${{ secrets.GRAVESHIFT_PR_TOKEN }}

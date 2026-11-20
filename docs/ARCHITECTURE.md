@@ -199,7 +199,11 @@ The daemon keeps only health and a local command inbox (**not built**). It liste
 
 ## GitHub Actions
 
-Actions runs one-shot jobs only. The reusable `workflow_call` workflow turns a platform-supplied payload into a patch file and opens one draft pull request. A thin `workflow_dispatch` workflow calls it so a person can start the same jobs. The platform invokes the reusable workflow. No daemon, no long-running server, no merge and no runtime action run in Actions. Self-host the daemon (`apps/daemon`) for the long-running work.
+Actions runs one-shot jobs only. The platform invokes the reusable `workflow_call` workflow with a work item id, a `graveshift/` branch slug, a base ref, a guarded patch payload, a recorded policy decision and a PR title. The `patch` job validates the slug and the recorded `allow`, checks the payload size, parses it with `packages/patch` schemas and the repo rules, redacts file content and writes a sanitized `patch.json` artifact. It runs with `contents: read` only.
+
+The `open-pr` job downloads that artifact, validates it again, writes the files, commits them to the `graveshift/` branch, pushes that branch and opens one draft pull request. `--base` comes from the `base_ref` input so a stacked PR targets its parent branch, not the repository default. No daemon, no long-running server, no merge and no runtime action run in Actions. Self-host the daemon (`apps/daemon`) for the long-running work.
+
+Only a person with write access to the repository may run the thin `workflow_dispatch` workflow by hand. It forwards the typed inputs and secrets unchanged; the platform records `policy_decision`, so a person does not type a permission grant. `pr_token` must be a fine-grained, repository-scoped PAT that can push to `graveshift/` branches and open draft PRs. The `permissions` block bounds only `GITHUB_TOKEN`: it does not bound a caller-supplied token, so keep the PAT narrowly scoped and rotate it. The model key is masked before use and is never printed.
 
 ## Decisions
 
