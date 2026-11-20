@@ -7,7 +7,6 @@ This describes the code as it exists. Items that are not built are marked **not 
 | Component | Path | Role |
 | --- | --- | --- |
 | Daemon | `apps/daemon` | Wires watcher, diagnoser, policy, optional fixer and the audit log. Serves an HTTP API and Server-Sent Events (SSE) with `Bun.serve`. |
-| Dashboard | `apps/dashboard` | Next.js graveyard UI. Proxies `/api/*` to the daemon. |
 | Core | `packages/core` | Zod schemas (source of truth), incident state machine, circuit-breaker helper, config loader, `RuntimeSource` contract. |
 | Store | `packages/store` | Hash-chained, append-only audit log on `bun:sqlite` through Drizzle. |
 | Policy | `packages/policy` | YAML loader and `decide()`. Pure and deterministic. |

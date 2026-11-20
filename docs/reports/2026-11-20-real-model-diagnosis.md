@@ -1,6 +1,6 @@
 # Real-model diagnosis report (2026-11-20)
 
-Result: all three diagnoser fixtures pass against the real model after one prompt change (round 2). The Compose demo plus the locally served dashboard also produced an `llm` diagnosis for the injected `null-candy` haunt.
+Result: all three diagnoser fixtures pass against the real model after one prompt change (round 2). The Compose demo also produced an `llm` diagnosis for the injected `null-candy` haunt.
 
 ## Method
 
@@ -57,10 +57,7 @@ Steps and output (secrets omitted):
 3. `GET localhost:2602/api/incidents` showed the incident in state `diagnosed`. The timeline entry read `code_bug (93%, llm): The API code calls candy.price.toFixed without validating that candy.price is non-null, causing a TypeError when price is null.` The evidence refs were `log:1`, `log:2` and `log:3`.
 4. The daemon log line: `llm: {task: diagnose, status: ok, provider: openai-compatible, model: qwen3.8-flash-next, tokensIn: 804, tokensOut: 245, costUsd: 0}`.
 5. `GET /api/audit/verify` returned `{"ok":true,"length":4}`.
-6. The dashboard is not part of the Compose files. It was served locally on port 2604 with `DAEMON_URL=http://127.0.0.1:2602` and opened in Chrome. Its DOM showed the `api` grave as "Haunting" and "incident is diagnosed", the heading "Diagnosis code_bug, 93% confidence, llm", the root cause about `candy.price.toFixed`, evidence items `log:1` and `log:8`, and the timeline entry "diagnosis code_bug (93%, llm)". The five-phase progress showed Wraith through Exorcist done and Resolved and Autopsy pending.
-7. `docker compose down` removed the containers and networks. No graveshift containers remained.
-
-The browser evidence proves the diagnosis reached the dashboard through the same-origin `/api/*` proxy.
+6. `docker compose down` removed the containers and networks. No graveshift containers remained.
 
 ## Limitations
 
@@ -70,7 +67,6 @@ The browser evidence proves the diagnosis reached the dashboard through the same
 - The secret check relies on the redactor patterns plus the live credential values. The fixtures hold no secrets, so a leak was not exercised here. Redaction before the LLM is covered by the redactor and gateway tests.
 - The Compose run covered `null-candy` only. `memory-leech` and `wrong-potion` were not injected in Compose.
 - A first Compose attempt used a stale named Postgres volume with an older password, so the API was unhealthy. The volumes were recreated before the recorded run.
-- The dashboard was served on the host, not in Compose. The browser evidence is one snapshot, not a full UX pass.
 - The model endpoint is a private address from `graveshift.config.example.yaml`, so the run reproduces only on a machine that can reach it.
 
 ## Reproduce

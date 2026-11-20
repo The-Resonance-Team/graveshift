@@ -32,8 +32,8 @@ The daemon API is on `127.0.0.1:2602`. The demo api and worker publish ports 260
 
 ## Watch the Haunting
 
-1. Open the dashboard: `cd apps/dashboard && DAEMON_URL=http://127.0.0.1:2602 bun run build && bun run start`, then visit `http://localhost:2604`. The Haunt panel can inject a scenario with a 30 s cooldown (the daemon needs `HAUNT_TOKEN`).
-2. Inject `null-candy` (below). Within seconds the api grave shows a Haunting, and the timeline moves from Wraith to Medium. Diagnosis uses one configured AI SDK model (`llm` in `graveshift.config.yaml`, key in `OPENAI_COMPATIBLE_API_KEY`). If the model is unavailable or its output is invalid, the diagnosis comes from the rules-only fallback and says so.
+1. No dashboard ships in this branch. Use the daemon API and the curl commands below. A Next.js UI will be scaffolded separately.
+2. Inject `null-candy` (below). Within seconds the daemon reports a `diagnosed` incident for `api`. Diagnosis uses one configured AI SDK model (`llm` in `graveshift.config.yaml`, key in `OPENAI_COMPATIBLE_API_KEY`). If the model is unavailable or its output is invalid, the diagnosis comes from the rules-only fallback and says so.
 3. Check the audit chain: `curl localhost:2602/api/audit/verify` returns `{"ok":true,"length":N}`.
 
 What does not happen yet: no draft pull request opens, because no patch generator is wired; no Discord message is sent; the daemon has no approval endpoint, so the `memory-leech` restart cannot be blessed. The actuator rejects an unsigned request with 403, which you can check with `curl -X POST localhost:2603/actions` from inside the network.
@@ -85,4 +85,4 @@ docker compose -f deploy/compose/graveshift.compose.yml -f deploy/compose/demo.c
 
 ## Verified locally
 
-Run on Docker with the demo compose file: `null-candy` (500 then 200 after reset), `slow-curse` (1.8 s then 9 ms), `wrong-potion` (503 then 200) and `memory-leech` (Docker emitted `oom` and `die` with exit code 137). The Docker source, reading through the proxy, turned those events into `oom` and `restart` signals. Kubernetes behavior is covered by fixture tests only; no cluster was available. The daemon run on Docker produced SSE within about 5 s of a haunt, reached `diagnosed` with category `code_bug`, and the audit chain verified. `docs/qa/coverage-matrix.md` lists the 21 dashboard checks.
+Run on Docker with the demo compose file: `null-candy` (500 then 200 after reset), `slow-curse` (1.8 s then 9 ms), `wrong-potion` (503 then 200) and `memory-leech` (Docker emitted `oom` and `die` with exit code 137). The Docker source, reading through the proxy, turned those events into `oom` and `restart` signals. Kubernetes behavior is covered by fixture tests only; no cluster was available. The daemon run on Docker produced SSE within about 5 s of a haunt, reached `diagnosed` with category `code_bug`, and the audit chain verified.

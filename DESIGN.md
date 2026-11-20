@@ -11,7 +11,7 @@ This file holds aesthetic tokens, accessibility rules and the user-facing copy c
 | Pumpkin | `#FF7A1A` | Warning |
 | Blood | `#E5484D` | Critical |
 
-Neutral tokens used by the dashboard (`apps/dashboard/src/app/globals.css`, `@theme inline`):
+Neutral tokens used by the dashboard (`globals.css`, `@theme inline`):
 
 | Token | Hex | Meaning |
 | --- | --- | --- |
@@ -20,7 +20,7 @@ Neutral tokens used by the dashboard (`apps/dashboard/src/app/globals.css`, `@th
 | Bone | `#e6edf3` | Primary text |
 | Fog | `#a3adbb` | Secondary text |
 
-Contrast pairs checked by `apps/dashboard/src/lib/dashboard.test.ts`: Bone, Fog, Ectoplasm, Pumpkin and Blood text on Night and Crypt; Bone and Fog on Mist; Night text on Pumpkin and Ectoplasm buttons. Every pair is at least 4.5:1. Status colours (Ectoplasm, Pumpkin, Blood) never sit on Mist, because Blood on Mist is below 4.5:1; hover states on status cards darken to Night instead.
+Contrast pairs checked by the dashboard test suite: Bone, Fog, Ectoplasm, Pumpkin and Blood text on Night and Crypt; Bone and Fog on Mist; Night text on Pumpkin and Ectoplasm buttons. Every pair is at least 4.5:1. Status colours (Ectoplasm, Pumpkin, Blood) never sit on Mist, because Blood on Mist is below 4.5:1; hover states on status cards darken to Night instead.
 
 ## Voice
 
@@ -64,13 +64,8 @@ notifier | Banshee | Ma khóc | The ghost that notifies people and collects appr
 - Content width caps at `max-w-7xl`. Long values (commands, branch names) scroll inside their block with `overflow-x-auto` instead of widening the page.
 - Every control stays reachable below 1024 px; the dashboard has no hidden navigation.
 
-## Component system
-
-- The dashboard builds with Astryx (`@astryxdesign/core`) components and page-template frames. The Graveshift theme extends the Gothic theme and maps the palette above to Astryx color tokens.
-- Component slots use Astryx `Layout`, `Card`, `List`, `StatusDot`, `Token`, `Stepper`, `Step`, `RadioList`, `SegmentedControl`, `Tooltip` and `Button`. Tailwind utilities remain for the palette tokens asserted by tests; no second styling system is introduced.
-
 ## Icon vocabulary
 
-- The dashboard ships no standalone icons. Status is shown with Astryx `StatusDot` next to a text label, so meaning never depends on colour or a glyph alone.
+- The dashboard ships no icons. Status is shown with a coloured dot (`aria-hidden`) next to a text label, so meaning never depends on colour or a glyph alone.
 - No Unicode glyphs or emoji as icons (`✓`, `→`, `☠`). Separators in UI text are commas.
 - When icons are needed, add one concept-keyed registry (`ICON.<concept>`, for example `ICON.incident`, `ICON.healthy`, `ICON.fixPr`) in a shared UI package, keyed by the internal terms of the Term table. Icons are `aria-hidden`, and icon-only buttons carry an `aria-label`. Do not add per-component icon sets.
