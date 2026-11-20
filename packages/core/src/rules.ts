@@ -53,7 +53,10 @@ const order = (a: Rule, b: Rule): number =>
 
 const uniqueById = (rules: readonly Rule[]): Rule[] => {
   const byId = new Map<string, Rule>();
-  for (const rule of [...rules].sort(order)) byId.set(rule.id, rule);
+  // Keep the first sorted rule, the same entry evaluateEnvelope returns first.
+  for (const rule of [...rules].sort(order)) {
+    if (!byId.has(rule.id)) byId.set(rule.id, rule);
+  }
   return [...byId.values()];
 };
 

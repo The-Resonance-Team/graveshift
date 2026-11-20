@@ -131,7 +131,9 @@ describe('rule engine', () => {
     const merged = mergeRules(systems, clients);
     expect(merged).toEqual(mergeRules([...systems].reverse(), [...clients].reverse()));
     expect(merged.filter((entry) => entry.id === 'rule-dup')).toHaveLength(1);
+    expect(merged.find((entry) => entry.id === 'rule-dup')?.action).toBe('escalate');
     expect(merged.filter((entry) => entry.id === 'rule-s')).toHaveLength(1);
+    expect(merged.find((entry) => entry.id === 'rule-s')?.action).toBe('detect');
   });
 
   test('gives the same output for the same input', () => {
