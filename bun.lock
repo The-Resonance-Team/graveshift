@@ -143,6 +143,8 @@
         "@graveshift/events": "workspace:*",
         "@graveshift/integrations": "workspace:*",
         "@graveshift/redactor": "workspace:*",
+      },
+      "peerDependencies": {
         "@nestjs/common": "12.6.0",
         "rxjs": "7.8.2",
       },

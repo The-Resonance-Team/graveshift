@@ -8,7 +8,12 @@ import {
   validateContext,
 } from '@graveshift/integrations';
 import { redact } from '@graveshift/redactor';
-import type { CallHandler, ExecutionContext, NestInterceptor } from '@nestjs/common';
+import {
+  HttpException,
+  type CallHandler,
+  type ExecutionContext,
+  type NestInterceptor,
+} from '@nestjs/common';
 import { catchError, throwError, type Observable } from 'rxjs';
 
 /** The Nest application surface the plugin needs. A real INestApplication fits it. */
@@ -32,6 +37,8 @@ type NextLike = (error?: unknown) => void;
 
 const SOURCE = 'nestjs_plugin';
 const TRACE_HEADER = 'x-trace-id';
+const MAX_TRACE_ID_LENGTH = 128;
+const traceIdPattern = /^[A-Za-z0-9_-]+$/;
 
 /** Drop the query string and redact any secret left in the path. */
 function pathOf(request: RequestLike): string {
@@ -39,15 +46,34 @@ function pathOf(request: RequestLike): string {
   return redact(path);
 }
 
-/** Reuse an incoming trace id; generate one only when the header is absent. */
+/** Collapse identifier-looking segments to keep fingerprint cardinality low. */
+function routeKey(request: RequestLike): string {
+  const segments = pathOf(request)
+    .split('/')
+    .filter(Boolean)
+    .map((segment) => (/\d/.test(segment) || segment.length > 24 ? ':id' : segment));
+  return `${request.method ?? 'UNKNOWN'}_${segments.join('_') || 'root'}`;
+}
+
+/**
+ * Reuse a redacted, bounded incoming trace id. Generate a fresh one when the
+ * header is absent or its value is not a safe token.
+ */
 function traceIdOf(request: RequestLike, clock: Clock): string {
   const raw = request.headers?.[TRACE_HEADER] ?? request.headers?.[TRACE_HEADER.toUpperCase()];
   const value = Array.isArray(raw) ? raw[0] : raw;
-  return value && value.length > 0 ? value : clock.newId();
+  if (!value) return clock.newId();
+  const cleaned = redact(value).slice(0, MAX_TRACE_ID_LENGTH);
+  return traceIdPattern.test(cleaned) ? cleaned : clock.newId();
 }
 
 function fingerprintOf(prefix: string, value: string): string {
   return `${prefix}_${value.replace(/[^A-Za-z0-9_-]/g, '_')}`;
+}
+
+/** Client errors are telemetry; only server and unknown errors are detection. */
+function severityFor(exception: unknown): 'info' | 'critical' {
+  return exception instanceof HttpException && exception.getStatus() < 500 ? 'info' : 'critical';
 }
 
 function errorName(exception: unknown): string {
@@ -66,6 +92,7 @@ function errorMessage(exception: unknown): string {
 export function init(app: GraveshiftApp, clock: Clock = systemClock): Integration {
   let generation = 0;
   let active = false;
+  const traceIds = new WeakMap<object, string>();
 
   return {
     name: 'nestjs',
@@ -91,21 +118,24 @@ export function init(app: GraveshiftApp, clock: Clock = systemClock): Integratio
 
       const middleware = (request: RequestLike, response: ResponseLike, next: NextLike): void => {
         const startedAt = Date.now();
-        const path = pathOf(request);
+        traceIds.set(request, traceIdOf(request, clock));
         response.on('finish', () => {
-          emit(() => ({
-            source: SOURCE,
-            type: 'http.request',
-            severity: 'info',
-            traceId: traceIdOf(request, clock),
-            fingerprint: fingerprintOf('http', `${request.method ?? 'UNKNOWN'}_${path}`),
-            payload: {
-              method: request.method ?? 'UNKNOWN',
-              path,
-              status: response.statusCode ?? 0,
-              durationMs: Date.now() - startedAt,
-            },
-          }));
+          emit(() => {
+            const path = pathOf(request);
+            return {
+              source: SOURCE,
+              type: 'http.request',
+              severity: 'info',
+              traceId: traceIds.get(request) ?? traceIdOf(request, clock),
+              fingerprint: fingerprintOf('http', routeKey(request)),
+              payload: {
+                method: request.method ?? 'UNKNOWN',
+                path,
+                status: response.statusCode ?? 0,
+                durationMs: Date.now() - startedAt,
+              },
+            };
+          });
         });
         next();
       };
@@ -119,9 +149,9 @@ export function init(app: GraveshiftApp, clock: Clock = systemClock): Integratio
               emit(() => ({
                 source: SOURCE,
                 type: 'http.error',
-                severity: 'critical',
-                traceId: traceIdOf(request, clock),
-                fingerprint: fingerprintOf('error', errorName(error)),
+                severity: severityFor(error),
+                traceId: traceIds.get(request) ?? traceIdOf(request, clock),
+                fingerprint: fingerprintOf('error', `${errorName(error)}_${routeKey(request)}`),
                 payload: {
                   method: request.method ?? 'UNKNOWN',
                   path: pathOf(request),

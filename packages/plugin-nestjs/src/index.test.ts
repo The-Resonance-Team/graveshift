@@ -1,4 +1,5 @@
 import { EventEnvelopeSchema } from '@graveshift/core';
+import { HttpException } from '@nestjs/common';
 import { describe, expect, test } from 'bun:test';
 
 import { init } from './index';
@@ -27,7 +28,7 @@ describe('NestJS plugin', () => {
       type: 'http.request',
       severity: 'info',
       traceId: 'trace-from-client',
-      fingerprint: 'http_GET__healthz',
+      fingerprint: 'http_GET_healthz',
     });
     expect(envelope?.payload).toMatchObject({
       method: 'GET',
@@ -45,6 +46,52 @@ describe('NestJS plugin', () => {
     finishRequest(middlewares[0]!, { method: 'GET', url: '/healthz' });
 
     expect(publisher.envelopes[0]?.traceId).toBe('id-1');
+  });
+
+  test('shares the generated trace id with the error envelope', async () => {
+    const { app, middlewares, interceptors } = makeApp();
+    const { context, publisher } = makeContext();
+    init(app, makeClock()).start(context);
+
+    const request = { method: 'GET', url: '/shared' };
+    finishRequest(middlewares[0]!, request);
+    await dispatch(interceptors[0]!, request, { kind: 'error', error: new Error('boom') });
+
+    expect(publisher.envelopes).toHaveLength(2);
+    expect(publisher.envelopes[0]?.traceId).toBe('id-1');
+    expect(publisher.envelopes[1]?.traceId).toBe(publisher.envelopes[0]?.traceId);
+  });
+
+  test('redacts and bounds the trace header, falling back when it is unsafe', () => {
+    const { app, middlewares } = makeApp();
+    const { context, publisher } = makeContext();
+    init(app, makeClock()).start(context);
+
+    finishRequest(middlewares[0]!, {
+      method: 'GET',
+      url: '/a',
+      headers: { 'x-trace-id': 'user@example.com' },
+    });
+    expect(publisher.envelopes[0]?.traceId).toBe('id-1');
+
+    finishRequest(middlewares[0]!, {
+      method: 'GET',
+      url: '/b',
+      headers: { 'x-trace-id': 'a'.repeat(200) },
+    });
+    expect(publisher.envelopes[1]?.traceId).toBe('a'.repeat(128));
+  });
+
+  test('keeps request fingerprint cardinality low for identifier paths', () => {
+    const { app, middlewares } = makeApp();
+    const { context, publisher } = makeContext();
+    init(app, makeClock()).start(context);
+
+    finishRequest(middlewares[0]!, { method: 'GET', url: '/users/123' });
+    finishRequest(middlewares[0]!, { method: 'GET', url: '/users/456' });
+
+    expect(publisher.envelopes[0]?.fingerprint).toBe('http_GET_users__id');
+    expect(publisher.envelopes[1]?.fingerprint).toBe('http_GET_users__id');
   });
 
   test('passes a successful handler result through untouched', async () => {
@@ -84,7 +131,7 @@ describe('NestJS plugin', () => {
       type: 'http.error',
       severity: 'critical',
       traceId: 'trace-err',
-      fingerprint: 'error_Error',
+      fingerprint: 'error_Error_GET_fail',
     });
     expect(envelope?.payload).toMatchObject({
       method: 'GET',
@@ -104,7 +151,26 @@ describe('NestJS plugin', () => {
       { kind: 'error', error: new TypeError('bad type') },
     );
 
-    expect(publisher.envelopes[0]?.fingerprint).toBe('error_TypeError');
+    expect(publisher.envelopes[0]?.fingerprint).toBe('error_TypeError_GET_fail');
+  });
+
+  test('maps client errors to info and server errors to critical', async () => {
+    const { app, interceptors } = makeApp();
+    const { context, publisher } = makeContext();
+    init(app, makeClock()).start(context);
+
+    await dispatch(
+      interceptors[0]!,
+      { method: 'GET', url: '/missing' },
+      { kind: 'error', error: new HttpException('missing', 404) },
+    );
+    await dispatch(
+      interceptors[0]!,
+      { method: 'GET', url: '/broken' },
+      { kind: 'error', error: new HttpException('broken', 503) },
+    );
+
+    expect(publisher.envelopes.map((envelope) => envelope.severity)).toEqual(['info', 'critical']);
   });
 
   test('redacts the path and message and never logs the raw error', async () => {
@@ -206,12 +272,25 @@ describe('NestJS plugin', () => {
     expect(() => plugin.start({ ...context, tenantId: 'bad tenant' })).toThrow('tenantId');
     expect(middlewares).toHaveLength(0);
 
-    const failing = {
+    const sync = {
+      ...context,
+      publisher: {
+        publish: () => {
+          throw new Error('broker down');
+        },
+      },
+    };
+    plugin.start(sync);
+    expect(() => finishRequest(middlewares[0]!, { method: 'GET', url: '/healthz' })).not.toThrow();
+
+    const other = makeApp();
+    init(other.app, makeClock()).start({
       ...context,
       publisher: { publish: () => Promise.reject(new Error('broker down')) },
-    };
-    plugin.start(failing);
-    expect(() => finishRequest(middlewares[0]!, { method: 'GET', url: '/healthz' })).not.toThrow();
+    });
+    expect(() =>
+      finishRequest(other.middlewares[0]!, { method: 'GET', url: '/healthz' }),
+    ).not.toThrow();
     await Promise.resolve();
   });
 });
