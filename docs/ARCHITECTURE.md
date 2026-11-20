@@ -197,6 +197,10 @@ The budget check and the charge are two separate steps. Concurrent calls can spe
 
 The daemon keeps only health and a local command inbox (**not built**). It listens on port 2602 and binds to 127.0.0.1 by default. The `PORT` environment variable changes the port. No client calls the daemon directly. Keep the bind on localhost.
 
+## GitHub Actions
+
+Actions runs one-shot jobs only. The reusable `workflow_call` workflow turns a platform-supplied payload into a patch file and opens one draft pull request. A thin `workflow_dispatch` workflow calls it so a person can start the same jobs. The platform invokes the reusable workflow. No daemon, no long-running server, no merge and no runtime action run in Actions. Self-host the daemon (`apps/daemon`) for the long-running work.
+
 ## Decisions
 
 See `docs/adr/0001-full-scope-for-kiroween.md`, `docs/adr/0002-single-ai-sdk-provider.md` (superseded by `docs/adr/0007-configurable-agents-and-providers.md`), `docs/adr/0003-platform-v2-starts-now.md`, `docs/adr/0004-effect-v4-daemon-on-bun.md`, `docs/adr/0005-event-backbone-nats.md`, `docs/adr/0006-nestjs-api-and-mcp.md` and `docs/adr/0007-configurable-agents-and-providers.md`.
