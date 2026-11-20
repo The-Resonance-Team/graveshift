@@ -1,5 +1,5 @@
 // Real-model diagnosis harness. Seam: the public diagnose({ gateway }, input) call.
-// Usage: bun apps/daemon/scripts/diagnose-real-model.ts --round <n> [--baseline] [--label <text>]
+// Usage: bun apps/_daemon/scripts/diagnose-real-model.ts --round <n> [--baseline] [--label <text>]
 //   --baseline  no providers, rules-only results (round 0)
 // Credentials come from the environment (Bun loads the gitignored .env). Nothing secret is printed.
 import { appendFileSync, mkdirSync } from 'node:fs';

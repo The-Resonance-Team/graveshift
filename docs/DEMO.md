@@ -1,6 +1,6 @@
 # Demo: Haunted Candy Shop
 
-`examples/haunted-candy-shop` is a fault-injectable app: an `api` (port 2600), a `worker` (port 2601) and Postgres. Graveshift watches it through the read-only docker-socket-proxy and Prometheus.
+`examples/haunted-candy-shop` is a fault-injectable app: an `api` (port 2600), a `worker` (port 2601) and Postgres. The v1 daemon watched it through the read-only docker-socket-proxy and Prometheus. That daemon is unavailable in v2.
 
 Themed names are UI copy only. In code and APIs they are `incident`, `approval` and `service`.
 
@@ -16,25 +16,25 @@ export OWNER_TOKEN=...         # allows POST /__reset (owner only)
 # demo app only
 docker compose -f deploy/compose/demo.compose.yml up -d --build
 
-# demo app plus Graveshift (daemon, read-only socket proxy, separate actuator, Prometheus)
+# demo app plus support services (separate actuator and Prometheus); no daemon in v2
 docker compose -f deploy/compose/graveshift.compose.yml -f deploy/compose/demo.compose.yml up -d --build
 ```
 
-Ports bind to `127.0.0.1` only. The daemon reaches Docker only through `socket-proxy` (containers, events, logs, info; `POST=0`). `docker.sock` is mounted into the two proxies and nowhere else. Only the `actuator` can write, through `socket-proxy-actuator`, which allows container restarts and nothing else.
+Ports bind to `127.0.0.1` only. No daemon starts in v2. `socket-proxy` is read-only (containers, events, logs, info; `POST=0`). `docker.sock` is mounted into the two proxies and nowhere else. Only the `actuator` can write, through `socket-proxy-actuator`, which allows container restarts and nothing else.
 
-The `daemon` and `actuator` images build from `deploy/compose/bun.Dockerfile`. The actuator exits at startup unless `ACTUATOR_HMAC_SECRET` has 32 or more characters, so set it before `up`:
+The `actuator` image builds from `deploy/compose/bun.Dockerfile`. The new daemon in `apps/daemon` is a scaffold and does not build in Compose. The actuator exits at startup unless `ACTUATOR_HMAC_SECRET` has 32 or more characters, so set it before `up`:
 
 ```sh
 export ACTUATOR_HMAC_SECRET=$(openssl rand -hex 32)
 ```
 
-The daemon API is on `127.0.0.1:2602`. The demo api and worker publish ports 2600 and 2601 on `127.0.0.1`; if another app holds port 2600, run the curl commands below from inside the Compose network (`docker compose exec`).
+The new daemon serves only `GET /healthz` on port 2602 when run directly with Bun. Compose does not start it. The v1 `/api/*` routes are unavailable in v2. The demo api and worker publish ports 2600 and 2601 on `127.0.0.1`; if another app holds port 2600, run the curl commands below from inside the Compose network (`docker compose exec`).
 
 ## Watch the Haunting
 
-1. No dashboard ships in this branch. Use the daemon API and the curl commands below. A Next.js UI will be scaffolded separately.
-2. Inject `null-candy` (below). Within seconds the daemon reports a `diagnosed` incident for `api`. Diagnosis uses one configured AI SDK model (`llm` in `graveshift.config.yaml`, key in `OPENAI_COMPATIBLE_API_KEY`). If the model is unavailable or its output is invalid, the diagnosis comes from the rules-only fallback and says so.
-3. Check the audit chain: `curl localhost:2602/api/audit/verify` returns `{"ok":true,"length":N}`.
+1. No dashboard ships in this branch. The v1 daemon API and the curl commands below are unavailable in v2. Use the demo API directly. A Next.js UI will be scaffolded separately.
+2. In v1, injecting `null-candy` made the daemon report a `diagnosed` incident for `api`. Diagnosis used one configured AI SDK model (`llm` in `graveshift.config.yaml`, key in `OPENAI_COMPATIBLE_API_KEY`), with a rules-only fallback. This flow is unavailable in v2.
+3. In v1, `curl localhost:2602/api/audit/verify` returned `{"ok":true,"length":N}`. This route is unavailable in v2.
 
 What does not happen yet: no draft pull request opens, because no patch generator is wired; no Discord message is sent; the daemon has no approval endpoint, so the `memory-leech` restart cannot be blessed. The actuator rejects an unsigned request with 403, which you can check with `curl -X POST localhost:2603/actions` from inside the network.
 
@@ -42,7 +42,7 @@ What does not happen yet: no draft pull request opens, because no patch generato
 
 - `GET /healthz`: 200 when the database answers, 503 otherwise.
 - `GET /metrics`: `http_requests_total{status}`, `http_request_duration_seconds` (histogram), `process_resident_memory_bytes`. The worker also exposes `jobs_processed_total`.
-- Prometheus scrapes jobs `demo-api`, `demo-worker` and `graveshift`.
+- Prometheus scrapes jobs `demo-api` and `demo-worker`.
 
 ## Scenarios
 
@@ -71,7 +71,7 @@ curl -X POST localhost:2600/__reset -H "x-haunt-token: $OWNER_TOKEN"
 curl -X POST localhost:2601/__reset -H "x-haunt-token: $OWNER_TOKEN"
 ```
 
-Closing demo PRs and archiving incidents is not implemented, and the daemon keeps incidents in memory, so `docker compose restart graveshift` clears the graveyard (the audit log stays). A `bun run demo:reset` wrapper is not provided. A scheduled daily reset belongs to the public demo (issue #14).
+Closing demo PRs and archiving incidents is not implemented. The v1 daemon kept incidents in memory, but it is unavailable in v2, so `docker compose restart graveshift` no longer applies. A `bun run demo:reset` wrapper is not provided. A scheduled daily reset belongs to the public demo (issue #14).
 
 ## Kind (Kubernetes)
 
@@ -85,4 +85,4 @@ docker compose -f deploy/compose/graveshift.compose.yml -f deploy/compose/demo.c
 
 ## Verified locally
 
-Run on Docker with the demo compose file: `null-candy` (500 then 200 after reset), `slow-curse` (1.8 s then 9 ms), `wrong-potion` (503 then 200) and `memory-leech` (Docker emitted `oom` and `die` with exit code 137). The Docker source, reading through the proxy, turned those events into `oom` and `restart` signals. Kubernetes behavior is covered by fixture tests only; no cluster was available. The daemon run on Docker produced SSE within about 5 s of a haunt, reached `diagnosed` with category `code_bug`, and the audit chain verified.
+Run on Docker with the demo compose file: `null-candy` (500 then 200 after reset), `slow-curse` (1.8 s then 9 ms), `wrong-potion` (503 then 200) and `memory-leech` (Docker emitted `oom` and `die` with exit code 137). These checks are for the demo app only. The v1 daemon checks (SSE, `diagnosed` with category `code_bug`, audit chain verification) are unavailable in v2. Kubernetes behavior is covered by fixture tests only; no cluster was available.

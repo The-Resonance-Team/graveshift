@@ -1,4 +1,4 @@
-# Shared image recipe for the daemon and the actuator: docker build --build-arg APP_PATH=apps/daemon
+# Shared image recipe for deployable apps: docker build --build-arg APP_PATH=packages/actuator
 FROM oven/bun:1.4.4
 WORKDIR /app
 ARG APP_PATH
