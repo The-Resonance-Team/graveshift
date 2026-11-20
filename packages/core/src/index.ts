@@ -1,7 +1,7 @@
 export { ConfigSchema, loadConfigFile, parseConfig } from './config';
 export type { Config } from './config';
-export { ConfigError, err, GraveshiftError, ok, TransitionError } from './errors';
-export type { Result, TransitionErrorCode } from './errors';
+export { ConfigError, err, GraveshiftError, ok, TransitionError, TriageError } from './errors';
+export type { Result, TransitionErrorCode, TriageErrorCode } from './errors';
 export {
   DEFAULT_RULE_ACTION,
   detectRuleOverrides,
@@ -39,3 +39,33 @@ export type {
 } from './schemas';
 export { BREAKER_WINDOW_MS, shouldTripBreaker, TRANSITIONS, transition } from './state';
 export type { TransitionContext } from './state';
+export {
+  AGENT_ASSIGNEE_PREFIX,
+  agentAssignee,
+  applyClientConfig,
+  countCompletedSubtasks,
+  createSubtasks,
+  NEEDS_HUMAN,
+  parseAssignee,
+  SubtaskSchema,
+  SubtasksSchema,
+  triageToAgent,
+  triageToHuman,
+  WORK_ITEM_PRIORITIES,
+  WorkItemPrioritySchema,
+  WORK_ITEM_SEVERITIES,
+  WorkItemSeveritySchema,
+  WORK_ITEM_STATUSES,
+  WorkItemSchema,
+  WorkItemStatusSchema,
+  WorkItemClientConfigSchema,
+} from './work-item';
+export type {
+  Subtask,
+  Subtasks,
+  WorkItem,
+  WorkItemClientConfig,
+  WorkItemPriority,
+  WorkItemSeverity,
+  WorkItemStatus,
+} from './work-item';

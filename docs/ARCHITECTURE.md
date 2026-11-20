@@ -72,6 +72,9 @@ The API in `apps/api` is the only external surface. A client calls this API, nev
 | `GET /docs-json` | The OpenAPI document. |
 | `GET /docs` | The Swagger UI. |
 | `POST /api/rules/validate` | Override ids, warning and acceptance for a rule set. Validation only. |
+| `GET /api/work-items` | A paged list of work items for the table. |
+| `GET /api/work-items/:id` | One work item for the detail sheet. |
+| `POST /api/work-items/:id/triage` | A triaged work item. Validation only. |
 | `POST /mcp` | Streamable HTTP MCP endpoint. Requires `Authorization: Bearer <GRAVESHIFT_MCP_TOKEN>`. |
 
 The API listens on 127.0.0.1 by default. Set `HOST` to change the bind address. Set `PORT` to change the port from 3000. Keep the localhost bind unless the MCP bearer token is configured and the endpoint is exposed deliberately.
@@ -79,6 +82,16 @@ The API listens on 127.0.0.1 by default. Set `HOST` to change the bind address. 
 Structured logging is deferred to the production ticket.
 
 The API uses Zod through Nest's standard-schema pipe. When a route takes input, the route attaches a Zod schema with `@Body({ schema })`, `@Query({ schema })` or `@Param({ schema })`. No business logic, rate limits or SSE were added to the HTTP routes here. MCP is served by the official module at `/mcp`; its bearer token is the only authentication on this surface. Later tickets add the routes for graves and hauntings here.
+
+## Work items
+
+A **work item** is created after a haunting is defined and verified. `packages/core` owns `WorkItemSchema`. The generated types in `packages/api-contract` are the wire contract. The frontend consumes these types. The frontend engineer owns the visual design of the table and the detail sheet. The images in the decision report are references only.
+
+A work item carries a title, description, success criteria, subtasks with a completed count, status, priority, assignee, reporter, start date, due date, sprint, parent, labels, team, watchers, severity, service, a diagnosis ref and the `autoFixAllowed` flag. Incident states in `packages/core` stay unchanged. `needs_human` and `needs_agent_<name>` are assignee values, not new incident states. The agent name comes from agent config in `packages/agents`.
+
+`GET /api/work-items` returns a paged list for the table. `GET /api/work-items/:id` returns one work item for the detail sheet. `POST /api/work-items/:id/triage` accepts an assignee of `needs_human` or an existing `needs_agent_<name>` and rejects any other value. The pure helpers `triageToHuman`, `triageToAgent` and `parseAssignee` in `packages/core` make no model call and change no shared state. They set `autoFixAllowed` from client config. No patch is generated and no fix runs in this ticket. "Fix now" and the exorcism stay in a later ticket.
+
+The API reads agent names from `AGENTS_PATH` (default `agents.example.yaml`) and the client auto-fix switch from `GRAVESHIFT_AUTO_FIX` (default false). An injectable in-memory store with three seeded work items serves runtime and tests. Persistence is deferred: no database and no event-bus consumer are wired.
 
 ## MCP endpoint
 
