@@ -29,6 +29,7 @@ services:
       POLICY_PATH: /config/policy.yaml
       CONFIG_PATH: /config/graveshift.config.yaml
       HAUNT_TOKEN: ${HAUNT_TOKEN:-}
+      OPENAI_COMPATIBLE_API_KEY: ${OPENAI_COMPATIBLE_API_KEY:-}
       DEMO_API_URL: http://api:2600
       DEMO_WORKER_URL: http://worker:2601
       ACTUATOR_URL: http://actuator:2603
