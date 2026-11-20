@@ -1,22 +1,63 @@
-# SCAFFOLD ONLY - not a working stack. Replace before use.
-# Graveshift core services (Compose mode). No real secrets; env placeholders only.
+# Graveshift in Compose mode. Agents are read-only: the daemon only reaches Docker through the
+# read-only socket-proxy. The actuator is the only writer and has its own restart-only proxy.
+# No real secrets here: values come from the environment; empty means the feature refuses to run.
+name: graveshift
+
+x-hardened: &hardened
+  restart: unless-stopped
+  read_only: true
+  security_opt: [no-new-privileges:true]
+  cap_drop: [ALL]
+  tmpfs: [/tmp]
+
 services:
   graveshift:
-    # Main daemon: Wraith -> Medium -> Exorcist -> Banshee, HTTP API + SSE.
-    image: graveshift/daemon:PLACEHOLDER
-    restart: unless-stopped
-    read_only: true
-    security_opt: [no-new-privileges:true]
-    cap_drop: [ALL]
-    # SEC-1: never mount /var/run/docker.sock here; use socket-proxy below.
+    <<: *hardened
+    build:
+      context: ../..
+      dockerfile: deploy/compose/bun.Dockerfile
+      args: { APP_PATH: apps/daemon }
+    image: graveshift/daemon:local
+    command: ['bun', 'src/main.ts']
+    # SEC-1: never mount /var/run/docker.sock here; Docker is reached only through socket-proxy.
     environment:
-      GRAVESHIFT_MODE: propose
-      # GRAVESHIFT_DISCORD_TOKEN: "<set via env, never commit>"
+      GRAVESHIFT_MODE: ${GRAVESHIFT_MODE:-propose}
+      DOCKER_PROXY_URL: http://socket-proxy:2375
+      PROMETHEUS_URL: http://prometheus:9090
+      METRICS_TARGETS: api=demo-api
+      WATCH_SERVICES: api,worker,postgres
+      POLICY_PATH: /config/policy.yaml
+      CONFIG_PATH: /config/graveshift.config.yaml
+      HAUNT_TOKEN: ${HAUNT_TOKEN:-}
+      DEMO_API_URL: http://api:3000
+      DEMO_WORKER_URL: http://worker:3001
+      ACTUATOR_URL: http://actuator:3200
+      DATA_DIR: /data
+      BUN_RUNTIME_TRANSPILER_CACHE_PATH: '0'
+    volumes:
+      - graveshift-data:/data
+      - ../../policy.example.yaml:/config/policy.yaml:ro
+      - ../../graveshift.config.example.yaml:/config/graveshift.config.yaml:ro
+    ports: ['127.0.0.1:3100:3000']
+    networks: [core, candy]
     depends_on: [socket-proxy, prometheus]
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'bun',
+          '-e',
+          "fetch('http://localhost:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
 
   socket-proxy:
-    # Read-only docker-socket-proxy: CONTAINERS/EVENTS/LOGS/INFO=1, POST=0.
-    image: tecnativa/docker-socket-proxy:PLACEHOLDER
+    # Read-only: containers, events, logs and info; every write verb is off.
+    image: tecnativa/docker-socket-proxy:0.3.0
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
     environment:
       CONTAINERS: '1'
       EVENTS: '1'
@@ -25,17 +66,66 @@ services:
       POST: '0'
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [core]
+
+  socket-proxy-actuator:
+    # Used only by the actuator; container restart is the single write permitted.
+    image: tecnativa/docker-socket-proxy:0.3.0
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    environment:
+      CONTAINERS: '1'
+      POST: '1'
+      ALLOW_RESTARTS: '1'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [act]
 
   actuator:
-    # SEC-2: separate container; HMAC-signed approved actions only.
-    image: graveshift/actuator:PLACEHOLDER
-    restart: unless-stopped
-    read_only: true
-    cap_drop: [ALL]
+    # SEC-2: separate container; executes approved, HMAC-signed, single-use actions only.
+    <<: *hardened
+    build:
+      context: ../..
+      dockerfile: deploy/compose/bun.Dockerfile
+      args: { APP_PATH: packages/actuator }
+    image: graveshift/actuator:local
+    command: ['bun', 'src/main.ts']
+    environment:
+      DOCKER_PROXY_URL: http://socket-proxy-actuator:2375
+      ACTUATOR_HMAC_SECRET: ${ACTUATOR_HMAC_SECRET:-}
+      POLICY_PATH: /config/policy.yaml
+      BUN_RUNTIME_TRANSPILER_CACHE_PATH: '0'
+    volumes:
+      - ../../policy.example.yaml:/config/policy.yaml:ro
+    networks: [core, act]
+    depends_on: [socket-proxy-actuator]
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'bun',
+          '-e',
+          "fetch('http://localhost:3200/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
 
   prometheus:
-    image: prom/prometheus:PLACEHOLDER
+    image: prom/prometheus:v3.16.0
+    restart: unless-stopped
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks: [core, candy]
 
-# TODO (real stack): named volume for incidents + append-only hash-chained audit DB.
+networks:
+  core: {}
+  act:
+    internal: true
+  candy:
+    name: candy
+
+volumes:
+  graveshift-data:
+  prometheus-data:

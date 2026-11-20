@@ -10,5 +10,12 @@
     "typecheck": "bun check --no-script",
     "test": "bun test",
     "start:stdio": "bun run src/index.ts"
+  },
+  "dependencies": {
+    "@graveshift/core": "workspace:*",
+    "@graveshift/metrics": "workspace:*",
+    "@graveshift/policy": "workspace:*",
+    "@graveshift/redactor": "workspace:*",
+    "zod": "^4.6.7"
   }
 }

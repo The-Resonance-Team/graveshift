@@ -1,0 +1,69 @@
+{
+  "name": "null-candy",
+  "input": {
+    "incident": {
+      "id": "inc-1",
+      "service": "api",
+      "state": "diagnosing",
+      "signalIds": ["log.error-burst:api:1", "metric.5xx-rate:api:2"],
+      "openedAt": "2026-11-20T10:00:00.000Z",
+      "updatedAt": "2026-11-20T10:00:05.000Z"
+    },
+    "detections": [
+      {
+        "id": "log.error-burst:api:1",
+        "rule": "log.error-burst",
+        "service": "api",
+        "severity": "critical",
+        "fingerprint": "api:log.error-burst",
+        "message": "5 error lines in 60 s",
+        "observedAt": "2026-11-20T10:00:00.000Z"
+      },
+      {
+        "id": "metric.5xx-rate:api:2",
+        "rule": "metric.5xx-rate",
+        "service": "api",
+        "severity": "critical",
+        "fingerprint": "api:metric.5xx-rate",
+        "message": "5xx rate 20.0% for 1 min",
+        "observedAt": "2026-11-20T10:00:00.000Z"
+      }
+    ],
+    "logs": [
+      "GET /candies/2 200",
+      "{\"level\": \"error\", \"message\": \"TypeError: null is not an object (evaluating 'candy.price.toFixed')\", \"time\": \"2026-11-20T10:00:00.000Z\"}",
+      "{\"level\": \"error\", \"message\": \"TypeError: null is not an object (evaluating 'candy.price.toFixed')\", \"time\": \"2026-11-20T10:00:01.000Z\"}",
+      "{\"level\": \"error\", \"message\": \"TypeError: null is not an object (evaluating 'candy.price.toFixed')\", \"time\": \"2026-11-20T10:00:02.000Z\"}",
+      "{\"level\": \"error\", \"message\": \"TypeError: null is not an object (evaluating 'candy.price.toFixed')\", \"time\": \"2026-11-20T10:00:03.000Z\"}",
+      "{\"level\": \"error\", \"message\": \"TypeError: null is not an object (evaluating 'candy.price.toFixed')\", \"time\": \"2026-11-20T10:00:04.000Z\"}"
+    ],
+    "files": [
+      {
+        "path": "src/app.ts",
+        "content": "const candy = await db.getCandy(Number(match[1]));\nif (!candy) return Response.json({ error: 'not found' }, { status: 404 });\nreturn Response.json({ id: candy.id, name: candy.name, price: candy.price!.toFixed(2) });"
+      }
+    ],
+    "commits": [
+      {
+        "sha": "a1b2c3d",
+        "message": "feat: format candy price to two decimals"
+      }
+    ]
+  },
+  "llmResponse": {
+    "category": "code_bug",
+    "rootCause": "GET /candies/:id calls candy.price.toFixed without a null guard, and candy 1 has a NULL price.",
+    "confidence": 0.85,
+    "evidence": [
+      {
+        "ref": "log:2",
+        "excerpt": "TypeError: null is not an object"
+      },
+      {
+        "ref": "file:src/app.ts",
+        "excerpt": "candy.price!.toFixed(2)"
+      }
+    ]
+  },
+  "expectedCategory": "code_bug"
+}

@@ -1,0 +1,12 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "role": "model",
+        "parts": [{ "text": "{\"category\":\"code_bug\",\"confidence\":0.8}" }]
+      },
+      "finishReason": "STOP"
+    }
+  ],
+  "usageMetadata": { "promptTokenCount": 790, "candidatesTokenCount": 51, "totalTokenCount": 841 }
+}

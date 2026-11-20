@@ -9,5 +9,9 @@
   "scripts": {
     "typecheck": "bun check --no-script",
     "test": "bun test"
+  },
+  "dependencies": {
+    "@graveshift/core": "workspace:*",
+    "drizzle-orm": "^0.45.4"
   }
 }

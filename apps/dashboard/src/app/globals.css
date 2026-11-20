@@ -1,0 +1,32 @@
+@import 'tailwindcss';
+@source "../";
+
+@theme inline {
+  --color-night: #0b0f14;
+  --color-crypt: #10151c;
+  --color-mist: #232d3a;
+  --color-bone: #e6edf3;
+  --color-fog: #a3adbb;
+  --color-ectoplasm: #7cffb2;
+  --color-pumpkin: #ff7a1a;
+  --color-blood: #e5484d;
+  --font-sans: ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+    scrollbar-color: var(--color-mist) var(--color-night);
+    scrollbar-width: thin;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}

@@ -8,6 +8,8 @@
   },
   "scripts": {
     "typecheck": "bun check --no-script",
-    "test": "bun test"
+    "test": "bun test",
+    "start:api": "bun src/api-main.ts",
+    "start:worker": "bun src/worker-main.ts"
   }
 }

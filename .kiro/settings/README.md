@@ -14,6 +14,7 @@ To set up locally:
 Never commit a real token. Only this example file (with placeholders) and this README are
 tracked. The rest of `.kiro/` is committed — do not gitignore it.
 
-A local `mcp.json` is present with the `graveshift` entry disabled. It is disabled because
-`packages/mcp-server` is a scaffold stub that exits immediately. Enable it only after the
-server implements the tools in `.kiro/specs/mcp-server/requirements.md`.
+A local `mcp.json` is present with the `graveshift` entry disabled. `packages/mcp-server`
+now implements the tools in `.kiro/specs/mcp-server/requirements.md` and exposes a stdio
+transport via `bun run start:stdio`. Enable the entry only after the daemon is running and
+you have checked tool output for redaction.
