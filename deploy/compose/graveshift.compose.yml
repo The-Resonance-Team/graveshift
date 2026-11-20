@@ -1,5 +1,5 @@
-# Graveshift in Compose mode. Agents are read-only: the daemon only reaches Docker through the
-# read-only socket-proxy. The actuator is the only writer and has its own restart-only proxy.
+# Graveshift support services in Compose mode. The daemon is not started here.
+# The actuator is the only writer and reaches Docker through its restart-only proxy.
 # No real secrets here: values come from the environment; empty means the feature refuses to run.
 name: graveshift
 
@@ -11,49 +11,6 @@ x-hardened: &hardened
   tmpfs: [/tmp]
 
 services:
-  graveshift:
-    <<: *hardened
-    build:
-      context: ../..
-      dockerfile: deploy/compose/bun.Dockerfile
-      args: { APP_PATH: apps/daemon }
-    image: graveshift/daemon:local
-    command: ['bun', 'src/main.ts']
-    # SEC-1: never mount /var/run/docker.sock here; Docker is reached only through socket-proxy.
-    environment:
-      GRAVESHIFT_MODE: ${GRAVESHIFT_MODE:-propose}
-      DOCKER_PROXY_URL: http://socket-proxy:2375
-      PROMETHEUS_URL: http://prometheus:9090
-      METRICS_TARGETS: api=demo-api
-      WATCH_SERVICES: api,worker,postgres
-      POLICY_PATH: /config/policy.yaml
-      CONFIG_PATH: /config/graveshift.config.yaml
-      HAUNT_TOKEN: ${HAUNT_TOKEN:-}
-      OPENAI_COMPATIBLE_API_KEY: ${OPENAI_COMPATIBLE_API_KEY:-}
-      DEMO_API_URL: http://api:2600
-      DEMO_WORKER_URL: http://worker:2601
-      ACTUATOR_URL: http://actuator:2603
-      DATA_DIR: /data
-      BUN_RUNTIME_TRANSPILER_CACHE_PATH: '0'
-    volumes:
-      - graveshift-data:/data
-      - ../../policy.example.yaml:/config/policy.yaml:ro
-      - ../../graveshift.config.example.yaml:/config/graveshift.config.yaml:ro
-    ports: ['127.0.0.1:2602:2602']
-    networks: [core, candy]
-    depends_on: [socket-proxy, prometheus]
-    healthcheck:
-      test:
-        [
-          'CMD',
-          'bun',
-          '-e',
-          "fetch('http://localhost:2602/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
-        ]
-      interval: 10s
-      timeout: 3s
-      retries: 3
-
   socket-proxy:
     # Read-only: containers, events, logs and info; every write verb is off.
     image: tecnativa/docker-socket-proxy:0.3.0
@@ -128,5 +85,4 @@ networks:
     name: candy
 
 volumes:
-  graveshift-data:
   prometheus-data:

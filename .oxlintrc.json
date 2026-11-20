@@ -28,7 +28,7 @@
   },
   "overrides": [
     {
-      "files": ["apps/daemon/scripts/diagnose-real-model.ts"],
+      "files": ["apps/_daemon/scripts/diagnose-real-model.ts"],
       "rules": {
         "no-await-in-loop": "off"
       }

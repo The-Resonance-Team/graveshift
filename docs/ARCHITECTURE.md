@@ -2,11 +2,14 @@
 
 This describes the code as it exists. Items that are not built are marked **not built**.
 
+The v1 daemon is at `apps/_daemon`. It is reference only. The repository does not build it and does not start it. The new daemon at `apps/daemon` is an Effect v4 skeleton on Bun. It has no use cases yet.
+
 ## Components
 
 | Component | Path | Role |
 | --- | --- | --- |
-| Daemon | `apps/daemon` | Wires watcher, diagnoser, policy, optional fixer and the audit log. Serves an HTTP API and Server-Sent Events (SSE) with `Bun.serve`. |
+| Daemon (v1) | `apps/_daemon` | Reference only. Wires Wraith, Medium, policy, optional fixer and the audit log. Not built and not started. |
+| Daemon (v2) | `apps/daemon` | New Effect v4 skeleton on Bun. Serves `GET /healthz` only. |
 | Core | `packages/core` | Zod schemas (source of truth), incident state machine, circuit-breaker helper, config loader, `RuntimeSource` contract. |
 | Store | `packages/store` | Hash-chained, append-only audit log on `bun:sqlite` through Drizzle. |
 | Policy | `packages/policy` | YAML loader and `decide()`. Pure and deterministic. |
@@ -39,10 +42,9 @@ The state machine lives in `packages/core/src/state.ts`. Incident states: see `I
 
 ## Compose mode
 
-`deploy/compose/graveshift.compose.yml` runs:
+`deploy/compose/graveshift.compose.yml` runs support services. It does not start a daemon.
 
-- `graveshift` (daemon, port `127.0.0.1:2602`, read-only root filesystem, all capabilities dropped).
-- `socket-proxy`: `tecnativa/docker-socket-proxy`, read-only (`POST=0`), the only Docker path for the daemon.
+- `socket-proxy`: `tecnativa/docker-socket-proxy`, read-only (`POST=0`).
 - `socket-proxy-actuator`: allows container restart only, on an internal network used by the actuator.
 - `actuator` (port 2603, not published). It exits at startup if `ACTUATOR_HMAC_SECRET` is shorter than 32 characters.
 - `prometheus`, scraping the demo app jobs.
@@ -55,21 +57,14 @@ The state machine lives in `packages/core/src/state.ts`. Incident states: see `I
 
 ## Daemon API
 
-All routes are `GET` unless noted. There are no approval or silence endpoints yet.
+The new daemon serves one route. The v1 routes in `apps/_daemon` are reference only.
 
 | Route | Returns |
 | --- | --- |
-| `/healthz` | `{status: "ok"}` |
-| `/api/mode` | policy mode, effective mode, warning |
-| `/api/graveyard` | services with health and open incident |
-| `/api/incidents`, `/api/incidents/:id`, `/timeline`, `/pr` | incident views |
-| `/api/events` | SSE: `hello`, `incident`, `timeline`, `ping` |
-| `/api/audit?afterSeq=&limit=` | audit entries, limit 1 to 100 |
-| `/api/audit/verify` | chain verification result |
-| `POST /api/haunt` | demo fault injection; needs `HAUNT_TOKEN` to be configured and is limited to one per 30 s |
+| `GET /healthz` | `{status: "ok"}` |
 
-The daemon has no authentication. Bind it to localhost, as the Compose file does.
+The daemon listens on port 2602 by default. The `PORT` environment variable changes the port. The daemon has no authentication. Bind it to localhost.
 
 ## Decisions
 
-See `docs/adr/0001-full-scope-for-kiroween.md` and `docs/adr/0002-single-ai-sdk-provider.md`.
+See `docs/adr/0001-full-scope-for-kiroween.md`, `docs/adr/0002-single-ai-sdk-provider.md`, `docs/adr/0003-platform-v2-starts-now.md` and `docs/adr/0004-effect-v4-daemon-on-bun.md`.

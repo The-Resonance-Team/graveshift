@@ -2,7 +2,7 @@
 
 A haunted on-call crew of AI agents that works the graveyard shift so you do not have to.
 
-> **Status (hackathon build):** the daemon, runtime sources, policy engine, redactor, diagnoser, fixer, actuator, audit log and MCP server are implemented and tested. The Compose stack runs end to end on one machine. Discord (the Banshee), the Kubernetes manifests and bootstrap, and a public demo are **not** done. See [Not done yet](#not-done-yet).
+> **Status:** the v1 daemon is at `apps/_daemon`. It is reference only and is not built or started. The new daemon at `apps/daemon` is an Effect v4 skeleton on Bun. It serves a health route and has no use cases yet. The v1 Wraith, Medium and other packages stay in `packages/`. Discord (the Banshee), the Kubernetes manifests and bootstrap, and a public demo are **not** done. See [Not done yet](#not-done-yet).
 
 ## Problem
 
@@ -22,6 +22,8 @@ Indie developers, teams of one to ten developers, students with deployed project
 6. **Banshee** (Discord) is a stub. Notifications go to a no-op notifier and blessings cannot be given yet.
 7. Everything is written to a hash-chained audit log (`packages/store`), and `graveshift-mcp` exposes read tools to Kiro.
 
+These steps describe the v1 code at `apps/_daemon`. The new Effect v4 daemon does not run them yet.
+
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/SECURITY.md](docs/SECURITY.md) and [GLOSSARY.md](GLOSSARY.md).
 
 ## Quick start (Docker Compose)
@@ -39,9 +41,9 @@ export ACTUATOR_HMAC_SECRET=$(openssl rand -hex 32)   # actuator refuses to star
 docker compose -f deploy/compose/graveshift.compose.yml -f deploy/compose/demo.compose.yml up -d --build
 ```
 
-The daemon listens on `127.0.0.1:2602`. No dashboard ships in this branch; a Next.js UI will be scaffolded separately.
+The new daemon serves `GET /healthz` on port 2602 by default. Set `PORT` to change the port. Compose does not start the daemon. No dashboard ships in this branch; a Next.js UI will be scaffolded separately.
 
-Without an LLM config the daemon still runs and writes rules-only diagnoses. To use a model, copy `graveshift.config.example.yaml`, set `llm.model` and `llm.baseUrl`, and put the key in `OPENAI_COMPATIBLE_API_KEY` (see `.env.example`).
+The v1 daemon still ran without an LLM config and wrote rules-only diagnoses. To use a model with that reference code, copy `graveshift.config.example.yaml`, set `llm.model` and `llm.baseUrl`, and put the key in `OPENAI_COMPATIBLE_API_KEY` (see `.env.example`).
 
 Inject a fault and reset it: see [docs/DEMO.md](docs/DEMO.md).
 
@@ -81,7 +83,7 @@ The `.kiro` directory holds steering, specs, hooks and agents. See [KIRO_USAGE.m
 
 ```text
 .kiro/       steering, specs, hooks, agents and MCP settings
-apps/        daemon (HTTP API and SSE)
+apps/        _daemon (v1 reference only), daemon (new Effect v4 skeleton)
 packages/    core, store, policy, redactor, metrics, sources-docker, sources-k8s,
              watcher, llm, diagnoser, fixer, actuator, mcp-server, notifier-discord (stub)
 deploy/      compose (working), k8s base and kind (scaffold), helm (scaffold)

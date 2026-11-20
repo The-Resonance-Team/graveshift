@@ -5,7 +5,7 @@
   "type": "module",
   "packageManager": "bun@1.4.4",
   "workspaces": [
-    "apps/*",
+    "apps/daemon",
     "packages/*"
   ],
   "scripts": {
@@ -13,8 +13,8 @@
     "format:check": "bun fmt --check",
     "lint": "bun lint --no-script --max-warnings=0 --allow-unsupported",
     "typecheck": "bun check --no-script",
-    "test:check": "bun test --check",
-    "test": "bun test",
+    "test:check": "bun test --check --path-ignore-patterns='apps/_daemon/**'",
+    "test": "bun test --path-ignore-patterns='apps/_daemon/**'",
     "verify": "bun run format:check && bun run lint && bun run typecheck && bun run test:check && bun run test"
   },
   "devDependencies": {
