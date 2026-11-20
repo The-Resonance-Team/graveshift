@@ -31,6 +31,9 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
+      - name: Check generated API contract
+        run: bun run generate:check
+
       - name: Type-check tests
         run: bun run test:check
 

@@ -13,13 +13,13 @@
     "format": "bun fmt",
     "format:check": "bun fmt --check",
     "lint": "bun lint --no-script --max-warnings=0 --allow-unsupported",
-    "typecheck": "bun check --no-script",
-    "test:check": "bun test --check --path-ignore-patterns='apps/_daemon/**'",
-    "test": "bun test --path-ignore-patterns='apps/_daemon/**'",
+    "typecheck": "bun check --no-script apps/api packages/api-contract/scripts/generate.ts --tsconfig-override apps/api/tsconfig.json && bun check --no-script",
+    "test:check": "bun test --check --tsconfig-override apps/api/tsconfig.json --path-ignore-patterns='apps/_daemon/**'",
+    "test": "bun test --tsconfig-override apps/api/tsconfig.json --path-ignore-patterns='apps/_daemon/**'",
+    "generate:check": "bun run --filter @graveshift/api-contract generate:check",
     "verify": "bun run format:check && bun run lint && bun run typecheck && bun run test:check && bun run test"
   },
   "devDependencies": {
-    "@graveshift/api-contract": "workspace:*",
     "@graveshift/policy": "workspace:*",
     "@types/bun": "1.4.4",
     "fast-check": "4.10.2",

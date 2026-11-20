@@ -1,6 +1,8 @@
 import { existsSync } from 'node:fs';
 import { describe, expect, test } from 'bun:test';
+import contractPackage from '../package.json';
 import { API_CONTRACT_VERSION, type HealthResponse } from './index.js';
+import openapi from './openapi.json';
 
 describe('api contract', () => {
   test('generated types file exists', () => {
@@ -10,6 +12,8 @@ describe('api contract', () => {
   test('exports the health response type', () => {
     const response: HealthResponse = { status: 'ok' };
     expect(response.status).toBe('ok');
-    expect(API_CONTRACT_VERSION).toBe('0.1.0');
+    const version: string = API_CONTRACT_VERSION;
+    expect(version).toBe(contractPackage.version);
+    expect(openapi.info.version).toBe(version);
   });
 });

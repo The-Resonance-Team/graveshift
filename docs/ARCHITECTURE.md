@@ -67,6 +67,10 @@ The API in `apps/api` is the only external surface. A client calls this API, nev
 | `GET /docs-json` | The OpenAPI document. |
 | `GET /docs` | The Swagger UI. |
 
+The API listens on 127.0.0.1 by default. Set `HOST` to change the bind address. Set `PORT` to change the port from 3000. Keep the localhost bind until authentication ships.
+
+Structured logging is deferred to the production ticket.
+
 The API uses Zod through Nest's standard-schema pipe. When a route takes input, the route attaches a Zod schema with `@Body({ schema })`, `@Query({ schema })` or `@Param({ schema })`. This ticket adds no business logic, authentication, rate limits, MCP or SSE. Later tickets add the routes for graves and hauntings here.
 
 `packages/api-contract` generates its types from the OpenAPI document. It exports the generated types and the `API_CONTRACT_VERSION` marker through `package.json#exports` only. It does not define an event envelope or any domain event type; a later ticket owns the envelope.

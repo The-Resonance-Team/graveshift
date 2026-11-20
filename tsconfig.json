@@ -1,9 +1,5 @@
 {
   "extends": "./tsconfig.base.json",
-  "compilerOptions": {
-    "experimentalDecorators": true,
-    "emitDecoratorMetadata": true
-  },
   "include": ["apps/**/*.ts", "packages/**/*.ts", "examples/**/*.ts"],
-  "exclude": ["apps/_daemon/**"]
+  "exclude": ["apps/_daemon/**", "apps/api/**", "packages/api-contract/scripts/**"]
 }

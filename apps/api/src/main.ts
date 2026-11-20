@@ -1,11 +1,13 @@
-import { SwaggerModule } from '@nestjs/swagger';
 import { createApp } from './app.factory.js';
-import { createOpenApiDocument } from './openapi.js';
 
 async function bootstrap() {
   const app = await createApp();
-  SwaggerModule.setup('docs', app, createOpenApiDocument(app));
-  await app.listen(process.env.PORT ?? 3000);
+  const port = Number(process.env.PORT ?? 3000);
+  const host = process.env.HOST ?? '127.0.0.1';
+  await app.listen(port, host);
 }
 
-void bootstrap();
+bootstrap().catch((error: unknown) => {
+  console.error('API startup failed', error);
+  process.exit(1);
+});

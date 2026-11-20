@@ -1,3 +1,6 @@
+// Generation imports apps/api on purpose: the controllers own the OpenAPI document,
+// so the script boots the real app. openapi-typescript stays pinned to 6.7.6 because
+// v7 needs TypeScript 5 and this repo uses TypeScript 7.
 import { mkdir } from 'node:fs/promises';
 import openapiTS, { type OpenAPI3 } from 'openapi-typescript';
 import { createApp } from '../../../apps/api/src/app.factory.js';
