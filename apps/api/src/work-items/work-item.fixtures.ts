@@ -1,4 +1,4 @@
-import { createSubtasks, type WorkItem } from '@graveshift/core';
+import { createSubtasks, NEEDS_HUMAN, type WorkItem } from '@graveshift/core';
 
 function workItem(id: string, title: string, overrides: Partial<WorkItem> = {}): WorkItem {
   return {
@@ -9,7 +9,7 @@ function workItem(id: string, title: string, overrides: Partial<WorkItem> = {}):
     subtasks: createSubtasks([]),
     status: 'todo',
     priority: 'medium',
-    assignee: 'unassigned',
+    assignee: NEEDS_HUMAN,
     reporter: 'wraith',
     startDate: null,
     dueDate: null,
@@ -26,8 +26,8 @@ function workItem(id: string, title: string, overrides: Partial<WorkItem> = {}):
   };
 }
 
-// ponytail: seed three items in memory; upgrade to a store adapter if persistence lands
-export const SEED_WORK_ITEMS: WorkItem[] = [
+// ponytail: demo data only, enabled by GRAVESHIFT_WORK_ITEM_DEMO; remove when persistence lands
+export const DEMO_WORK_ITEMS: WorkItem[] = [
   workItem('wi-1', 'Fix OOM on api', {
     description: 'The api grave was drained by a leech.',
     successCriteria: ['Memory stays below the limit for one hour.'],

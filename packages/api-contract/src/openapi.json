@@ -380,8 +380,18 @@
                             ]
                           },
                           "assignee": {
-                            "type": "string",
-                            "minLength": 1
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "needs_human"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "pattern": "^(needs_agent_)[\\s\\S]{0,}$"
+                              }
+                            ]
                           },
                           "reporter": {
                             "type": "string",
@@ -604,8 +614,18 @@
                       ]
                     },
                     "assignee": {
-                      "type": "string",
-                      "minLength": 1
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "needs_human"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "pattern": "^(needs_agent_)[\\s\\S]{0,}$"
+                        }
+                      ]
                     },
                     "reporter": {
                       "type": "string",
@@ -729,8 +749,18 @@
                 "type": "object",
                 "properties": {
                   "assignee": {
-                    "type": "string",
-                    "minLength": 1
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "enum": [
+                          "needs_human"
+                        ]
+                      },
+                      {
+                        "type": "string",
+                        "pattern": "^(needs_agent_)[\\s\\S]{0,}$"
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -826,8 +856,18 @@
                       ]
                     },
                     "assignee": {
-                      "type": "string",
-                      "minLength": 1
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "needs_human"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "pattern": "^(needs_agent_)[\\s\\S]{0,}$"
+                        }
+                      ]
                     },
                     "reporter": {
                       "type": "string",
@@ -925,6 +965,9 @@
           },
           "404": {
             "description": "No work item has this id."
+          },
+          "409": {
+            "description": "The work item is in a terminal status."
           }
         },
         "tags": [

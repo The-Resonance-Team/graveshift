@@ -12,3 +12,8 @@ export type WorkItemListResponse =
 
 export type WorkItemResponse =
   paths['/api/work-items/{id}']['get']['responses'][200]['content']['application/json'];
+
+export type TriageRequest =
+  paths['/api/work-items/{id}/triage']['post']['requestBody']['content']['application/json'];
+
+export type Assignee = WorkItemResponse['assignee'];

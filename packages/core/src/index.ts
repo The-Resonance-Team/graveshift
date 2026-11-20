@@ -41,14 +41,18 @@ export { BREAKER_WINDOW_MS, shouldTripBreaker, TRANSITIONS, transition } from '.
 export type { TransitionContext } from './state';
 export {
   AGENT_ASSIGNEE_PREFIX,
+  AgentAssigneeSchema,
   agentAssignee,
   applyClientConfig,
+  assertTriageAllowed,
+  AssigneeSchema,
   countCompletedSubtasks,
   createSubtasks,
   NEEDS_HUMAN,
   parseAssignee,
   SubtaskSchema,
   SubtasksSchema,
+  TERMINAL_WORK_ITEM_STATUSES,
   triageToAgent,
   triageToHuman,
   WORK_ITEM_PRIORITIES,
@@ -56,11 +60,13 @@ export {
   WORK_ITEM_SEVERITIES,
   WorkItemSeveritySchema,
   WORK_ITEM_STATUSES,
+  WorkItemClientConfigSchema,
   WorkItemSchema,
   WorkItemStatusSchema,
-  WorkItemClientConfigSchema,
 } from './work-item';
 export type {
+  AgentAssignee,
+  Assignee,
   Subtask,
   Subtasks,
   WorkItem,

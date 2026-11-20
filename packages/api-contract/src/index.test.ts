@@ -3,7 +3,9 @@ import { describe, expect, test } from 'bun:test';
 import contractPackage from '../package.json';
 import {
   API_CONTRACT_VERSION,
+  type Assignee,
   type HealthResponse,
+  type TriageRequest,
   type WorkItemListResponse,
   type WorkItemResponse,
 } from './index';
@@ -47,5 +49,13 @@ describe('api contract', () => {
     };
     const list: WorkItemListResponse = { items: [detail], total: 1, offset: 0, limit: 20 };
     expect(list.items[0]?.id).toBe('wi-1');
+  });
+
+  test('exports a triage request type with a distinct assignee', () => {
+    const human: TriageRequest = { assignee: 'needs_human' };
+    const agent: TriageRequest = { assignee: 'needs_agent_SRE Bot' };
+    const assignee: Assignee = agent.assignee;
+    expect(human.assignee).toBe('needs_human');
+    expect(assignee).toBe('needs_agent_SRE Bot');
   });
 });

@@ -1,5 +1,6 @@
 import {
   AGENT_ASSIGNEE_PREFIX,
+  assertTriageAllowed,
   NEEDS_HUMAN,
   ok,
   parseAssignee,
@@ -11,6 +12,7 @@ import {
 import {
   BadRequestException,
   Body,
+  ConflictException,
   Controller,
   Get,
   HttpCode,
@@ -23,6 +25,7 @@ import {
 } from '@nestjs/common';
 import {
   ApiBadRequestResponse,
+  ApiConflictResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiTags,
@@ -82,6 +85,7 @@ export class WorkItemsController {
   @HttpCode(HttpStatus.OK)
   @ApiOkResponse({ description: 'The triaged work item.', standardSchema: WorkItemSchema })
   @ApiBadRequestResponse({ description: 'The assignee is not valid.' })
+  @ApiConflictResponse({ description: 'The work item is in a terminal status.' })
   @ApiNotFoundResponse({ description: 'No work item has this id.' })
   triage(
     @Param({ schema: workItemParamsSchema }) params: WorkItemParams,
@@ -89,6 +93,9 @@ export class WorkItemsController {
   ): WorkItem {
     const item = this.store.get(params.id);
     if (!item) throw new NotFoundException(`Unknown work item: ${params.id}`);
+
+    const allowed = assertTriageAllowed(item);
+    if (!allowed.ok) throw new ConflictException(allowed.error.message);
 
     const assignee = parseAssignee(body.assignee, this.policy.agentNames);
     if (!assignee.ok) throw new BadRequestException(assignee.error.message);

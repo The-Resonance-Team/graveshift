@@ -1,4 +1,4 @@
-import { WorkItemSchema } from '@graveshift/core';
+import { AssigneeSchema, WorkItemSchema } from '@graveshift/core';
 import { z } from 'zod';
 
 export const workItemParamsSchema = z.object({ id: z.string().min(1) }).strict();
@@ -20,5 +20,5 @@ export const workItemListResponseSchema = z.object({
 });
 export type WorkItemListResponse = z.infer<typeof workItemListResponseSchema>;
 
-export const triageRequestSchema = z.object({ assignee: z.string().min(1) }).strict();
+export const triageRequestSchema = z.object({ assignee: AssigneeSchema }).strict();
 export type TriageRequest = z.infer<typeof triageRequestSchema>;

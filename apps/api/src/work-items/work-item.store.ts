@@ -1,14 +1,16 @@
 import { type WorkItem } from '@graveshift/core';
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 
-import { SEED_WORK_ITEMS } from './work-item.fixtures';
+export const WORK_ITEM_SEED = Symbol('WORK_ITEM_SEED');
 
 /** In-memory store for runtime and tests. Persistence is deferred; no database is wired. */
 @Injectable()
 export class WorkItemStore {
-  private readonly items = new Map<string, WorkItem>(
-    SEED_WORK_ITEMS.map((item) => [item.id, item]),
-  );
+  private readonly items: Map<string, WorkItem>;
+
+  constructor(@Inject(WORK_ITEM_SEED) seed: readonly WorkItem[]) {
+    this.items = new Map(seed.map((item) => [item.id, item]));
+  }
 
   list(): WorkItem[] {
     return [...this.items.values()];

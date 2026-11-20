@@ -139,7 +139,7 @@ export interface operations {
                 status: "todo" | "in_progress" | "in_review" | "done";
                 /** @enum {string} */
                 priority: "low" | "medium" | "high" | "critical";
-                assignee: string;
+                assignee: "needs_human" | `needs_agent_${string}`;
                 reporter: string;
                 /** Format: date */
                 startDate: string | null;
@@ -191,7 +191,7 @@ export interface operations {
             status: "todo" | "in_progress" | "in_review" | "done";
             /** @enum {string} */
             priority: "low" | "medium" | "high" | "critical";
-            assignee: string;
+            assignee: "needs_human" | `needs_agent_${string}`;
             reporter: string;
             /** Format: date */
             startDate: string | null;
@@ -225,7 +225,7 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": {
-          assignee: string;
+          assignee: "needs_human" | `needs_agent_${string}`;
         };
       };
     };
@@ -250,7 +250,7 @@ export interface operations {
             status: "todo" | "in_progress" | "in_review" | "done";
             /** @enum {string} */
             priority: "low" | "medium" | "high" | "critical";
-            assignee: string;
+            assignee: "needs_human" | `needs_agent_${string}`;
             reporter: string;
             /** Format: date */
             startDate: string | null;
@@ -275,6 +275,10 @@ export interface operations {
       };
       /** @description No work item has this id. */
       404: {
+        content: never;
+      };
+      /** @description The work item is in a terminal status. */
+      409: {
         content: never;
       };
     };
