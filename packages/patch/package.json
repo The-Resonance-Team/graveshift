@@ -1,0 +1,22 @@
+{
+  "name": "@graveshift/patch",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./generate": "./src/generate.ts",
+    "./guard": "./src/guard.ts",
+    "./schemas": "./src/schemas.ts"
+  },
+  "scripts": {
+    "typecheck": "bun check --no-script",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@graveshift/agents": "workspace:*",
+    "@graveshift/core": "workspace:*",
+    "@graveshift/gateway": "workspace:*",
+    "zod": "^4.6.7"
+  }
+}

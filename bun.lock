@@ -199,6 +199,16 @@
       "name": "@graveshift/notifier-discord",
       "version": "0.1.0",
     },
+    "packages/patch": {
+      "name": "@graveshift/patch",
+      "version": "0.1.0",
+      "dependencies": {
+        "@graveshift/agents": "workspace:*",
+        "@graveshift/core": "workspace:*",
+        "@graveshift/gateway": "workspace:*",
+        "zod": "^4.6.7",
+      },
+    },
     "packages/plugin-nestjs": {
       "name": "@graveshift/plugin-nestjs",
       "version": "0.1.0",
@@ -408,6 +418,8 @@
     "@graveshift/metrics": ["@graveshift/metrics@workspace:packages/metrics"],
 
     "@graveshift/notifier-discord": ["@graveshift/notifier-discord@workspace:packages/notifier-discord"],
+
+    "@graveshift/patch": ["@graveshift/patch@workspace:packages/patch"],
 
     "@graveshift/plugin-nestjs": ["@graveshift/plugin-nestjs@workspace:packages/plugin-nestjs"],
 

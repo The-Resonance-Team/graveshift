@@ -27,6 +27,7 @@ The v1 daemon is at `apps/_daemon`. It is reference only. The repository does no
 | Agents | `packages/agents` | Zod schemas for agent config, system template merge and the routing agent. Pure helpers only; no provider call. |
 | Gateway | `packages/gateway` | The single model call path for an Agent. Redaction, daily budgets, audit events, transport retry, one validation retry, evidence validation and rules-only fallback. One thin adapter per official provider package. |
 | Exorcist | `packages/fixer` | Patch guard, GitHub App auth, `graveshift/` branches, draft pull requests. No merge call exists. |
+| Patch | `packages/patch` | Patch schemas, `generatePatch` and `guardPatch`. The model proposes a Patch. The guard validates it. Policy decides later. |
 | Actuator | `packages/actuator` | Separate service. Verifies and executes approved actions. |
 | MCP | `apps/api/src/mcp` | `graveshift-mcp` through the official `@nestjs/mcp` module: Streamable HTTP at `/mcp` with a bearer token, plus a stdio launcher. |
 | Banshee | `packages/notifier-discord` | **Not built.** Package exports only its name. The daemon uses a no-op `Notifier`. |
@@ -92,6 +93,12 @@ A work item carries a title, description, success criteria, subtasks with a comp
 `GET /api/work-items` returns a paged list for the table. `GET /api/work-items/:id` returns one work item for the detail sheet. `POST /api/work-items/:id/triage` accepts an assignee of `needs_human` or an existing `needs_agent_<name>`, validates it and writes the result to the in-memory store. Any other assignee returns 400. A work item in a terminal status returns 409 and does not change. The pure helpers `triageToHuman`, `triageToAgent`, `parseAssignee` and `assertTriageAllowed` in `packages/core` make no model call and change no shared state. They set `autoFixAllowed` from client config. The generated assignee type is `needs_human | needs_agent_${string}`. No patch is generated and no fix runs in this ticket. "Fix now" and the exorcism stay in a later ticket. Audit for triage is deferred with the audit chain: no audit event is emitted here.
 
 The API reads agent names from `AGENTS_PATH` (default `agents.example.yaml`) and the client auto-fix switch from `GRAVESHIFT_AUTO_FIX` (default false). A missing or invalid `AGENTS_PATH` fails boot with a `WORK_ITEM_POLICY_INVALID` error. The store seed is injectable. It is empty by default, so production serves no demo data. Set `GRAVESHIFT_WORK_ITEM_DEMO=true` to load three demo work items for a local demo. E2E tests override the seed, the store and the policy with `Test.createTestingModule()`, so they read no agent file and use no demo data. Persistence is deferred: no database and no event-bus consumer are wired.
+
+## Patches
+
+`packages/patch` holds the patch path. A configured **Agent** proposes a Patch for a **Work item**. The model call goes through `packages/gateway` and is injected. `PatchSchema` parses the model output. The guard then checks the Patch: no empty Patch, no file count over the limit, no line count over the limit, no negative or non-integer line count, no unsafe path, no duplicate path, no forbidden path and no path outside `allowedPaths`. Forbidden paths match without case sensitivity. `allowedPaths` keep case sensitivity. `guardPatch` raises one `PatchRejectedError` with all reasons. `generatePatch` returns a typed rejection when the model gives no Patch or an invalid Patch. The guard runs before the caller sees a successful result.
+
+A valid Patch grants no permission and runs no fix. The **Exorcist** prepares the **Exorcism** in a later ticket. Policy `decide()` grants permission later. This ticket makes no GitHub call and opens no pull request.
 
 ## MCP endpoint
 
