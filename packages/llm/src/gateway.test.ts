@@ -4,14 +4,13 @@ import { z } from 'zod';
 
 import { createBudget } from './budget';
 import { createGateway } from './gateway';
-import type { AuditEvent, LlmProvider, LlmTask, ProviderName } from './types';
+import type { AuditEvent, LlmProvider, LlmTask } from './types';
 
 const Out = z.object({ answer: z.string() });
 type Out = z.infer<typeof Out>;
 
 const task = (over: Partial<LlmTask<Out>> = {}): LlmTask<Out> => ({
   name: 'diagnose',
-  tier: 'smart',
   system: 'system',
   prompt: 'prompt',
   schema: Out,
@@ -20,7 +19,6 @@ const task = (over: Partial<LlmTask<Out>> = {}): LlmTask<Out> => ({
 });
 
 interface FakeOptions {
-  name?: ProviderName;
   paid?: boolean;
   available?: boolean;
   script?: Array<unknown | Error>;
@@ -28,7 +26,6 @@ interface FakeOptions {
 }
 
 function fake({
-  name = 'openai-compatible',
   paid = true,
   available = true,
   script = [{ answer: 'model' }],
@@ -37,7 +34,7 @@ function fake({
   const prompts: string[] = [];
   let call = 0;
   const provider: LlmProvider = {
-    name,
+    name: 'openai-compatible',
     paid,
     available: () => available,
     async generateObject({ prompt }) {
@@ -139,12 +136,18 @@ describe('budget', () => {
 });
 
 describe('validation, redaction, audit', () => {
-  test('invalid output retries once with the reason, then reports invalid', async () => {
+  test('invalid output retries once with the reason, then uses rules-only', async () => {
     const stubborn = fake({ script: [{ nope: 1 }] });
     const result = await gateway([stubborn.provider]).run(task());
-    expect(result.status).toBe('invalid');
+    expect(result).toMatchObject({ status: 'rules_only', value: { answer: 'rules' } });
     expect(stubborn.calls()).toBe(2);
     expect(stubborn.prompts[1]).toContain('<validation_error>');
+  });
+
+  test('invalid output stays invalid when no rules-only fallback exists', async () => {
+    const stubborn = fake({ script: [{ nope: 1 }] });
+    const result = await gateway([stubborn.provider]).run(task({ rulesOnly: undefined as never }));
+    expect(result.status).toBe('invalid');
   });
 
   test('a corrected second answer is accepted', async () => {

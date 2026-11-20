@@ -14,6 +14,5 @@ export type {
   LlmResult,
   LlmTask,
   ProviderName,
-  Tier,
   Usage,
 } from './types';

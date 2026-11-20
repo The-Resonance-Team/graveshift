@@ -34,7 +34,6 @@ function replay(body: unknown, seen: Seen[] = [], status = 200): typeof fetch {
 }
 
 const request = {
-  tier: 'smart' as const,
   system: 'sys',
   prompt: 'prompt',
   signal: AbortSignal.timeout(5000),

@@ -3,7 +3,6 @@ import { z } from 'zod';
 
 export const PROVIDER_NAMES = ['openai-compatible'] as const;
 export type ProviderName = (typeof PROVIDER_NAMES)[number];
-export type Tier = 'fast' | 'smart';
 
 export const LlmConfigSchema = z.object({
   provider: z.literal('openai-compatible'),
@@ -24,7 +23,6 @@ export interface Usage {
 }
 
 export interface GenerateRequest {
-  tier: Tier;
   system: string;
   prompt: string;
   schema: z.ZodType;
@@ -46,7 +44,6 @@ export class LlmProviderError extends GraveshiftError<'LLM_PROVIDER_ERROR'> {
 
 export interface LlmTask<T> {
   name: string;
-  tier: Tier;
   system: string;
   prompt: string;
   schema: z.ZodType<T>;

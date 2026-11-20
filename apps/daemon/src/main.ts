@@ -1,9 +1,8 @@
 import { Database } from 'bun:sqlite';
 import { mkdirSync } from 'node:fs';
 
-import { loadConfigFile, type RuntimeSource } from '@graveshift/core';
+import { type RuntimeSource } from '@graveshift/core';
 import { diagnose } from '@graveshift/diagnoser';
-import { buildProviders, createGateway, type LlmConfig, LlmConfigSchema } from '@graveshift/llm';
 import { createMetricsClient } from '@graveshift/metrics';
 import { loadPolicy } from '@graveshift/policy';
 import { redact } from '@graveshift/redactor';
@@ -17,6 +16,7 @@ import { modeView, readConfig } from './config';
 import { startFeeders } from './feeders';
 import { createFlow } from './flow';
 import { createHttp } from './http';
+import { createDiagnosisGateway } from './llm';
 import { createRegistry } from './registry';
 
 const log = pino({ base: { app: 'graveshift-daemon' } });
@@ -28,16 +28,13 @@ const policy = await loadPolicy(config.policyPath);
 const mode = modeView(policy, env);
 if (mode.warning) warn(mode.warning);
 
-const llmConfig: LlmConfig | undefined = await loadConfigFile(config.configPath)
-  .then((c) => LlmConfigSchema.parse(c.llm))
-  .catch(() => undefined);
+const { gateway, llmConfig } = await createDiagnosisGateway(
+  config.configPath,
+  env,
+  policy.limits.llmDailyBudgetUsd,
+  (event) => log.info({ llm: event }, 'llm call'),
+);
 if (!llmConfig) warn(`no LLM config at ${config.configPath}, diagnoses are rules-only`);
-const gateway = createGateway({
-  providers: llmConfig ? buildProviders(llmConfig, env) : [],
-  config: llmConfig ?? { timeoutMs: 30_000, maxRetries: 0, priceTableUsdPer1M: {} },
-  dailyBudgetUsd: policy.limits.llmDailyBudgetUsd,
-  onAudit: (event) => log.info({ llm: event }, 'llm call'),
-});
 
 mkdirSync(config.dataDir, { recursive: true });
 const audit = createSqliteAuditStore(new Database(`${config.dataDir}/audit.db`, { create: true }));

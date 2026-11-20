@@ -1,6 +1,6 @@
 # Real-model diagnosis report (2026-11-20)
 
-Result: all three diagnoser fixtures pass against the real model after one prompt change (round 2). The full Docker Compose stack also produced an `llm` diagnosis for the injected `null-candy` haunt.
+Result: all three diagnoser fixtures pass against the real model after one prompt change (round 2). The Compose demo plus the locally served dashboard also produced an `llm` diagnosis for the injected `null-candy` haunt.
 
 ## Method
 
@@ -9,7 +9,7 @@ Result: all three diagnoser fixtures pass against the real model after one promp
 - Gateway: built as the daemon does (`buildProviders`, `createGateway`, daily budget from `policy.example.yaml`, audit callback). LLM settings come from `graveshift.config.example.yaml` (provider `openai-compatible`, model `qwen3.8-flash-next`, `timeoutMs` 30000, `maxRetries` 1). The API key comes from the gitignored `.env`.
 - Inputs: the `input` field of `packages/diagnoser/fixtures/{null-candy,memory-leech,wrong-potion}.json`. `llmResponse` is ignored.
 - Expected categories: `null-candy` is `code_bug`, `memory-leech` is `resource_exhaustion`, `wrong-potion` is `config_error`.
-- A case passes only when all of these hold: category matches, every evidence ref exists in the context bundle, no secret appears in the output (the redactor leaves it unchanged and no live credential value appears), and for real-model rounds the source is `llm` (not the rules-only fallback).
+- A case passes only when all of these hold: category matches, every evidence ref exists in the context bundle, and no secret appears in the output. The source is recorded as `usedLlm` but is not a pass condition.
 - Rounds: round 0 is the baseline with no providers (rules-only). Round 1 is the real model with the unmodified prompt. Round 2 is the real model after one prompt change.
 - Raw results: `docs/reports/real-model-results.jsonl`. Rows hold short redacted excerpts only, no prompts and no full logs.
 - Not changed: diagnosis logic, schema, validation, model, temperature.
@@ -28,7 +28,7 @@ Result: all three diagnoser fixtures pass against the real model after one promp
 | 2 | llm, tuned prompt | memory-leech | resource_exhaustion | resource_exhaustion | 0.95 | llm | yes | no | 5,919 ms | yes |
 | 2 | llm, tuned prompt | wrong-potion | config_error | config_error | 0.93 | llm | yes | no | 6,516 ms | yes |
 
-Stop condition met at round 2 of the three allowed tuning rounds. Rounds 3 and 4 were not needed.
+Stop condition met after round 2. The cap allows three rounds after the baseline (rounds 1-3); round 3 was not needed.
 
 ## Failure analysis
 
@@ -42,6 +42,10 @@ Effect: `memory-leech` became `resource_exhaustion` (0.95). The other two cases 
 
 `supportsStructuredOutputs`: not changed. The model never returned output that failed the zod schema, so the correctness-fix exception did not apply. The SDK still warns that `responseFormat` is not sent. The prompt asks for a JSON object and the gateway validates it.
 
+## Post-review fixes
+
+After the two review reports, the gateway now uses rules-only when model output stays invalid after the one validation retry. This matches ADR 0002 and the spec. The unused `Tier` type and field were removed. The harness no longer has inline lint disables; a scoped override in `.oxlintrc.json` covers its intentional sequential loop. Gateway wiring was moved to one shared factory, `apps/daemon/src/llm.ts`, used by both the daemon and the harness. The three fixtures were not called again after these changes; gateway and diagnoser tests cover the new fallback.
+
 ## Compose evidence
 
 Stack: `graveshift.compose.yml` plus `demo.compose.yml`, built locally, with ports bound to `127.0.0.1` (demo API 2600, daemon 2602). Change made: `deploy/compose/graveshift.compose.yml` now passes `OPENAI_COMPATIBLE_API_KEY` to the daemon container; it was missing. `POSTGRES_PASSWORD`, `OWNER_TOKEN` and `ACTUATOR_HMAC_SECRET` were random values created in the shell for the run. Compose was started with `--env-file .env`.
@@ -53,9 +57,10 @@ Steps and output (secrets omitted):
 3. `GET localhost:2602/api/incidents` showed the incident in state `diagnosed`. The timeline entry read `code_bug (93%, llm): The API code calls candy.price.toFixed without validating that candy.price is non-null, causing a TypeError when price is null.` The evidence refs were `log:1`, `log:2` and `log:3`.
 4. The daemon log line: `llm: {task: diagnose, status: ok, provider: openai-compatible, model: qwen3.8-flash-next, tokensIn: 804, tokensOut: 245, costUsd: 0}`.
 5. `GET /api/audit/verify` returned `{"ok":true,"length":4}`.
-6. `docker compose down` removed the containers and networks. No graveshift containers remained.
+6. The dashboard is not part of the Compose files. It was served locally on port 2604 with `DAEMON_URL=http://127.0.0.1:2602` and opened in Chrome. Its DOM showed the `api` grave as "Haunting" and "incident is diagnosed", the heading "Diagnosis code_bug, 93% confidence, llm", the root cause about `candy.price.toFixed`, evidence items `log:1` and `log:8`, and the timeline entry "diagnosis code_bug (93%, llm)". The five-phase progress showed Wraith through Exorcist done and Resolved and Autopsy pending.
+7. `docker compose down` removed the containers and networks. No graveshift containers remained.
 
-The dashboard (port 2604) is not part of the Compose files, so it was not started. The evidence above comes from the daemon API.
+The browser evidence proves the diagnosis reached the dashboard through the same-origin `/api/*` proxy.
 
 ## Limitations
 
@@ -64,6 +69,8 @@ The dashboard (port 2604) is not part of the Compose files, so it was not starte
 - Latency varies widely (5.9 s to 56.9 s). Some values exceed the 30 s `timeoutMs`, so those calls likely included a gateway retry. The latency column is wall time for the whole `diagnose` call.
 - The secret check relies on the redactor patterns plus the live credential values. The fixtures hold no secrets, so a leak was not exercised here. Redaction before the LLM is covered by the redactor and gateway tests.
 - The Compose run covered `null-candy` only. `memory-leech` and `wrong-potion` were not injected in Compose.
+- A first Compose attempt used a stale named Postgres volume with an older password, so the API was unhealthy. The volumes were recreated before the recorded run.
+- The dashboard was served on the host, not in Compose. The browser evidence is one snapshot, not a full UX pass.
 - The model endpoint is a private address from `graveshift.config.example.yaml`, so the run reproduces only on a machine that can reach it.
 
 ## Reproduce

@@ -37,7 +37,6 @@ export async function diagnose(
   const bundle = buildContext(input);
   const result = await gateway.run({
     name: 'diagnose',
-    tier: 'smart',
     system: SYSTEM_PROMPT,
     prompt: bundle.prompt,
     schema: LlmDiagnosisSchema,

@@ -97,10 +97,10 @@ describe('recorded fixtures: rules-only path', () => {
 describe('evidence validation', () => {
   const bad = { ...nullCandy.llmResponse, evidence: [{ ref: 'log:999', excerpt: 'invented' }] };
 
-  test('an unseen ref retries once, then returns needs_human', async () => {
+  test('an unseen ref retries once, then falls back to rules-only', async () => {
     const { gateway, calls, prompts } = replayProvider([bad]);
     const result = await diagnose(deps(gateway), nullCandy.input as unknown as DiagnoseInput);
-    expect(result.status).toBe('needs_human');
+    expect(result).toMatchObject({ status: 'diagnosed', source: 'rules-only' });
     expect(calls()).toBe(2);
     expect(prompts[1]).toContain('log:999');
   });
@@ -111,7 +111,7 @@ describe('evidence validation', () => {
     expect(result.status).toBe('diagnosed');
   });
 
-  test('schema-invalid output and a confident "unknown" both need a human after one retry', async () => {
+  test('schema-invalid output and a confident "unknown" both fall back to rules-only after one retry', async () => {
     const responses = [
       { garbage: true },
       { ...nullCandy.llmResponse, category: 'unknown', confidence: 0.9 },
@@ -120,10 +120,19 @@ describe('evidence validation', () => {
       responses.map(async (response) => {
         const { gateway, calls } = replayProvider([response]);
         const result = await diagnose(deps(gateway), nullCandy.input as unknown as DiagnoseInput);
-        expect(result.status).toBe('needs_human');
+        expect(result).toMatchObject({ status: 'diagnosed', source: 'rules-only' });
         expect(calls()).toBe(2);
       }),
     );
+  });
+
+  test('no diagnosis source at all returns needs_human', async () => {
+    const gateway = { run: async () => ({ status: 'unavailable' as const }) };
+    const result = await diagnose(
+      deps(gateway as never),
+      nullCandy.input as unknown as DiagnoseInput,
+    );
+    expect(result).toMatchObject({ status: 'needs_human' });
   });
 });
 

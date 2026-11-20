@@ -45,7 +45,6 @@ export function createGateway(options: GatewayOptions) {
     ): Promise<Generated | undefined> => {
       try {
         return await provider.generateObject({
-          tier: task.tier,
           system,
           prompt: text,
           schema: task.schema,
@@ -124,6 +123,10 @@ export function createGateway(options: GatewayOptions) {
         return from(index + 1);
       }
       if (result.kind === 'invalid') {
+        // last safety net: an invalid model answer must not block a diagnosis
+        if (task.rulesOnly) {
+          return finish({ status: 'rules_only', value: task.rulesOnly(), skipped });
+        }
         return finish({
           status: 'invalid',
           reason: result.reason,

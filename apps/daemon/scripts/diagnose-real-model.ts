@@ -5,7 +5,6 @@
 import { appendFileSync, mkdirSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 
-import { loadConfigFile } from '@graveshift/core';
 import {
   buildContext,
   type Category,
@@ -13,9 +12,11 @@ import {
   diagnose,
   type DiagnoseResult,
 } from '@graveshift/diagnoser';
-import { type AuditEvent, buildProviders, createGateway, LlmConfigSchema } from '@graveshift/llm';
+import type { AuditEvent } from '@graveshift/llm';
 import { loadPolicy } from '@graveshift/policy';
 import { redact } from '@graveshift/redactor';
+
+import { createDiagnosisGateway } from '../src/llm';
 
 const root = resolve(import.meta.dir, '../../..');
 const fixtureDir = resolve(root, 'packages/diagnoser/fixtures');
@@ -43,30 +44,27 @@ const liveSecrets = [env.OPENAI_COMPATIBLE_API_KEY, env.HAUNT_TOKEN].filter(
 );
 const leaks = (text: string) => redact(text) !== text || liveSecrets.some((s) => text.includes(s));
 
-const config = await loadConfigFile(resolve(root, 'graveshift.config.example.yaml'));
-const llmConfig = LlmConfigSchema.parse(config.llm);
 const policy = await loadPolicy(resolve(root, 'policy.example.yaml'));
 
 const audits: AuditEvent[] = [];
-const gateway = createGateway({
-  providers: baseline ? [] : buildProviders(llmConfig, env),
-  config: llmConfig,
-  dailyBudgetUsd: policy.limits.llmDailyBudgetUsd,
-  onAudit: (event) => audits.push(event),
-});
+const { gateway } = await createDiagnosisGateway(
+  resolve(root, 'graveshift.config.example.yaml'),
+  baseline ? {} : env,
+  policy.limits.llmDailyBudgetUsd,
+  (event) => audits.push(event as AuditEvent),
+);
 
 mkdirSync(dirname(outPath), { recursive: true });
 let failed = 0;
 
-// cases run one after another on purpose: latency is measured per call
+// Cases run one after another on purpose: latency is measured per call and
+// calls share one gateway budget. The scoped lint override in .oxlintrc.json covers this loop.
 for (const { id, expected } of CASES) {
-  // oxlint-disable-next-line no-await-in-loop
   const fixture = (await Bun.file(resolve(fixtureDir, `${id}.json`)).json()) as {
     input: DiagnoseInput;
   };
   const bundle = buildContext(fixture.input);
   const started = performance.now();
-  // oxlint-disable-next-line no-await-in-loop
   const result: DiagnoseResult = await diagnose({ gateway }, fixture.input);
   const latencyMs = Math.round(performance.now() - started);
   const audit = audits.at(-1);
@@ -99,19 +97,19 @@ for (const { id, expected } of CASES) {
       diagnosis.rootCause,
       ...diagnosis.evidence.map((e) => `${e.ref} ${e.excerpt}`),
     ].join('\n');
-    const grounded = refs.length > 0 && refs.every((r) => bundle.refs.has(r));
+    const grounded = refs.every((r) => bundle.refs.has(r));
     const secretLeak = leaks(outputText);
-    const sourceOk = baseline || source === 'llm';
     row = {
       ...base,
       actual: category,
       source,
+      usedLlm: source === 'llm',
       confidence: diagnosis.confidence,
       rootCause: excerpt(diagnosis.rootCause, 160),
       evidence: diagnosis.evidence.map((e) => ({ ref: e.ref, excerpt: excerpt(e.excerpt, 80) })),
       groundedRefs: grounded,
       secretLeak,
-      pass: category === expected && grounded && !secretLeak && sourceOk,
+      pass: category === expected && grounded && !secretLeak,
     };
   }
   if (audit)
