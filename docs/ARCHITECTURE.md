@@ -87,7 +87,11 @@ Two lanes carry envelopes:
 | `telemetry` | `info` | Baselines and charts. |
 | `detection` | `warning`, `critical` | Detection by the Wraith. |
 
-`packages/events` owns the `Publisher` interface, `createNatsPublisher` and an in-memory fake for tests. Subjects have the form `graveshift.<tenantId>.<lane>.<type>`. The publisher uses the official NATS client and sends the envelope `id` as the `msgID` option. This ticket wires no daemon, API, Plugin, Collector or rule engine.
+`packages/events` owns the `Publisher` interface, `createNatsPublisher` and an in-memory fake under `./testing`. Subjects have the form `graveshift.<tenantId>.<lane>.<type>`. The publisher uses the official NATS client packages `@nats-io/transport-node` and `@nats-io/jetstream`, and sends the envelope `id` as the `msgID` option. The NATS connection code is under `./nats`; it is not loaded when a caller imports only `Publisher` or the fake.
+
+The JetStream stream is `GRAVESHIFT_EVENTS`. It filters subjects with `graveshift.>`. JetStream detects duplicate publishes by `msgID` inside `duplicate_window`. The default `duplicate_window` is two minutes. Redelivery after that window is not idempotent: a consumer must still handle a repeated envelope `id`.
+
+This ticket wires no daemon, API, Plugin, Collector or rule engine.
 
 ## Daemon local surface
 
