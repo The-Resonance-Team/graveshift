@@ -16,6 +16,7 @@
       }
     ],
     "no-explicit-any": "error",
+    "typescript/no-extraneous-class": ["warn", { "allowWithDecorator": true }],
     "no-console": ["warn", { "allow": ["warn", "error"] }],
     "no-debugger": "warn",
     "react/react-in-jsx-scope": "off",

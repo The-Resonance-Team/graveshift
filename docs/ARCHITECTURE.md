@@ -8,6 +8,8 @@ The v1 daemon is at `apps/_daemon`. It is reference only. The repository does no
 
 | Component | Path | Role |
 | --- | --- | --- |
+| API | `apps/api` | NestJS app. The only external surface. Serves `GET /healthz`, the OpenAPI document and the Swagger UI. |
+| API contract | `packages/api-contract` | Publishes generated TypeScript types and a version marker from the OpenAPI document. No event envelope. |
 | Daemon (v1) | `apps/_daemon` | Reference only. Wires Wraith, Medium, policy, optional fixer and the audit log. Not built and not started. |
 | Daemon (v2) | `apps/daemon` | New Effect v4 skeleton on Bun. Serves `GET /healthz` only. |
 | Core | `packages/core` | Zod schemas (source of truth), incident state machine, circuit-breaker helper, config loader, `RuntimeSource` contract. |
@@ -55,16 +57,24 @@ The state machine lives in `packages/core/src/state.ts`. Incident states: see `I
 
 `deploy/k8s` holds RBAC and a network policy only. The reader ClusterRole allows get/list/watch (including `pods/log`). The actuator has a namespaced Role limited to patching `api` and `worker` deployments and scaling `worker`. The network policy is a skeleton that allows all egress. There are no Deployments, no kind overlay and no working bootstrap script: **not built** (issue #14). RBAC changes require a change to `.kiro/specs/k8s-deploy`.
 
-## Daemon API
+## External API
 
-The new daemon serves one route. The v1 routes in `apps/_daemon` are reference only.
+The API in `apps/api` is the only external surface. A client calls this API, never the daemon.
 
 | Route | Returns |
 | --- | --- |
 | `GET /healthz` | `{status: "ok"}` |
+| `GET /docs-json` | The OpenAPI document. |
+| `GET /docs` | The Swagger UI. |
 
-The daemon listens on port 2602 and binds to 127.0.0.1 by default. The `PORT` environment variable changes the port. The daemon has no authentication. Keep the bind on localhost.
+The API uses Zod through Nest's standard-schema pipe. When a route takes input, the route attaches a Zod schema with `@Body({ schema })`, `@Query({ schema })` or `@Param({ schema })`. This ticket adds no business logic, authentication, rate limits, MCP or SSE. Later tickets add the routes for graves and hauntings here.
+
+`packages/api-contract` generates its types from the OpenAPI document. It exports the generated types and the `API_CONTRACT_VERSION` marker through `package.json#exports` only. It does not define an event envelope or any domain event type; a later ticket owns the envelope.
+
+## Daemon local surface
+
+The daemon keeps only health and a local command inbox (**not built**). It listens on port 2602 and binds to 127.0.0.1 by default. The `PORT` environment variable changes the port. No client calls the daemon directly. Keep the bind on localhost.
 
 ## Decisions
 
-See `docs/adr/0001-full-scope-for-kiroween.md`, `docs/adr/0002-single-ai-sdk-provider.md`, `docs/adr/0003-platform-v2-starts-now.md` and `docs/adr/0004-effect-v4-daemon-on-bun.md`.
+See `docs/adr/0001-full-scope-for-kiroween.md`, `docs/adr/0002-single-ai-sdk-provider.md`, `docs/adr/0003-platform-v2-starts-now.md`, `docs/adr/0004-effect-v4-daemon-on-bun.md` and `docs/adr/0006-nestjs-api-and-mcp.md`.
