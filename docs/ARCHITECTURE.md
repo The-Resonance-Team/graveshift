@@ -130,11 +130,13 @@ The audit event for Rule override detection is deferred with the rest of the aud
 
 ## Agent config
 
-An **Agent** is a configured Ghost. Its config block holds a name, role, description with trigger keywords, prompt, params, provider package, model, `baseUrl`, `apiKeyEnv`, allowed tools, daily budget and escalation target. `packages/agents` owns the Zod schemas and pure helpers. A key is never stored in config: `apiKeyEnv` only names the environment variable that holds the key.
+An **Agent** is a configured Ghost. Its config block holds a name, role, description with trigger keywords, prompt, params, provider package, model, `baseUrl`, `apiKeyEnv`, allowed tools, daily budget and escalation target. `packages/agents` owns the Zod schemas and pure helpers. The schema is strict: an unknown key, including a key value, fails validation. `baseUrl` must use https and carry no URL credentials. `apiKeyEnv` must be `GRAVESHIFT_*` or end with `_API_KEY`. This is a naming guard only; it does not check which secret the variable holds. The gateway in ticket #26 enforces the credential allowlist.
 
-`agents.example.yaml` holds one system template with two Agents: an SRE Bot and a DevOps Bot. Each one names an official `@ai-sdk/*` provider package, a model, a `baseUrl` and an `apiKeyEnv`. Client config overrides a system Agent with the same name. `mergeAgentTemplates` applies this client override: the client block wins and the other system Agents stay.
+`agents.example.yaml` holds a `system` list with two Agent templates: an SRE Bot and a DevOps Bot. Each one names a model, a `baseUrl` and an `apiKeyEnv`. Supported provider packages are `@ai-sdk/google`, `@ai-sdk/anthropic` and `@ai-sdk/openai-compatible`. The `client` list replaces a whole system Agent with the same name; it does not merge fields. `mergeAgentTemplates` applies this client override: the client block wins and the other system Agents stay. Duplicate names in either list and an `escalateTo` that does not name an existing Agent fail validation.
 
-The **Routing agent** is a built-in role. It reads a request, selects a target Agent by the trigger keywords in the description, and fills `{{PARAM}}` placeholders in the prompt from the declared params. A missing required param leads to one question to the user. If the param is still missing, the result is `needs_human` with a reason. The question is written through an injected `RoutingModel` interface. This package imports no provider package and makes no model call. Redaction, budget and audit controls stay in ticket #26.
+Each param is one key-value map. Its key is a `{{PARAM}}` placeholder in the prompt. The YAML value is a **default**: the routing agent uses it when the request has no value for that param. An empty value means there is no default. Params and placeholders must declare each other, and param names must be unique. A missing param without a default leads to one question to the user. If the param is still missing, the result is `needs_human` with a reason.
+
+The **Routing agent** is a built-in role. It reads a request and selects a target Agent by the trigger keywords in the description. When two Agents score the same, the first Agent in the list wins. Request text and filled param values are wrapped as `<untrusted_*>` data before they enter any prompt, using the same convention as the diagnoser. The question is written through an injected `RoutingModel` interface. This package imports no provider package and makes no model call. Redaction, budget and audit controls stay in ticket #26.
 
 ## Daemon local surface
 
@@ -142,4 +144,4 @@ The daemon keeps only health and a local command inbox (**not built**). It liste
 
 ## Decisions
 
-See `docs/adr/0001-full-scope-for-kiroween.md`, `docs/adr/0002-single-ai-sdk-provider.md`, `docs/adr/0003-platform-v2-starts-now.md`, `docs/adr/0004-effect-v4-daemon-on-bun.md`, `docs/adr/0005-event-backbone-nats.md`, `docs/adr/0006-nestjs-api-and-mcp.md` and `docs/adr/0007-configurable-agents-and-providers.md`.
+See `docs/adr/0001-full-scope-for-kiroween.md`, `docs/adr/0002-single-ai-sdk-provider.md` (superseded by `docs/adr/0007-configurable-agents-and-providers.md`), `docs/adr/0003-platform-v2-starts-now.md`, `docs/adr/0004-effect-v4-daemon-on-bun.md`, `docs/adr/0005-event-backbone-nats.md`, `docs/adr/0006-nestjs-api-and-mcp.md` and `docs/adr/0007-configurable-agents-and-providers.md`.

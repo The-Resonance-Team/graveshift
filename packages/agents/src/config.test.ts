@@ -7,6 +7,7 @@ import {
   declaredParams,
   fillAgentPrompt,
   mergeAgentTemplates,
+  paramDefaults,
   PROVIDER_PACKAGES,
   type AgentConfig,
 } from './config';
@@ -38,6 +39,7 @@ const devopsBot: AgentConfig = {
   apiKeyEnv: 'ANTHROPIC_API_KEY',
   allowedTools: ['propose_fix'],
   dailyBudgetUsd: 5,
+  escalateTo: 'SRE Bot',
 };
 
 describe('agent config validation', () => {
@@ -45,9 +47,10 @@ describe('agent config validation', () => {
     const parsed = AgentConfigSchema.parse(sreBot);
     expect(parsed.params).toEqual([{ VERSION: 'v1' }, { INCIDENT_DETAIL: 'OOM VPS' }]);
     expect(declaredParams(parsed)).toEqual(['VERSION', 'INCIDENT_DETAIL']);
+    expect(paramDefaults(parsed)).toEqual({ VERSION: 'v1', INCIDENT_DETAIL: 'OOM VPS' });
   });
 
-  test('rejects a malformed params shape', () => {
+  test('rejects a malformed or duplicate params shape', () => {
     expect(() => AgentConfigSchema.parse({ ...sreBot, params: [{ VERSION: 1 }] })).toThrow();
     expect(() =>
       AgentConfigSchema.parse({ ...sreBot, params: [{ 'lower-case': 'v1' }] }),
@@ -56,24 +59,63 @@ describe('agent config validation', () => {
       AgentConfigSchema.parse({ ...sreBot, params: [{ VERSION: 'v1', SERVICE: 'api' }] }),
     ).toThrow();
     expect(() => AgentConfigSchema.parse({ ...sreBot, params: 'VERSION' })).toThrow();
+    expect(() =>
+      AgentConfigSchema.parse({ ...sreBot, params: [{ VERSION: 'v1' }, { VERSION: 'v2' }] }),
+    ).toThrow();
   });
 
-  test('accepts only official provider packages and never a key value', () => {
-    expect(PROVIDER_PACKAGES).toContain('@ai-sdk/google');
+  test('rejects an apiKey instead of dropping it silently', () => {
+    expect(() => AgentConfigSchema.parse({ ...sreBot, apiKey: 'sk-secret' })).toThrow();
+    expect(() =>
+      AgentsFileSchema.parse({ system: [{ ...sreBot, apiKey: 'sk-secret' }] }),
+    ).toThrow();
+    expect(() => AgentsFileSchema.parse({ system: [sreBot], unknown: true })).toThrow();
+  });
+
+  test('accepts only official provider packages', () => {
+    expect(PROVIDER_PACKAGES).toContain('@ai-sdk/openai-compatible');
     expect(() => AgentConfigSchema.parse({ ...sreBot, provider: '@other/google' })).toThrow();
-    const withKey = AgentConfigSchema.parse({ ...sreBot, apiKey: 'sk-secret' });
-    expect(Object.hasOwn(withKey, 'apiKey')).toBe(false);
+  });
+
+  test('requires https baseUrl without credentials', () => {
+    expect(AgentConfigSchema.parse(sreBot).baseUrl).toBe(sreBot.baseUrl);
+    expect(() =>
+      AgentConfigSchema.parse({ ...sreBot, baseUrl: 'http://example.com/v1' }),
+    ).toThrow();
+    expect(() =>
+      AgentConfigSchema.parse({ ...sreBot, baseUrl: 'https://user:pass@example.com/v1' }),
+    ).toThrow();
+  });
+
+  test('restricts apiKeyEnv to a safe naming pattern', () => {
+    expect(
+      AgentConfigSchema.parse({ ...sreBot, apiKeyEnv: 'GRAVESHIFT_CLIENT_API_KEY' }),
+    ).toBeDefined();
+    expect(() => AgentConfigSchema.parse({ ...sreBot, apiKeyEnv: 'CLIENT_KEY' })).toThrow();
+    expect(() =>
+      AgentConfigSchema.parse({ ...sreBot, apiKeyEnv: 'AWS_SECRET_ACCESS_KEY' }),
+    ).toThrow();
     expect(() => AgentConfigSchema.parse({ ...sreBot, apiKeyEnv: 'sk-secret' })).toThrow();
+  });
+
+  test('requires prompt and params to declare each other', () => {
+    expect(() => AgentConfigSchema.parse({ ...sreBot, prompt: 'Resolve {{UNKNOWN}}.' })).toThrow();
+    expect(() => AgentConfigSchema.parse({ ...sreBot, prompt: 'Resolve the incident.' })).toThrow();
+    expect(AgentConfigSchema.parse(sreBot)).toBeDefined();
   });
 });
 
-describe('agent templates', () => {
+describe('agent lists', () => {
   test('client config overrides a system template with the same name', () => {
-    const override: AgentConfig = { ...sreBot, model: 'client-model', apiKeyEnv: 'CLIENT_KEY' };
+    const override: AgentConfig = {
+      ...sreBot,
+      model: 'client-model',
+      apiKeyEnv: 'GRAVESHIFT_CLIENT_API_KEY',
+    };
     const merged = mergeAgentTemplates([sreBot, devopsBot], [override]);
     expect(merged).toHaveLength(2);
     expect(merged[0]?.model).toBe('client-model');
-    expect(merged[0]?.apiKeyEnv).toBe('CLIENT_KEY');
+    expect(merged[0]?.apiKeyEnv).toBe('GRAVESHIFT_CLIENT_API_KEY');
     expect(merged[1]).toEqual(devopsBot);
   });
 
@@ -82,15 +124,28 @@ describe('agent templates', () => {
     const merged = mergeAgentTemplates([sreBot, devopsBot], [extra]);
     expect(merged.map((agent) => agent.name)).toEqual(['SRE Bot', 'DevOps Bot', 'Extra Bot']);
   });
+
+  test('rejects duplicate names in system and in client', () => {
+    expect(() => AgentsFileSchema.parse({ system: [sreBot, sreBot] })).toThrow();
+    expect(() => AgentsFileSchema.parse({ system: [], client: [devopsBot, devopsBot] })).toThrow();
+  });
+
+  test('requires escalateTo to name an existing agent', () => {
+    expect(() =>
+      AgentsFileSchema.parse({ system: [{ ...sreBot, escalateTo: 'Missing Bot' }] }),
+    ).toThrow();
+    expect(AgentsFileSchema.parse({ system: [sreBot, devopsBot] }).system).toHaveLength(2);
+  });
 });
 
 describe('prompt params', () => {
-  test('fills every declared placeholder', () => {
+  test('wraps every filled value as untrusted data', () => {
     const filled = fillAgentPrompt(sreBot.prompt, {
       VERSION: 'v2',
       INCIDENT_DETAIL: 'OOM VPS',
     });
-    expect(filled).toBe('Resolve OOM VPS on version v2.');
+    expect(filled).toContain('<untrusted_param name="VERSION">v2</untrusted_param>');
+    expect(filled).toContain('<untrusted_param name="INCIDENT_DETAIL">OOM VPS</untrusted_param>');
     expect(filled).not.toContain('{{');
   });
 });
@@ -108,7 +163,7 @@ describe('example config file', () => {
     expect(JSON.stringify(raw)).not.toContain('sk-');
     expect(JSON.stringify(file)).not.toContain('"apiKey"');
     for (const agent of agents) {
-      expect(agent.apiKeyEnv).toMatch(/^[A-Z][A-Z0-9_]*$/);
+      expect(agent.apiKeyEnv).toMatch(/_API_KEY$/);
       expect(Object.keys(agent)).not.toContain('apiKey');
     }
   });

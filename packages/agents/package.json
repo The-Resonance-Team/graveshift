@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/config.ts",
-    "./routing": "./src/routing.ts"
+    "./routing": "./src/routing.ts",
+    "./untrusted": "./src/untrusted.ts"
   },
   "scripts": {
     "typecheck": "bun check --no-script",

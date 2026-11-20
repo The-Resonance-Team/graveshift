@@ -1,4 +1,11 @@
-import { type AgentConfig, declaredParams, fillAgentPrompt, selectAgentByKeywords } from './config';
+import {
+  type AgentConfig,
+  declaredParams,
+  fillAgentPrompt,
+  paramDefaults,
+  selectAgentByKeywords,
+} from './config';
+import { UNTRUSTED_SYSTEM_NOTE, untrustedRequest } from './untrusted';
 
 export const ROUTING_AGENT_ROLE = 'routing';
 
@@ -42,10 +49,19 @@ export function createRoutingAgent(options: RoutingAgentOptions): RoutingAgent {
       }
 
       const supplied = request.params ?? {};
-      const missing = declaredParams(agent).filter((name) => {
-        const value = supplied[name];
-        return typeof value !== 'string' || value.length === 0;
-      });
+      const defaults = paramDefaults(agent);
+      const effective: Record<string, string> = {};
+      const missing: string[] = [];
+      for (const name of declaredParams(agent)) {
+        const fromRequest = supplied[name];
+        const value =
+          typeof fromRequest === 'string' && fromRequest.length > 0 ? fromRequest : defaults[name];
+        if (value === undefined || value.length === 0) {
+          missing.push(name);
+        } else {
+          effective[name] = value;
+        }
+      }
 
       if (missing.length > 0) {
         if (request.alreadyAsked === true) {
@@ -56,13 +72,16 @@ export function createRoutingAgent(options: RoutingAgentOptions): RoutingAgent {
           };
         }
         const question = await model.generateText({
-          system: 'You are the Graveshift routing agent. Ask the user once for the missing params.',
-          prompt: `Agent ${agent.name} needs ${missing.join(', ')}. Request: ${request.text}`,
+          system: [
+            'You are the Graveshift routing agent. Ask the user once for the missing params.',
+            UNTRUSTED_SYSTEM_NOTE,
+          ].join('\n'),
+          prompt: `Agent ${agent.name} needs ${missing.join(', ')}. Request:\n${untrustedRequest(request.text)}`,
         });
         return { kind: 'ask', agent, question, missing };
       }
 
-      return { kind: 'routed', agent, prompt: fillAgentPrompt(agent.prompt, supplied) };
+      return { kind: 'routed', agent, prompt: fillAgentPrompt(agent.prompt, effective) };
     },
   };
 }

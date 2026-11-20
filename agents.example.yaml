@@ -35,6 +35,6 @@ system:
     dailyBudgetUsd: 5
     escalateTo: SRE Bot
 
-# A client may replace any system template with the same name. Only the fields
-# that differ need to be supplied by the caller when it builds its config.
+# A client entry replaces the whole system Agent block with the same name.
+# It is not a field merge: the client block must be a complete Agent config.
 client: []
