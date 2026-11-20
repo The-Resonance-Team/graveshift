@@ -24,7 +24,7 @@ function replayProvider(responses: unknown[], available = true) {
   const prompts: string[] = [];
   let call = 0;
   const provider: LlmProvider = {
-    name: 'ollama',
+    name: 'openai-compatible',
     paid: false,
     available: () => available,
     async generateObject({ prompt }) {

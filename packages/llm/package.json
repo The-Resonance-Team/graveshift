@@ -11,8 +11,10 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@ai-sdk/openai-compatible": "3.0.93",
     "@graveshift/core": "workspace:*",
     "@graveshift/redactor": "workspace:*",
+    "ai": "7.0.177",
     "zod": "^4.6.7"
   }
 }

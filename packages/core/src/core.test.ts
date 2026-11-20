@@ -67,11 +67,12 @@ describe('config', () => {
     const config = await loadConfigFile(
       `${import.meta.dir}/../../../graveshift.config.example.yaml`,
     );
-    expect(config.llm.chain).toEqual(['bedrock', 'gemini', 'ollama']);
+    expect(config.llm.provider).toBe('openai-compatible');
+    expect(config.llm.model).toBe('qwen3.8-flash-next');
   });
 
   test('rejects invalid config with a typed error', () => {
-    expect(() => parseConfig({ llm: { chain: [] } })).toThrow(ConfigError);
+    expect(() => parseConfig({ llm: { provider: 'gemini' } })).toThrow(ConfigError);
   });
 });
 

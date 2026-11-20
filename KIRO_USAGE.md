@@ -25,7 +25,7 @@ Concrete bug a spec prevented, and the comparison with ad hoc coding: capture pe
 
 ## 3. Steering
 
-Seven files in `.kiro/steering/`: `product`, `tech`, `structure`, `safety` (always included), plus `halloween-voice`, `docker-k8s` and `github-app` (matched by file type). `safety.md` lists eight invariants that the code follows: signed single-use actions, draft-only PRs, pure policy, redaction before outputs, untrusted tags, no `docker.sock`, no secrets, append-only audit and the circuit breaker. The `tech` rule "no provider SDK outside `packages/llm`" is why the provider chain sits in one gateway package.
+Seven files in `.kiro/steering/`: `product`, `tech`, `structure`, `safety` (always included), plus `halloween-voice`, `docker-k8s` and `github-app` (matched by file type). `safety.md` lists eight invariants that the code follows: signed single-use actions, draft-only PRs, pure policy, redaction before outputs, untrusted tags, no `docker.sock`, no secrets, append-only audit and the circuit breaker. The `tech` rule "no provider SDK outside `packages/llm`" is why the model call sits in one gateway package.
 
 Before and after example: capture pending.
 
@@ -81,7 +81,7 @@ Dates are from `docs/HANDOFF.md` (20 Nov 2026, ICT). "Corrected" lists fixes rec
 | Policy and redactor | deny-first `decide()`, mode lattice, 12 detectors, policy CLI | none recorded |
 | Runtime sources and demo | Docker, Kubernetes and Prometheus clients, Haunted Candy Shop with five faults | Docker smoke test showed four scenarios behave as designed; OOM events seen |
 | Watcher | seven rules, dedupe, PromQL poller | none recorded |
-| LLM and diagnoser | provider chain, budget stop, evidence validation, fixtures | none recorded |
+| LLM and diagnoser | single-provider gateway, budget stop, evidence validation, fixtures | none recorded |
 | Fixer and actuator | GitHub App client, patch guard, signed single-use actions, breaker | none recorded |
 | Daemon | pipeline, HTTP API, SSE, Haunt panel endpoint | real Docker run: SSE within about 5 s, audit chain verified |
 | Dashboard | Next.js graveyard, timeline, wizard | low-contrast text, 375 px tooltip overflow, favicon 404 |

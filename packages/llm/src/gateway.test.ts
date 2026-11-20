@@ -20,7 +20,7 @@ const task = (over: Partial<LlmTask<Out>> = {}): LlmTask<Out> => ({
 });
 
 interface FakeOptions {
-  name: ProviderName;
+  name?: ProviderName;
   paid?: boolean;
   available?: boolean;
   script?: Array<unknown | Error>;
@@ -28,10 +28,10 @@ interface FakeOptions {
 }
 
 function fake({
-  name,
+  name = 'openai-compatible',
   paid = true,
   available = true,
-  script = [{ answer: name }],
+  script = [{ answer: 'model' }],
   usage = { in: 1000, out: 0 },
 }: FakeOptions) {
   const prompts: string[] = [];
@@ -44,7 +44,7 @@ function fake({
       prompts.push(prompt);
       const next = script[Math.min(call++, script.length - 1)];
       if (next instanceof Error) throw next;
-      return { object: next, model: `${name}-model`, usage };
+      return { object: next, model: 'test-model', usage };
     },
   };
   return { provider, prompts, calls: () => call };
@@ -53,7 +53,7 @@ function fake({
 const config = {
   timeoutMs: 1000,
   maxRetries: 1,
-  priceTableUsdPer1M: { 'bedrock-model': { in: 1000, out: 0 } },
+  priceTableUsdPer1M: { 'test-model': { in: 1000, out: 0 } },
 };
 const gateway = (
   providers: LlmProvider[],
@@ -66,47 +66,34 @@ const gateway = (
     ...(over.onAudit ? { onAudit: over.onAudit } : {}),
   });
 
-describe('provider chain', () => {
-  test('uses the first available provider', async () => {
-    const result = await gateway([
-      fake({ name: 'bedrock' }).provider,
-      fake({ name: 'gemini' }).provider,
-    ]).run(task());
+describe('single provider', () => {
+  test('uses the configured provider', async () => {
+    const result = await gateway([fake({}).provider]).run(task());
     expect(result).toMatchObject({
       status: 'ok',
-      provider: 'bedrock',
-      value: { answer: 'bedrock' },
+      provider: 'openai-compatible',
+      value: { answer: 'model' },
     });
   });
 
-  test('falls through unavailable and failing providers in order', async () => {
-    const down = fake({ name: 'bedrock', available: false });
-    const broken = fake({ name: 'gemini', script: [new Error('503')] });
-    const local = fake({ name: 'ollama', paid: false });
-    const result = await gateway([down.provider, broken.provider, local.provider]).run(task());
-    expect(result).toMatchObject({ status: 'ok', provider: 'ollama' });
-    expect(result.status === 'ok' && result.skipped).toEqual([
-      { provider: 'bedrock', reason: 'unavailable' },
-      { provider: 'gemini', reason: 'failed' },
-    ]);
+  test('transport errors retry up to maxRetries, then report failed and use rules-only', async () => {
+    const flaky = fake({ script: [new Error('timeout'), { answer: 'recovered' }] });
+    expect(await gateway([flaky.provider]).run(task())).toMatchObject({
+      status: 'ok',
+      value: { answer: 'recovered' },
+    });
+    const broken = fake({ script: [new Error('503')] });
+    const result = await gateway([broken.provider]).run(task());
+    expect(result).toMatchObject({ status: 'rules_only', value: { answer: 'rules' } });
+    expect(result.skipped).toEqual([{ provider: 'openai-compatible', reason: 'failed' }]);
     expect(broken.calls()).toBe(2);
   });
 
-  test('transport errors retry up to maxRetries before moving on', async () => {
-    const flaky = fake({
-      name: 'bedrock',
-      script: [new Error('timeout'), { answer: 'recovered' }],
-    });
-    const result = await gateway([flaky.provider]).run(task());
-    expect(result).toMatchObject({ status: 'ok', value: { answer: 'recovered' } });
-  });
-
-  test('uses rules-only when every provider is out, and unavailable without a fallback', async () => {
-    const providers = [fake({ name: 'bedrock', available: false }).provider];
-    expect(await gateway(providers).run(task())).toMatchObject({
-      status: 'rules_only',
-      value: { answer: 'rules' },
-    });
+  test('uses rules-only when the model is unavailable, unavailable without a fallback', async () => {
+    const providers = [fake({ available: false }).provider];
+    const result = await gateway(providers).run(task());
+    expect(result).toMatchObject({ status: 'rules_only', value: { answer: 'rules' } });
+    expect(result.skipped).toEqual([{ provider: 'openai-compatible', reason: 'unavailable' }]);
     expect(await gateway(providers).run(task({ rulesOnly: undefined as never }))).toMatchObject({
       status: 'unavailable',
     });
@@ -114,13 +101,13 @@ describe('provider chain', () => {
 });
 
 describe('budget', () => {
-  test('stops paid providers once spent, keeps free ones', async () => {
-    const paid = fake({ name: 'bedrock', usage: { in: 2_000_000, out: 0 } });
-    const free = fake({ name: 'ollama', paid: false });
-    const gw = gateway([paid.provider, free.provider], { dailyBudgetUsd: 1 });
-    expect((await gw.run(task())).status === 'ok' && (await gw.run(task()))).toMatchObject({
-      provider: 'ollama',
-    });
+  test('an exhausted daily budget skips the model and falls back to rules-only', async () => {
+    const paid = fake({ usage: { in: 2_000_000, out: 0 } });
+    const gw = gateway([paid.provider], { dailyBudgetUsd: 1 });
+    expect((await gw.run(task())).status).toBe('ok');
+    const second = await gw.run(task());
+    expect(second).toMatchObject({ status: 'rules_only' });
+    expect(second.skipped).toEqual([{ provider: 'openai-compatible', reason: 'budget' }]);
     expect(paid.calls()).toBe(1);
   });
 
@@ -153,7 +140,7 @@ describe('budget', () => {
 
 describe('validation, redaction, audit', () => {
   test('invalid output retries once with the reason, then reports invalid', async () => {
-    const stubborn = fake({ name: 'bedrock', script: [{ nope: 1 }] });
+    const stubborn = fake({ script: [{ nope: 1 }] });
     const result = await gateway([stubborn.provider]).run(task());
     expect(result.status).toBe('invalid');
     expect(stubborn.calls()).toBe(2);
@@ -161,7 +148,7 @@ describe('validation, redaction, audit', () => {
   });
 
   test('a corrected second answer is accepted', async () => {
-    const fixes = fake({ name: 'bedrock', script: [{ nope: 1 }, { answer: 'fixed' }] });
+    const fixes = fake({ script: [{ nope: 1 }, { answer: 'fixed' }] });
     expect(await gateway([fixes.provider]).run(task())).toMatchObject({
       status: 'ok',
       value: { answer: 'fixed' },
@@ -169,7 +156,7 @@ describe('validation, redaction, audit', () => {
   });
 
   test('evidence validator failures follow the same retry path', async () => {
-    const p = fake({ name: 'bedrock', script: [{ answer: 'bad' }, { answer: 'good' }] });
+    const p = fake({ script: [{ answer: 'bad' }, { answer: 'good' }] });
     const result = await gateway([p.provider]).run(
       task({ validate: (v) => (v.answer === 'good' ? undefined : 'unseen ref') }),
     );
@@ -177,7 +164,7 @@ describe('validation, redaction, audit', () => {
   });
 
   test('secrets never reach a provider and audit events carry no prompt', async () => {
-    const p = fake({ name: 'ollama', paid: false });
+    const p = fake({});
     const events: AuditEvent[] = [];
     await gateway([p.provider], { onAudit: (e) => events.push(e) }).run(
       task({
@@ -191,7 +178,7 @@ describe('validation, redaction, audit', () => {
     expect(events[0]).toMatchObject({
       task: 'diagnose',
       status: 'ok',
-      provider: 'ollama',
+      provider: 'openai-compatible',
       tokensIn: 1000,
     });
     expect(JSON.stringify(events[0])).not.toContain('hunter22');
@@ -200,7 +187,7 @@ describe('validation, redaction, audit', () => {
   test('property: any secret injected in the prompt is absent from every provider call', async () => {
     await fc.assert(
       fc.asyncProperty(fc.stringMatching(/^[A-Za-z0-9]{8,20}$/), async (secret) => {
-        const p = fake({ name: 'ollama', paid: false });
+        const p = fake({});
         await gateway([p.provider]).run(task({ prompt: `token PASSWORD=${secret} end` }));
         expect(p.prompts.join('\n')).not.toContain(secret);
       }),

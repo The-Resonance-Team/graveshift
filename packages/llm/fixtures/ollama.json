@@ -1,7 +1,0 @@
-{
-  "model": "<PLACEHOLDER_MODEL>",
-  "message": { "role": "assistant", "content": "{\"category\":\"code_bug\",\"confidence\":0.8}" },
-  "done": true,
-  "prompt_eval_count": 801,
-  "eval_count": 47
-}

@@ -48,6 +48,7 @@ export function createGateway(options: GatewayOptions) {
           tier: task.tier,
           system,
           prompt: text,
+          schema: task.schema,
           signal: AbortSignal.timeout(config.timeoutMs),
         });
       } catch {

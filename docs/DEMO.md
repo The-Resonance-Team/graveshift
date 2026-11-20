@@ -33,7 +33,7 @@ The daemon API is on `127.0.0.1:2602`. The demo api and worker publish ports 260
 ## Watch the Haunting
 
 1. Open the dashboard: `cd apps/dashboard && DAEMON_URL=http://127.0.0.1:2602 bun run build && bun run start`, then visit `http://localhost:2604`. The Haunt panel can inject a scenario with a 30 s cooldown (the daemon needs `HAUNT_TOKEN`).
-2. Inject `null-candy` (below). Within seconds the api grave shows a Haunting, and the timeline moves from Wraith to Medium. Without a configured LLM the diagnosis comes from the rules-only fallback and says so.
+2. Inject `null-candy` (below). Within seconds the api grave shows a Haunting, and the timeline moves from Wraith to Medium. Diagnosis uses one configured AI SDK model (`llm` in `graveshift.config.yaml`, key in `OPENAI_COMPATIBLE_API_KEY`). If the model is unavailable or its output is invalid, the diagnosis comes from the rules-only fallback and says so.
 3. Check the audit chain: `curl localhost:2602/api/audit/verify` returns `{"ok":true,"length":N}`.
 
 What does not happen yet: no draft pull request opens, because no patch generator is wired; no Discord message is sent; the daemon has no approval endpoint, so the `memory-leech` restart cannot be blessed. The actuator rejects an unsigned request with 403, which you can check with `curl -X POST localhost:2603/actions` from inside the network.

@@ -3,7 +3,8 @@ export type { Budget } from './budget';
 export { buildProviders } from './chain';
 export { createGateway } from './gateway';
 export type { GatewayOptions, LlmGateway } from './gateway';
-export { bedrockProvider, extractObject, geminiProvider, ollamaProvider } from './providers';
+export { openAiCompatibleProvider } from './providers';
+export type { OpenAiCompatibleOptions } from './providers';
 export { LlmConfigSchema, LlmProviderError, PROVIDER_NAMES } from './types';
 export type {
   AuditEvent,

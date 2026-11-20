@@ -1,0 +1,17 @@
+{
+  "id": "chatcmpl-test",
+  "object": "chat.completion",
+  "created": 1790000000,
+  "model": "qwen3.8-flash-next",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "{\"category\":\"code_bug\",\"confidence\":0.8}"
+      },
+      "finish_reason": "stop"
+    }
+  ],
+  "usage": { "prompt_tokens": 120, "completion_tokens": 30, "total_tokens": 150 }
+}

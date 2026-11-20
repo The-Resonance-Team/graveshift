@@ -33,5 +33,5 @@ Every tool input has a Zod schema with limits (`list_incidents` at most 50, `get
 - Consumed actuator token IDs are in memory; a restart inside the 15-minute window forgets them.
 - The Kubernetes network policy allows all egress. Egress allowlisting is not done.
 - The `pods/log` rule exposes log contents to the daemon. For real users, use a namespace-scoped Role instead of the ClusterRole.
-- Bedrock uses a bearer API key only; SigV4 is not implemented.
+- The model endpoint uses a bearer API key from `OPENAI_COMPATIBLE_API_KEY`. The key is read from the environment only and never from config files. The configured `baseUrl` may be plain HTTP on a private network; use a trusted network or TLS.
 - Kubernetes code is tested with fixtures only.

@@ -15,7 +15,7 @@ Indie developers, teams of one to ten developers, students with deployed project
 ## How it works
 
 1. **Wraith** (`packages/watcher`) turns runtime events, logs and Prometheus queries into detections with seven rules, a 10-minute fingerprint dedupe and one haunting (incident) per service.
-2. **Medium** (`packages/diagnoser`) builds a diagnosis from logs and signals. Logs are wrapped as untrusted, evidence is validated, and one retry then `needs_human` applies. Model calls go only through `packages/llm` (Bedrock, then Gemini, then Ollama, then rules-only).
+2. **Medium** (`packages/diagnoser`) builds a diagnosis from logs and signals. Logs are wrapped as untrusted, evidence is validated, and one retry then `needs_human` applies. Model calls go only through `packages/llm` (one model through the Vercel AI SDK OpenAI-compatible provider; rules-only when the model is unavailable or its output is invalid).
 3. **Policy** (`packages/policy`) decides every action. It is pure, deny-first and default deny.
 4. **Exorcist** (`packages/fixer`) pushes to a `graveshift/` branch and opens a draft pull request. It has no merge call. The daemon does not yet generate patches, so no real draft pull request opens today.
 5. **Actuator** (`packages/actuator`) is a separate service that runs only approved, HMAC-signed, unexpired, single-use actions.
@@ -47,7 +47,7 @@ DAEMON_URL=http://127.0.0.1:2602 bun run build
 bun run start        # http://localhost:2604
 ```
 
-`DAEMON_URL` is baked in at build time. Without an LLM config the daemon still runs and writes rules-only diagnoses. To use a model, copy `graveshift.config.example.yaml`, replace the placeholder model IDs, and supply provider keys through the environment.
+`DAEMON_URL` is baked in at build time. Without an LLM config the daemon still runs and writes rules-only diagnoses. To use a model, copy `graveshift.config.example.yaml`, set `llm.model` and `llm.baseUrl`, and put the key in `OPENAI_COMPATIBLE_API_KEY` (see `.env.example`).
 
 Inject a fault and reset it: see [docs/DEMO.md](docs/DEMO.md).
 

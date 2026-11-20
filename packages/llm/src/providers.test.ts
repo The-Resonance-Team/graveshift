@@ -1,15 +1,17 @@
 import { describe, expect, test } from 'bun:test';
-import fc from 'fast-check';
-import { z } from 'zod';
 
-import bedrock from '../fixtures/bedrock.json';
-import gemini from '../fixtures/gemini.json';
-import ollama from '../fixtures/ollama.json';
-import { bedrockProvider, extractObject, geminiProvider, ollamaProvider } from './providers';
-import type { LlmProvider } from './types';
+import fixture from '../fixtures/openai-compatible.json';
+import { buildProviders } from './chain';
+import { LlmConfigSchema } from './types';
 
-const Output = z.object({ category: z.string(), confidence: z.number() });
-const models = { fast: 'fast-model', smart: 'smart-model' };
+const config = LlmConfigSchema.parse({
+  provider: 'openai-compatible',
+  model: 'qwen3.8-flash-next',
+  baseUrl: 'http://models.test:8888/v1',
+  timeoutMs: 1000,
+  maxRetries: 0,
+  priceTableUsdPer1M: { 'qwen3.8-flash-next': { in: 1, out: 2 } },
+});
 
 interface Seen {
   url: string;
@@ -17,14 +19,17 @@ interface Seen {
   body: Record<string, unknown>;
 }
 
-function replay(fixture: unknown, seen: Seen[] = [], status = 200): typeof fetch {
-  return (async (input: string | URL, init?: RequestInit) => {
+function replay(body: unknown, seen: Seen[] = [], status = 200): typeof fetch {
+  return (async (input: string | URL | Request, init?: RequestInit) => {
     seen.push({
       url: input.toString(),
-      headers: init?.headers as Record<string, string>,
+      headers: Object.fromEntries(new Headers(init?.headers).entries()),
       body: JSON.parse(String(init?.body)),
     });
-    return new Response(JSON.stringify(fixture), { status });
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { 'content-type': 'application/json' },
+    });
   }) as unknown as typeof fetch;
 }
 
@@ -32,87 +37,63 @@ const request = {
   tier: 'smart' as const,
   system: 'sys',
   prompt: 'prompt',
-  signal: AbortSignal.timeout(1000),
+  signal: AbortSignal.timeout(5000),
 };
+const env = { OPENAI_COMPATIBLE_API_KEY: 'test-key' };
 
-async function conforms(provider: LlmProvider) {
-  const result = await provider.generateObject(request);
-  expect(Output.parse(result.object)).toEqual({ category: 'code_bug', confidence: 0.8 });
-  expect(result.model).toBe('smart-model');
-  expect(result.usage.in).toBeGreaterThan(0);
-}
-
-describe('adapter schema conformance (recorded fixtures, no network)', () => {
-  test('bedrock converse', async () => {
-    const seen: Seen[] = [];
-    await conforms(
-      bedrockProvider({
-        models,
-        region: 'ap-southeast-1',
-        apiKey: 'test-key',
-        fetch: replay(bedrock, seen),
-      }),
-    );
-    expect(seen[0]?.url).toBe(
-      'https://bedrock-runtime.ap-southeast-1.amazonaws.com/model/smart-model/converse',
-    );
-    expect(seen[0]?.headers.authorization).toBe('Bearer test-key');
+describe('config', () => {
+  test('accepts the single-provider shape', () => {
+    expect(config.provider).toBe('openai-compatible');
   });
 
-  test('gemini generateContent', async () => {
-    const seen: Seen[] = [];
-    await conforms(geminiProvider({ models, apiKey: 'test-key', fetch: replay(gemini, seen) }));
-    expect(seen[0]?.url).toContain('/models/smart-model:generateContent');
-    expect(seen[0]?.headers['x-goog-api-key']).toBe('test-key');
-  });
-
-  test('ollama chat', async () => {
-    const seen: Seen[] = [];
-    await conforms(
-      ollamaProvider({ models, baseUrl: 'http://ollama:11434', fetch: replay(ollama, seen) }),
-    );
-    expect(seen[0]?.url).toBe('http://ollama:11434/api/chat');
-    expect(seen[0]?.body).toMatchObject({ stream: false, format: 'json', model: 'smart-model' });
-  });
-
-  test('provider errors surface as LlmProviderError', async () => {
-    const provider = ollamaProvider({
-      models,
-      baseUrl: 'http://ollama:11434',
-      fetch: replay({}, [], 500),
-    });
-    await expect(provider.generateObject(request)).rejects.toMatchObject({
-      code: 'LLM_PROVIDER_ERROR',
-    });
+  test('rejects the removed chain shape, unknown providers and bad URLs', () => {
+    expect(LlmConfigSchema.safeParse({ ...config, provider: 'gemini' }).success).toBe(false);
+    expect(LlmConfigSchema.safeParse({ ...config, baseUrl: 'not a url' }).success).toBe(false);
+    expect(LlmConfigSchema.safeParse({ ...config, model: '' }).success).toBe(false);
+    expect(
+      LlmConfigSchema.safeParse({ timeoutMs: 1, maxRetries: 0, priceTableUsdPer1M: {} }),
+    ).toHaveProperty('success', false);
   });
 });
 
-describe('availability', () => {
-  test('paid providers need a key and a non-placeholder model', async () => {
-    const placeholder = { fast: '<PLACEHOLDER_MODEL_ID>', smart: '<PLACEHOLDER_MODEL_ID>' };
-    expect(await bedrockProvider({ models, region: 'r' }).available()).toBe(false);
-    expect(
-      await bedrockProvider({ models: placeholder, region: 'r', apiKey: 'k' }).available(),
-    ).toBe(false);
-    expect(await geminiProvider({ models, apiKey: 'k' }).available()).toBe(true);
-    expect(await ollamaProvider({ models: placeholder, baseUrl: 'http://o' }).available()).toBe(
+describe('openai-compatible provider (recorded fixture, no network)', () => {
+  test('builds exactly one provider', () => {
+    expect(buildProviders(config, env)).toHaveLength(1);
+  });
+
+  test('calls chat completions with bearer key and maps object, model and usage', async () => {
+    const seen: Seen[] = [];
+    const [provider] = buildProviders(config, env, replay(fixture, seen));
+    const { z } = await import('zod');
+    const result = await provider!.generateObject({
+      ...request,
+      schema: z.object({ category: z.string(), confidence: z.number() }),
+    });
+    expect(result.object).toEqual({ category: 'code_bug', confidence: 0.8 });
+    expect(result.model).toBe('qwen3.8-flash-next');
+    expect(result.usage).toEqual({ in: 120, out: 30 });
+    expect(seen[0]?.url).toBe('http://models.test:8888/v1/chat/completions');
+    expect(seen[0]?.headers.authorization).toBe('Bearer test-key');
+    expect(seen[0]?.body).toMatchObject({ model: 'qwen3.8-flash-next', temperature: 0 });
+  });
+
+  test('HTTP errors surface as exceptions the gateway can retry', async () => {
+    const [provider] = buildProviders(config, env, replay({ error: { message: 'boom' } }, [], 500));
+    const { z } = await import('zod');
+    await expect(
+      provider!.generateObject({ ...request, schema: z.object({}) }),
+    ).rejects.toBeDefined();
+  });
+
+  test('is paid, and unavailable without a key or with a placeholder model', async () => {
+    const [ready] = buildProviders(config, env);
+    expect(ready?.paid).toBe(true);
+    expect(await ready?.available()).toBe(true);
+    expect(await buildProviders(config, {})[0]?.available()).toBe(false);
+    expect(await buildProviders(config, { OPENAI_COMPATIBLE_API_KEY: '' })[0]?.available()).toBe(
       false,
     );
-  });
-});
-
-describe('extractObject', () => {
-  test('property: recovers any JSON object from fenced or chatty text', () => {
-    fc.assert(
-      fc.property(fc.dictionary(fc.string({ minLength: 1 }), fc.integer()), (object) => {
-        const json = JSON.stringify(object);
-        expect(extractObject(json)).toEqual(object);
-        expect(extractObject(`Sure!\n\`\`\`json\n${json}\n\`\`\`\nDone.`)).toEqual(object);
-      }),
-    );
-  });
-
-  test('unparsable text is passed through for schema validation to reject', () => {
-    expect(extractObject('no json here')).toBe('no json here');
+    const placeholder = { ...config, model: '<PLACEHOLDER_MODEL>' };
+    expect(await buildProviders(placeholder, env)[0]?.available()).toBe(false);
   });
 });

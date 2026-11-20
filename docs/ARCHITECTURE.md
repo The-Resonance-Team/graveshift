@@ -16,7 +16,7 @@ This describes the code as it exists. Items that are not built are marked **not 
 | Metrics | `packages/metrics` | Prometheus instant-query client and the watcher queries. |
 | Wraith | `packages/watcher` | Rules, fingerprint dedupe, per-service incident, Salt-line silences, PromQL poller. |
 | Medium | `packages/diagnoser` | Context builder, untrusted wrapping, evidence validation, rules-only fallback. |
-| LLM | `packages/llm` | `LlmGateway`: provider chain, retry, timeout, daily budget, prompt redaction. The only place provider calls are made. |
+| LLM | `packages/llm` | `LlmGateway`: single AI SDK model, retry, timeout, daily budget, prompt redaction. The only place provider calls are made. |
 | Exorcist | `packages/fixer` | Patch guard, GitHub App auth, `graveshift/` branches, draft pull requests. No merge call exists. |
 | Actuator | `packages/actuator` | Separate service. Verifies and executes approved actions. |
 | MCP | `packages/mcp-server` | `graveshift-mcp` over stdio. HTTP transport exists as code only. |

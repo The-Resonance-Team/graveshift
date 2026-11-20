@@ -4,7 +4,9 @@ import { ConfigError } from './errors';
 
 export const ConfigSchema = z.object({
   llm: z.looseObject({
-    chain: z.array(z.enum(['bedrock', 'gemini', 'ollama'])).min(1),
+    provider: z.literal('openai-compatible'),
+    model: z.string().min(1),
+    baseUrl: z.url(),
     timeoutMs: z.number().int().positive(),
     maxRetries: z.number().int().min(0),
   }),
