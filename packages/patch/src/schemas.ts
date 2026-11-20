@@ -17,12 +17,16 @@ export const PatchSchema = z
   .strict();
 export type Patch = z.infer<typeof PatchSchema>;
 
+const pattern = z.string().min(1);
+
 export const RepoRulesSchema = z
   .object({
     maxFilesChanged: z.number().int().min(1),
     maxLinesChanged: z.number().int().min(1),
-    allowedPaths: z.array(z.string()),
-    forbiddenPaths: z.array(z.string()),
+    // Default [] allows no path: the guard fails closed until a caller sets patterns.
+    allowedPaths: z.array(pattern).default([]),
+    // Default [] forbids no extra path. allowedPaths still gates every path.
+    forbiddenPaths: z.array(pattern).default([]),
   })
   .strict();
 export type RepoRules = z.infer<typeof RepoRulesSchema>;

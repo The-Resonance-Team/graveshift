@@ -17,6 +17,7 @@
     "@graveshift/agents": "workspace:*",
     "@graveshift/core": "workspace:*",
     "@graveshift/gateway": "workspace:*",
+    "@graveshift/redactor": "workspace:*",
     "zod": "^4.6.7"
   }
 }

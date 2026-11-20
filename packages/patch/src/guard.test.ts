@@ -60,6 +60,21 @@ describe('guardPatch', () => {
     expect(reasonsOf({ files: [file('src/a.ts', 200)] })).toEqual([]);
   });
 
+  test('rejects an under-reported large file', () => {
+    const content = Array.from({ length: 201 }, (_unused, index) => `line ${index}`).join('\n');
+    const reasons = reasonsOf({ files: [file('src/big.ts', 1, content)] });
+    expect(reasons).toContain('src/big.ts: content exceeds maxLinesChanged 200');
+    expect(reasons).toContain('201 lines exceeds maxLinesChanged 200');
+  });
+
+  test('counts real content lines toward the total limit', () => {
+    const content = Array.from({ length: 101 }, (_unused, index) => `line ${index}`).join('\n');
+    const reasons = reasonsOf({
+      files: [file('src/a.ts', 1, content), file('src/b.ts', 1, content)],
+    });
+    expect(reasons).toContain('202 lines exceeds maxLinesChanged 200');
+  });
+
   test('rejects a negative line count', () => {
     expect(reasonsOf({ files: [file('src/a.ts', -1)] })).toContain('src/a.ts: invalid line count');
   });
@@ -97,6 +112,12 @@ describe('guardPatch', () => {
     );
   });
 
+  test('rejects duplicate paths that differ only in case', () => {
+    expect(reasonsOf({ files: [file('src/A.ts'), file('src/a.ts')] })).toContain(
+      'src/a.ts: duplicate path',
+    );
+  });
+
   const forbidden = ['src/.env', 'src/.ENV', 'src/key.PEM', 'deploy/k8s/rbac.yaml', 'policy.yaml'];
   for (const [index, path] of forbidden.entries()) {
     test(`rejects forbidden path ${index}`, () => {
@@ -118,7 +139,7 @@ describe('guardPatch', () => {
       files: [file('deploy/a.yaml', 300), file('src/../x', -1), file('docs/x.md')],
     };
     const reasons = reasonsOf(patch);
-    expect(reasons).toContain('300 lines exceeds maxLinesChanged 200');
+    expect(reasons).toContain('302 lines exceeds maxLinesChanged 200');
     expect(reasons).toContain('deploy/a.yaml: forbidden path');
     expect(reasons).toContain('src/../x: unsafe path');
     expect(reasons).toContain('src/../x: invalid line count');

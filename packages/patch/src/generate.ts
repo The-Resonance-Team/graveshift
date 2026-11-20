@@ -1,5 +1,6 @@
 import { UNTRUSTED_SYSTEM_NOTE, wrapUntrusted } from '@graveshift/agents/untrusted';
 import type { GatewayResult, GatewayTask } from '@graveshift/gateway';
+import { redact } from '@graveshift/redactor';
 
 import { guardPatch, PatchRejectedError } from './guard';
 import { type Patch, PatchSchema, type RepoRules } from './schemas';
@@ -27,7 +28,6 @@ export interface GeneratePatchOptions {
   rules: RepoRules;
   diagnosis: string;
   task?: string;
-  guard?: (patch: Patch, rules: RepoRules) => void;
 }
 
 export type GeneratePatchResult =
@@ -40,7 +40,7 @@ const rejection = (reason: string): GeneratePatchResult => ({
 });
 
 export async function generatePatch(options: GeneratePatchOptions): Promise<GeneratePatchResult> {
-  const { gateway, agent, rules, diagnosis, task = PATCH_TASK, guard = guardPatch } = options;
+  const { gateway, agent, rules, diagnosis, task = PATCH_TASK } = options;
   const prompt = [
     'Repository rules:',
     `maxFilesChanged=${rules.maxFilesChanged}`,
@@ -60,8 +60,9 @@ export async function generatePatch(options: GeneratePatchOptions): Promise<Gene
       prompt,
       schema: PatchSchema,
     });
-  } catch {
-    return rejection('patch call failed');
+  } catch (error) {
+    const cause = error instanceof Error ? error.message : 'unknown failure';
+    return rejection(`patch call failed: ${redact(cause)}`);
   }
 
   if (result.status === 'unavailable') return rejection('no patch source available');
@@ -71,9 +72,9 @@ export async function generatePatch(options: GeneratePatchOptions): Promise<Gene
   const parsed = PatchSchema.safeParse(result.value);
   if (!parsed.success) return rejection('invalid patch: schema validation failed');
 
-  // The guard runs before the caller can see a successful result.
+  // The guard always runs before the caller can see a successful result.
   try {
-    guard(parsed.data, rules);
+    guardPatch(parsed.data, rules);
   } catch (error) {
     if (error instanceof PatchRejectedError) return { ok: false, error };
     return rejection('patch guard failed');

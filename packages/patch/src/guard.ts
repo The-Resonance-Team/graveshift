@@ -28,28 +28,42 @@ export function unsafePath(path: string): boolean {
   );
 }
 
+const contentLines = (content: string | null): number =>
+  content === null ? 0 : diffStats(null, content);
+
 // SEC-6: guardPatch runs before any caller-visible success. Forbidden paths match
 // case-insensitively so .ENV cannot slip through. allowedPaths stay case-sensitive.
+// The real line count of content is an upper bound on changed lines, so the
+// model cannot lower the counted size by under-reporting linesChanged.
 export function guardPatch(patch: Patch, rules: RepoRules): void {
   const reasons: string[] = [];
   if (patch.files.length === 0) reasons.push('empty patch');
   if (patch.files.length > rules.maxFilesChanged) {
     reasons.push(`${patch.files.length} files exceeds maxFilesChanged ${rules.maxFilesChanged}`);
   }
-  const lines = patch.files.reduce((sum, file) => sum + file.linesChanged, 0);
+  // The self-reported count can only raise the total, never lower it.
+  const lines = patch.files.reduce(
+    (sum, file) => sum + Math.max(file.linesChanged, contentLines(file.content)),
+    0,
+  );
   if (lines > rules.maxLinesChanged)
     reasons.push(`${lines} lines exceeds maxLinesChanged ${rules.maxLinesChanged}`);
 
+  // macOS uses a case-insensitive file system; a path collision is a duplicate there.
   const seen = new Set<string>();
   for (const file of patch.files) {
     if (!Number.isInteger(file.linesChanged) || file.linesChanged < 0)
       reasons.push(`${file.path}: invalid line count`);
+    if (file.content !== null && contentLines(file.content) > rules.maxLinesChanged) {
+      reasons.push(`${file.path}: content exceeds maxLinesChanged ${rules.maxLinesChanged}`);
+    }
     if (unsafePath(file.path)) {
       reasons.push(`${file.path}: unsafe path`);
       continue;
     }
-    if (seen.has(file.path)) reasons.push(`${file.path}: duplicate path`);
-    seen.add(file.path);
+    const key = file.path.toLowerCase();
+    if (seen.has(key)) reasons.push(`${file.path}: duplicate path`);
+    seen.add(key);
     if (matches(rules.forbiddenPaths, file.path, false))
       reasons.push(`${file.path}: forbidden path`);
     else if (!matches(rules.allowedPaths, file.path, true))

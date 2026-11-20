@@ -1,7 +1,13 @@
 import { describe, expect, test } from 'bun:test';
 import type { GatewayResult, GatewayTask } from '@graveshift/gateway';
 
-import { generatePatch, type PatchGateway, PATCH_SYSTEM, PATCH_TASK } from './generate';
+import {
+  generatePatch,
+  type GeneratePatchOptions,
+  type PatchGateway,
+  PATCH_SYSTEM,
+  PATCH_TASK,
+} from './generate';
 import { PatchRejectedError } from './guard';
 import { PatchSchema, type Patch, type RepoRules } from './schemas';
 
@@ -100,15 +106,21 @@ describe('generatePatch', () => {
     });
   });
 
-  test('a thrown model call returns a typed rejection', async () => {
+  test('a thrown model call returns a typed rejection with a redacted cause', async () => {
     const gateway = {
       run: async (_task: GatewayTask<Patch>): Promise<GatewayResult<Patch>> => {
-        throw new Error('down');
+        throw new Error('Bearer abcdef123456 failed');
       },
     };
     const result = await generatePatch(options(gateway));
     expect(result.ok).toBe(false);
-    if (!result.ok) expect(result.error.reasons).toEqual(['patch call failed']);
+    if (!result.ok) {
+      const reason = result.error.reasons[0]!;
+      expect(reason).toContain('patch call failed:');
+      expect(reason).not.toContain('abcdef123456');
+      expect(reason).toContain('[REDACTED:bearer]');
+      expect(result.error).toBeInstanceOf(PatchRejectedError);
+    }
   });
 
   test('model output cannot grant a permission', async () => {
@@ -122,27 +134,33 @@ describe('generatePatch', () => {
   });
 
   test('the guard runs before any caller-visible success', async () => {
-    const calls: string[] = [];
-    const fake = fakeGateway(ok(patch));
-    const guard = (_value: Patch, _rules: RepoRules) => {
-      calls.push('guard');
-    };
-    const result = await generatePatch({ ...options(fake), guard });
-    expect(result.ok).toBe(true);
-    expect(calls).toEqual(['guard']);
-  });
-
-  test('a guard rejection stops caller-visible success', async () => {
-    const guard = () => {
-      throw new PatchRejectedError(['blocked by path rule']);
-    };
-    const rejected = await generatePatch({ ...options(fakeGateway(ok(patch))), guard });
-    expect(rejected.ok).toBe(false);
-    if (!rejected.ok) expect(rejected.error.reasons).toEqual(['blocked by path rule']);
+    const accepted = await generatePatch(options(fakeGateway(ok(patch))));
+    expect(accepted.ok).toBe(true);
 
     const bad = { files: [{ path: 'deploy/a.yaml', content: 'x', linesChanged: 1 }] };
-    const realGuard = await generatePatch(options(fakeGateway(ok(bad))));
-    expect(realGuard.ok).toBe(false);
-    if (!realGuard.ok) expect(realGuard.error.reasons).toContain('deploy/a.yaml: forbidden path');
+    const rejected = await generatePatch(options(fakeGateway(ok(bad))));
+    expect(rejected.ok).toBe(false);
+    if (!rejected.ok) expect(rejected.error.reasons).toContain('deploy/a.yaml: forbidden path');
+  });
+
+  test('a caller cannot bypass the guard', async () => {
+    const bad = { files: [{ path: 'deploy/a.yaml', content: 'x', linesChanged: 1 }] };
+    const spoofed = {
+      ...options(fakeGateway(ok(bad))),
+      guard: () => undefined,
+    } as unknown as GeneratePatchOptions;
+    const result = await generatePatch(spoofed);
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.reasons).toContain('deploy/a.yaml: forbidden path');
+  });
+
+  test('an under-reported large file is rejected after the model call', async () => {
+    const content = Array.from({ length: 201 }, (_unused, index) => `line ${index}`).join('\n');
+    const big = { files: [{ path: 'src/big.ts', content, linesChanged: 1 }] };
+    const result = await generatePatch(options(fakeGateway(ok(big))));
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.reasons).toContain('src/big.ts: content exceeds maxLinesChanged 200');
+    }
   });
 });
