@@ -14,6 +14,8 @@ The v1 daemon is at `apps/_daemon`. It is reference only. The repository does no
 | Daemon (v2) | `apps/daemon` | New Effect v4 skeleton on Bun. Serves `GET /healthz` only. |
 | Core | `packages/core` | Zod schemas (source of truth), event envelope schema, incident state machine, circuit-breaker helper, config loader, `RuntimeSource` contract, pure rule engine. |
 | Events | `packages/events` | `Publisher` interface, NATS JetStream publisher and an in-memory fake. No consumer is wired yet. |
+| Integrations | `packages/integrations` | Plugin and Collector contract: `Integration`, `Context` and a pure envelope builder. No NATS client import. |
+| NestJS plugin | `packages/plugin-nestjs` | In-process Plugin. Publishes one envelope per HTTP request and one for an unhandled error. |
 | Store | `packages/store` | Hash-chained, append-only audit log on `bun:sqlite` through Drizzle. |
 | Policy | `packages/policy` | YAML loader and `decide()`. Pure and deterministic. |
 | Redactor | `packages/redactor` | Twelve ordered detectors, idempotent. |
@@ -92,7 +94,15 @@ Two lanes carry envelopes:
 
 The JetStream stream is `GRAVESHIFT_EVENTS`. It filters subjects with `graveshift.>`. JetStream detects duplicate publishes by `msgID` inside `duplicate_window`. The default `duplicate_window` is two minutes. Redelivery after that window is not idempotent: a consumer must still handle a repeated envelope `id`.
 
-This ticket wires no daemon, Plugin or Collector. The rule engine is in `packages/core`, and the API only validates rule overrides.
+The daemon wiring is still deferred. The rule engine is in `packages/core`, and the API only validates rule overrides.
+
+## Plugins and Collectors
+
+A **Plugin** is an in-process integration shipped into a client framework. A **Collector** is a daemon-side integration that reads infrastructure or cloud state. Both implement the `Integration` contract in `packages/integrations`: a name, a kind, `start()` and `stop()`. The host gives each one a `Context` with a `Publisher`, a `tenantId` and a `service`. The `service` names the **Grave** under watch. The contract also builds a valid **Event envelope** from `packages/core` with a `traceId`, `fingerprint` and severity. Its entry point imports no NATS client.
+
+`packages/plugin-nestjs` is the first Plugin. Its `init(app)` returns an Integration. After `start(context)` it observes HTTP requests and publishes one info **Event envelope** per request and one critical envelope for an unhandled error. It holds no NATS connection and uses only the injected `Publisher`.
+
+A Collector example lives in the contract tests: a fake source that publishes one envelope when started. Docker, Kubernetes, Prometheus and cloud Collectors are out of scope. Rule evaluation stays in the daemon. No Plugin or Collector evaluates a rule.
 
 ## Rule engine
 

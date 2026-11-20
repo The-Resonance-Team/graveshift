@@ -1,0 +1,19 @@
+{
+  "name": "@graveshift/plugin-nestjs",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "bun check --no-script",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@graveshift/core": "workspace:*",
+    "@graveshift/events": "workspace:*",
+    "@graveshift/integrations": "workspace:*",
+    "@nestjs/common": "12.6.0"
+  }
+}

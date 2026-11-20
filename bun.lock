@@ -93,6 +93,14 @@
         "zod": "^4.6.7",
       },
     },
+    "packages/integrations": {
+      "name": "@graveshift/integrations",
+      "version": "0.1.0",
+      "dependencies": {
+        "@graveshift/core": "workspace:*",
+        "@graveshift/events": "workspace:*",
+      },
+    },
     "packages/llm": {
       "name": "@graveshift/llm",
       "version": "0.1.0",
@@ -126,6 +134,16 @@
     "packages/notifier-discord": {
       "name": "@graveshift/notifier-discord",
       "version": "0.1.0",
+    },
+    "packages/plugin-nestjs": {
+      "name": "@graveshift/plugin-nestjs",
+      "version": "0.1.0",
+      "dependencies": {
+        "@graveshift/core": "workspace:*",
+        "@graveshift/events": "workspace:*",
+        "@graveshift/integrations": "workspace:*",
+        "@nestjs/common": "12.6.0",
+      },
     },
     "packages/policy": {
       "name": "@graveshift/policy",
@@ -213,6 +231,8 @@
 
     "@graveshift/fixer": ["@graveshift/fixer@workspace:packages/fixer"],
 
+    "@graveshift/integrations": ["@graveshift/integrations@workspace:packages/integrations"],
+
     "@graveshift/llm": ["@graveshift/llm@workspace:packages/llm"],
 
     "@graveshift/mcp-server": ["@graveshift/mcp-server@workspace:packages/mcp-server"],
@@ -220,6 +240,8 @@
     "@graveshift/metrics": ["@graveshift/metrics@workspace:packages/metrics"],
 
     "@graveshift/notifier-discord": ["@graveshift/notifier-discord@workspace:packages/notifier-discord"],
+
+    "@graveshift/plugin-nestjs": ["@graveshift/plugin-nestjs@workspace:packages/plugin-nestjs"],
 
     "@graveshift/policy": ["@graveshift/policy@workspace:packages/policy"],
 
