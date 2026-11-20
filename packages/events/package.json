@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./nats": "./src/nats.ts",
+    "./testing": "./src/testing.ts"
   },
   "scripts": {
     "typecheck": "bun check --no-script",
@@ -12,6 +14,7 @@
   },
   "dependencies": {
     "@graveshift/core": "workspace:*",
-    "nats": "2.29.3"
+    "@nats-io/jetstream": "3.5.0",
+    "@nats-io/transport-node": "3.5.0"
   }
 }

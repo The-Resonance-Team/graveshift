@@ -1,12 +1,8 @@
 import type { EventEnvelope } from '@graveshift/core';
 import { describe, expect, test } from 'bun:test';
 
-import {
-  createInMemoryPublisher,
-  createNatsPublisher,
-  type PublishTarget,
-  publishSubject,
-} from './index';
+import { createNatsPublisher, type PublishTarget, publishSubject } from './index';
+import { createInMemoryPublisher } from './testing';
 
 const envelope: EventEnvelope = {
   id: 'evt-1',
@@ -27,12 +23,13 @@ interface Published {
   options: { msgID: string };
 }
 
-function fakeTarget(): { target: PublishTarget; published: Published[] } {
+function fakeTarget(failure?: Error): { target: PublishTarget; published: Published[] } {
   const published: Published[] = [];
   return {
     published,
     target: {
       publish(subject, payload, options) {
+        if (failure) return Promise.reject(failure);
         published.push({ subject, payload, options });
         return Promise.resolve(undefined);
       },
@@ -63,6 +60,16 @@ describe('createNatsPublisher', () => {
     expect(published[0]?.options.msgID).toBe(envelope.id);
   });
 
+  test('reuses the same msgID for the same envelope id', async () => {
+    const { target, published } = fakeTarget();
+    const publisher = createNatsPublisher(target);
+
+    await publisher.publish(envelope);
+    await publisher.publish(envelope);
+
+    expect(published.map((record) => record.options.msgID)).toEqual([envelope.id, envelope.id]);
+  });
+
   test('publishes the envelope as JSON on the right subject', async () => {
     const { target, published } = fakeTarget();
     await createNatsPublisher(target).publish({ ...envelope, severity: 'critical' });
@@ -71,6 +78,13 @@ describe('createNatsPublisher', () => {
     expect(record?.subject).toBe('graveshift.tenant-1.detection.signal.oom');
     const decoded = JSON.parse(new TextDecoder().decode(record?.payload)) as EventEnvelope;
     expect(decoded).toEqual({ ...envelope, severity: 'critical' });
+  });
+
+  test('propagates a rejected publish', async () => {
+    const failure = new Error('publish failed');
+    const { target } = fakeTarget(failure);
+
+    await expect(createNatsPublisher(target).publish(envelope)).rejects.toBe(failure);
   });
 });
 

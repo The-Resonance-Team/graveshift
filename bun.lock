@@ -78,7 +78,8 @@
       "version": "0.1.0",
       "dependencies": {
         "@graveshift/core": "workspace:*",
-        "nats": "2.29.3",
+        "@nats-io/jetstream": "3.5.0",
+        "@nats-io/transport-node": "3.5.0",
       },
     },
     "packages/fixer": {
@@ -240,6 +241,16 @@
     "@lukeed/csprng": ["@lukeed/csprng@1.1.0", "", {}, "sha512-Z7C/xXCiGWsg0KuKsHTKJxbWhpI3Vs5GwLfOean7MGyVFGqdRgBbAjOCh6u4bbjPc/8MJ2pZmK/0DLdCbivLDA=="],
 
     "@microsoft/tsdoc": ["@microsoft/tsdoc@0.17.1", "", {}, "sha512-VHyYyyoH63jFoO3shpw9Zfijk5v/9p/VrClW35z0/q6ooK7sSmxpzOkS4iZPxs3vO4XtBW4H38HRAKkAMIK7DA=="],
+
+    "@nats-io/jetstream": ["@nats-io/jetstream@3.5.0", "", { "dependencies": { "@nats-io/nats-core": "3.5.0" } }, "sha512-+auzo9mYvcsqq+H1ZBdSslkiPF96W4zbqpAT9Ni6ComcaA+j9cLpGGYYWpDqJCRrArZ8AxVAYvd7IxukZ/9z7w=="],
+
+    "@nats-io/nats-core": ["@nats-io/nats-core@3.5.0", "", { "dependencies": { "@nats-io/nkeys": "2.1.0", "@nats-io/nuid": "3.1.0" } }, "sha512-iHsKhlzINdpL27pxvbHhBLRs4mnAKDfYrXMReBDNqvhKb/yVxz+Vz2rXujBAUiMsfOXFzixUK4Uu/qNnDRjZvA=="],
+
+    "@nats-io/nkeys": ["@nats-io/nkeys@2.1.0", "", { "dependencies": { "tweetnacl": "^1.0.3" } }, "sha512-vLMgwfPouG2Utp3hHUfdmMVEGEQ202tLES/pOAOfTJR5hwWGymm2mKuo3UMYv9kNw7awpcTBfEAljFqZcFm1lA=="],
+
+    "@nats-io/nuid": ["@nats-io/nuid@3.1.0", "", {}, "sha512-NC+JksVZl0zwpwsO6aIvsivqcqzgI2db0gCris/bSdZx56CdyniphijTfcjieUpR4HwZEiiid67NEviQ16sveA=="],
+
+    "@nats-io/transport-node": ["@nats-io/transport-node@3.5.0", "", { "dependencies": { "@nats-io/nats-core": "3.5.0", "@nats-io/nkeys": "2.1.0", "@nats-io/nuid": "3.1.0" } }, "sha512-5Ebt62tnQsrrb3p+aHJt0+zRHAkxbUhhD+8HnHNBTYRgXJ2X2LgvOD19EiiAISdW7yR4IQSmsdvpfX+I5oG5ew=="],
 
     "@nestjs/common": ["@nestjs/common@12.6.0", "", { "dependencies": { "@standard-schema/spec": "1.1.0", "file-type": "22.3.0", "iterare": "1.2.1", "load-esm": "1.0.3", "tslib": "2.9.1", "uid": "2.0.2" }, "peerDependencies": { "class-transformer": ">=0.4.1", "class-validator": ">=0.13.2", "reflect-metadata": "^0.1.12 || ^0.2.0", "rxjs": "^7.1.0" }, "optionalPeers": ["class-transformer", "class-validator"] }, "sha512-qlCebomQxvtNSdOQfgBryWwi2gjUYGTmXnwRP0vLp5xdKfR3DfAl4KRsvuXEbAUCBPUtHsgWSxh76IP1pc262A=="],
 
@@ -533,11 +544,7 @@
 
     "multer": ["multer@2.5.0", "", { "dependencies": { "append-field": "^1.0.0", "busboy": "^1.6.0", "type-is": "^1.6.18" } }, "sha512-BsqOzYGVq49JcW2IzoSAxeKYRevb+dGGPPWleOR8Lrlk4igwxu1/9pwSXlByhCb7MVZDrNJFC0IBP5/O5nLYRw=="],
 
-    "nats": ["nats@2.29.3", "", { "dependencies": { "nkeys.js": "1.1.0" } }, "sha512-tOQCRCwC74DgBTk4pWZ9V45sk4d7peoE2njVprMRCBXrhJ5q5cYM7i6W+Uvw2qUrcfOSnuisrX7bEx3b3Wx4QA=="],
-
     "negotiator": ["negotiator@1.1.0", "", { "dependencies": { "content-type": "^2.1.0" } }, "sha512-NMPBRMJgiQHjbd8phG3Vebdx4kZ1H121rbl5IkMqeOsahptB9BKo/d7oJ3zTXqTgagn2bWlNSXkh0QUGM31RYg=="],
-
-    "nkeys.js": ["nkeys.js@1.1.0", "", { "dependencies": { "tweetnacl": "1.0.3" } }, "sha512-tB/a0shZL5UZWSwsoeyqfTszONTt4k2YS0tuQioMOD180+MbombYVgzDUYHlx+gejYK6rgf08n/2Df99WY0Sxg=="],
 
     "oauth4webapi": ["oauth4webapi@3.8.8", "", {}, "sha512-8N28E+a/oxfXWBgOMt+ZP/JUf/XR+IFbvkAEPP3gznXOMv9BpAAwiIj0TFNz3tGTPc0ZQ8zmWBNgN1nAys0gng=="],
 
