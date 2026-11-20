@@ -54,6 +54,13 @@
         "zod": "^4.6.7",
       },
     },
+    "packages/agents": {
+      "name": "@graveshift/agents",
+      "version": "0.1.0",
+      "dependencies": {
+        "zod": "^4.6.7",
+      },
+    },
     "packages/api-contract": {
       "name": "@graveshift/api-contract",
       "version": "0.1.0",
@@ -214,6 +221,8 @@
     "@fastify/busboy": ["@fastify/busboy@2.1.1", "", {}, "sha512-vBZP4NlzfOlerQTnba4aqZoMhE/a9HY7HRqoOPaETQcSQuWEIyZMHGfVu6w9wGtGK5fED5qRs2DteVCjOH60sA=="],
 
     "@graveshift/actuator": ["@graveshift/actuator@workspace:packages/actuator"],
+
+    "@graveshift/agents": ["@graveshift/agents@workspace:packages/agents"],
 
     "@graveshift/api": ["@graveshift/api@workspace:apps/api"],
 

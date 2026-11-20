@@ -1,0 +1,40 @@
+# System agent templates. Keys are never written here: apiKeyEnv names the
+# environment variable that holds the key. Params are key-value maps; their
+# names are the {{PARAM}} placeholders in the prompt.
+system:
+  - name: SRE Bot
+    role: sre
+    description: 'Handles incidents, outages and OOM VPS restarts.'
+    prompt: 'Resolve {{INCIDENT_DETAIL}} on version {{VERSION}}.'
+    params:
+      - VERSION: v1
+      - INCIDENT_DETAIL: 'OOM VPS'
+    provider: '@ai-sdk/google'
+    model: gemini-3.8-flash-high
+    baseUrl: https://generativelanguage.googleapis.com/v1beta
+    apiKeyEnv: GOOGLE_GENERATIVE_AI_API_KEY
+    allowedTools:
+      - query_metric
+      - tail_logs
+    dailyBudgetUsd: 2.5
+    escalateTo: DevOps Bot
+
+  - name: DevOps Bot
+    role: devops
+    description: 'Handles deployment, pipeline and infrastructure tasks.'
+    prompt: 'Check deployment {{VERSION}} for {{SERVICE}}.'
+    params:
+      - VERSION: v1
+      - SERVICE: api
+    provider: '@ai-sdk/anthropic'
+    model: claude-sonnet-5.5
+    baseUrl: https://api.anthropic.com/v1
+    apiKeyEnv: ANTHROPIC_API_KEY
+    allowedTools:
+      - propose_fix
+    dailyBudgetUsd: 5
+    escalateTo: SRE Bot
+
+# A client may replace any system template with the same name. Only the fields
+# that differ need to be supplied by the caller when it builds its config.
+client: []
