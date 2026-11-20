@@ -20,6 +20,9 @@ export interface paths {
   "/api/work-items/{id}/triage": {
     post: operations["WorkItemsController_triage"];
   };
+  "/api/work-items/{id}/fix-now": {
+    post: operations["WorkItemsController_fixNow"];
+  };
 }
 
 export type webhooks = Record<string, never>;
@@ -155,6 +158,7 @@ export interface operations {
                 service: string;
                 diagnosisRef: string;
                 autoFixAllowed: boolean;
+                fixPriority: number;
               })[];
             total: number;
             offset: number;
@@ -207,6 +211,7 @@ export interface operations {
             service: string;
             diagnosisRef: string;
             autoFixAllowed: boolean;
+            fixPriority: number;
           };
         };
       };
@@ -266,6 +271,7 @@ export interface operations {
             service: string;
             diagnosisRef: string;
             autoFixAllowed: boolean;
+            fixPriority: number;
           };
         };
       };
@@ -279,6 +285,70 @@ export interface operations {
       };
       /** @description The work item is in a terminal status. */
       409: {
+        content: never;
+      };
+    };
+  };
+  WorkItemsController_fixNow: {
+    parameters: {
+      path: {
+        id: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          note?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description The work item after Fix now moved it to the front of the fix queue. */
+      200: {
+        content: {
+          "application/json": {
+            id: string;
+            title: string;
+            description: string;
+            successCriteria: string[];
+            subtasks: {
+              items: {
+                  id: string;
+                  title: string;
+                  done: boolean;
+                }[];
+              completed: number;
+            };
+            /** @enum {string} */
+            status: "todo" | "in_progress" | "in_review" | "done";
+            /** @enum {string} */
+            priority: "low" | "medium" | "high" | "critical";
+            assignee: "needs_human" | `needs_agent_${string}`;
+            reporter: string;
+            /** Format: date */
+            startDate: string | null;
+            /** Format: date */
+            dueDate: string | null;
+            sprint: string | null;
+            parent: string | null;
+            labels: string[];
+            team: string;
+            watchers: string[];
+            /** @enum {string} */
+            severity: "info" | "warning" | "critical";
+            service: string;
+            diagnosisRef: string;
+            autoFixAllowed: boolean;
+            fixPriority: number;
+          };
+        };
+      };
+      /** @description The request body is not valid. */
+      400: {
+        content: never;
+      };
+      /** @description No work item has this id. */
+      404: {
         content: never;
       };
     };

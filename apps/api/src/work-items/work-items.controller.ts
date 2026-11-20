@@ -31,8 +31,11 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 
+import { FixService } from '../fix/fix.service';
 import { WORK_ITEM_POLICY, type WorkItemPolicy } from './work-item.policy';
 import {
+  type FixNowRequest,
+  fixNowRequestSchema,
   type ListWorkItemsQuery,
   listWorkItemsQuerySchema,
   type TriageRequest,
@@ -50,6 +53,7 @@ export class WorkItemsController {
   constructor(
     private readonly store: WorkItemStore,
     @Inject(WORK_ITEM_POLICY) private readonly policy: WorkItemPolicy,
+    private readonly fixer: FixService,
   ) {}
 
   @Get()
@@ -113,5 +117,25 @@ export class WorkItemsController {
 
     this.store.save(result.value);
     return result.value;
+  }
+
+  @Post(':id/fix-now')
+  @HttpCode(HttpStatus.OK)
+  @ApiOkResponse({
+    description: 'The work item after Fix now moved it to the front of the fix queue.',
+    standardSchema: WorkItemSchema,
+  })
+  @ApiBadRequestResponse({ description: 'The request body is not valid.' })
+  @ApiNotFoundResponse({ description: 'No work item has this id.' })
+  async fixNow(
+    @Param({ schema: workItemParamsSchema }) params: WorkItemParams,
+    @Body({ schema: fixNowRequestSchema }) body: FixNowRequest,
+  ): Promise<WorkItem> {
+    const item = this.store.get(params.id);
+    if (!item) throw new NotFoundException(`Unknown work item: ${params.id}`);
+
+    const result = await this.fixer.fixNow(item, body.note);
+    this.store.save(result.item);
+    return result.item;
   }
 }

@@ -40,7 +40,7 @@ runtime events / logs / Prometheus
         -> incident `detected`
         -> Medium: diagnosis (LLM through LlmGateway, else rules-only)
         -> policy decide(open_pr)
-        -> Exorcist: draft PR (only if a patch generator is wired: not built)
+        -> Exorcist: draft PR (patch generator: built; daemon wiring: not built)
         -> Banshee: Discord blessing (not built)
         -> Actuator: signed, single-use action (nothing in the daemon requests one yet)
 every step -> audit log
@@ -76,6 +76,7 @@ The API in `apps/api` is the only external surface. A client calls this API, nev
 | `GET /api/work-items` | A paged list of work items for the table. |
 | `GET /api/work-items/:id` | One work item for the detail sheet. |
 | `POST /api/work-items/:id/triage` | The triaged work item. Updates the in-memory store. |
+| `POST /api/work-items/:id/fix-now` | The work item after **Fix now** moved it to the front of the fix queue. |
 | `POST /mcp` | Streamable HTTP MCP endpoint. Requires `Authorization: Bearer <GRAVESHIFT_MCP_TOKEN>`. |
 
 The API listens on 127.0.0.1 by default. Set `HOST` to change the bind address. Set `PORT` to change the port from 3000. Keep the localhost bind unless the MCP bearer token is configured and the endpoint is exposed deliberately.
@@ -90,7 +91,7 @@ A **work item** is created after a haunting is defined and verified. `packages/c
 
 A work item carries a title, description, success criteria, subtasks with a completed count, status, priority, assignee, reporter, start date, due date, sprint, parent, labels, team, watchers, severity, service, a diagnosis ref and the `autoFixAllowed` flag. Incident states in `packages/core` stay unchanged. `needs_human` and `needs_agent_<name>` are assignee values, not new incident states. The agent name comes from agent config in `packages/agents`.
 
-`GET /api/work-items` returns a paged list for the table. `GET /api/work-items/:id` returns one work item for the detail sheet. `POST /api/work-items/:id/triage` accepts an assignee of `needs_human` or an existing `needs_agent_<name>`, validates it and writes the result to the in-memory store. Any other assignee returns 400. A work item in a terminal status returns 409 and does not change. The pure helpers `triageToHuman`, `triageToAgent`, `parseAssignee` and `assertTriageAllowed` in `packages/core` make no model call and change no shared state. They set `autoFixAllowed` from client config. The generated assignee type is `needs_human | needs_agent_${string}`. No patch is generated and no fix runs in this ticket. "Fix now" and the exorcism stay in a later ticket. Audit for triage is deferred with the audit chain: no audit event is emitted here.
+`GET /api/work-items` returns a paged list for the table. `GET /api/work-items/:id` returns one work item for the detail sheet. `POST /api/work-items/:id/triage` accepts an assignee of `needs_human` or an existing `needs_agent_<name>`, validates it and writes the result to the in-memory store. Any other assignee returns 400. A work item in a terminal status returns 409 and does not change. The pure helpers `triageToHuman`, `triageToAgent`, `parseAssignee` and `assertTriageAllowed` in `packages/core` make no model call and change no shared state. They set `autoFixAllowed` from client config. The generated assignee type is `needs_human | needs_agent_${string}`. A work item also carries `fixPriority`: a lower number sits nearer the front of the fix queue. Audit for triage is deferred with the audit chain: no audit event is emitted here.
 
 The API reads agent names from `AGENTS_PATH` (default `agents.example.yaml`) and the client auto-fix switch from `GRAVESHIFT_AUTO_FIX` (default false). A missing or invalid `AGENTS_PATH` fails boot with a `WORK_ITEM_POLICY_INVALID` error. The store seed is injectable. It is empty by default, so production serves no demo data. Set `GRAVESHIFT_WORK_ITEM_DEMO=true` to load three demo work items for a local demo. E2E tests override the seed, the store and the policy with `Test.createTestingModule()`, so they read no agent file and use no demo data. Persistence is deferred: no database and no event-bus consumer are wired.
 
@@ -98,7 +99,17 @@ The API reads agent names from `AGENTS_PATH` (default `agents.example.yaml`) and
 
 `packages/patch` holds the patch path. A configured **Agent** proposes a Patch for a **Work item**. The model call goes through `packages/gateway` and is injected. `PatchSchema` parses the model output. The guard then checks the Patch: no empty Patch, no file count over the limit, no line count over the limit, no negative or non-integer line count, no unsafe path, no duplicate path, no forbidden path and no path outside `allowedPaths`. Forbidden paths match without case sensitivity. `allowedPaths` keep case sensitivity. `guardPatch` raises one `PatchRejectedError` with all reasons. `generatePatch` returns a typed rejection when the model gives no Patch or an invalid Patch. The guard runs before the caller sees a successful result.
 
-A valid Patch grants no permission and runs no fix. The **Exorcist** prepares the **Exorcism** in a later ticket. Policy `decide()` grants permission later. This ticket makes no GitHub call and opens no pull request.
+A valid Patch grants no permission and runs no fix. The fix path below uses it.
+
+## Fix paths
+
+A **Work item** enters the fix path in two ways. When the client config sets `autoFixAllowed`, the fix starts without a click: this is auto-fix. When the client turns auto-fix off, a person uses **Fix now**. **Fix now** also moves the Work item to the front of the fix queue. `POST /api/work-items/:id/fix-now` is the **Fix now** route. Its Zod body may carry a short note. Both ways use one use case in `apps/api/src/fix`. Auto-fix runs only when `autoFixAllowed` is true.
+
+The use case calls `decide()` from `packages/policy` first. It needs `effect === 'allow'`. If the policy gives `deny`, no Patch is made and no pull request is opened. The **Exorcist** only proposes a Patch through `packages/patch` and `packages/gateway`. The model output cannot grant permission. The use case gives `decide()` the Work item service, its diagnosis ref and fixed counters. No real model call runs in this path.
+
+`guardPatch` runs before any client call. The **Exorcist** opens a draft pull request through the injectable GitHub client in `packages/fixer`. That client has `createPullRequest({ draft: true })` and no merge method. A draft pull request is the last state of a fix: the **Exorcism** waits for human review. Graveshift does not merge and does not run a runtime action. No test calls a GitHub endpoint.
+
+**Fix now** always promotes `fixPriority` to the front of the queue and saves the Work item. This is a queue order change, not a permission grant. It is saved even when the policy denies the fix.
 
 ## MCP endpoint
 

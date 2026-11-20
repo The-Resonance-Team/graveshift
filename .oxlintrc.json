@@ -41,6 +41,13 @@
         "vitest/valid-title": "off",
         "vitest/require-mock-type-parameters": "off"
       }
+    },
+    // Generated contract types grow with every route; their line count is owned by the generator, not by hand-written code.
+    {
+      "files": ["**/generated/**"],
+      "rules": {
+        "max-lines": "off"
+      }
     }
   ],
   "ignorePatterns": [

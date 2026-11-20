@@ -84,8 +84,17 @@ export const WorkItemSchema = z.object({
   service: id,
   diagnosisRef: id,
   autoFixAllowed: z.boolean(),
+  // Lower values sit nearer the front of the fix queue. Zero is the front.
+  fixPriority: z.number().int().min(0),
 });
 export type WorkItem = z.infer<typeof WorkItemSchema>;
+
+export const FIX_QUEUE_FRONT = 0;
+
+// Fix now moves a work item to the front of the fix queue. It changes no other field.
+export function promoteToFront(item: WorkItem): WorkItem {
+  return { ...item, fixPriority: FIX_QUEUE_FRONT };
+}
 
 // Client config decides whether a work item may be fixed without a Fix now action.
 export const WorkItemClientConfigSchema = z

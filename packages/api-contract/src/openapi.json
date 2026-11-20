@@ -455,6 +455,11 @@
                           },
                           "autoFixAllowed": {
                             "type": "boolean"
+                          },
+                          "fixPriority": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
                           }
                         },
                         "required": [
@@ -477,7 +482,8 @@
                           "severity",
                           "service",
                           "diagnosisRef",
-                          "autoFixAllowed"
+                          "autoFixAllowed",
+                          "fixPriority"
                         ],
                         "additionalProperties": false
                       }
@@ -689,6 +695,11 @@
                     },
                     "autoFixAllowed": {
                       "type": "boolean"
+                    },
+                    "fixPriority": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
@@ -711,7 +722,8 @@
                     "severity",
                     "service",
                     "diagnosisRef",
-                    "autoFixAllowed"
+                    "autoFixAllowed",
+                    "fixPriority"
                   ],
                   "additionalProperties": false
                 }
@@ -931,6 +943,11 @@
                     },
                     "autoFixAllowed": {
                       "type": "boolean"
+                    },
+                    "fixPriority": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
                     }
                   },
                   "required": [
@@ -953,7 +970,8 @@
                     "severity",
                     "service",
                     "diagnosisRef",
-                    "autoFixAllowed"
+                    "autoFixAllowed",
+                    "fixPriority"
                   ],
                   "additionalProperties": false
                 }
@@ -968,6 +986,245 @@
           },
           "409": {
             "description": "The work item is in a terminal status."
+          }
+        },
+        "tags": [
+          "work-items"
+        ]
+      }
+    },
+    "/api/work-items/{id}/fix-now": {
+      "post": {
+        "operationId": "WorkItemsController_fixNow",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "note": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 500
+                  }
+                },
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The work item after Fix now moved it to the front of the fix queue.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "title": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "description": {
+                      "type": "string"
+                    },
+                    "successCriteria": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "subtasks": {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "title": {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              "done": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "title",
+                              "done"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "completed": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        }
+                      },
+                      "required": [
+                        "items",
+                        "completed"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "todo",
+                        "in_progress",
+                        "in_review",
+                        "done"
+                      ]
+                    },
+                    "priority": {
+                      "type": "string",
+                      "enum": [
+                        "low",
+                        "medium",
+                        "high",
+                        "critical"
+                      ]
+                    },
+                    "assignee": {
+                      "anyOf": [
+                        {
+                          "type": "string",
+                          "enum": [
+                            "needs_human"
+                          ]
+                        },
+                        {
+                          "type": "string",
+                          "pattern": "^(needs_agent_)[\\s\\S]{0,}$"
+                        }
+                      ]
+                    },
+                    "reporter": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "startDate": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                    },
+                    "dueDate": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                    },
+                    "sprint": {
+                      "nullable": true,
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "parent": {
+                      "nullable": true,
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "labels": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "team": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "watchers": {
+                      "type": "array",
+                      "items": {
+                        "type": "string",
+                        "minLength": 1
+                      }
+                    },
+                    "severity": {
+                      "type": "string",
+                      "enum": [
+                        "info",
+                        "warning",
+                        "critical"
+                      ]
+                    },
+                    "service": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "diagnosisRef": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "autoFixAllowed": {
+                      "type": "boolean"
+                    },
+                    "fixPriority": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "title",
+                    "description",
+                    "successCriteria",
+                    "subtasks",
+                    "status",
+                    "priority",
+                    "assignee",
+                    "reporter",
+                    "startDate",
+                    "dueDate",
+                    "sprint",
+                    "parent",
+                    "labels",
+                    "team",
+                    "watchers",
+                    "severity",
+                    "service",
+                    "diagnosisRef",
+                    "autoFixAllowed",
+                    "fixPriority"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request body is not valid."
+          },
+          "404": {
+            "description": "No work item has this id."
           }
         },
         "tags": [

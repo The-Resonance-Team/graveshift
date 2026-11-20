@@ -1,4 +1,4 @@
-import { createSubtasks, NEEDS_HUMAN, type WorkItem } from '@graveshift/core';
+import { createSubtasks, NEEDS_HUMAN, promoteToFront, type WorkItem } from '@graveshift/core';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
@@ -6,6 +6,7 @@ import request from 'supertest';
 
 import { configureApp } from '../src/app.factory';
 import { AppModule } from '../src/app.module';
+import { FixService } from '../src/fix/fix.service';
 import { WORK_ITEM_POLICY, type WorkItemPolicy } from '../src/work-items/work-item.policy';
 import { WORK_ITEM_SEED, WorkItemStore } from '../src/work-items/work-item.store';
 
@@ -55,9 +56,22 @@ function item(id: string, overrides: Partial<WorkItem> = {}): WorkItem {
     service: 'api',
     diagnosisRef: `diag-${id}`,
     autoFixAllowed: false,
+    fixPriority: 100,
     ...overrides,
   };
 }
+
+// The e2e pass injects a fixed use case. No gateway, GitHub client or policy file is used.
+const fakeFixer = {
+  async fixNow(workItem: WorkItem) {
+    return {
+      item: promoteToFront(workItem),
+      trigger: 'fix_now',
+      effect: 'allow',
+      ok: true,
+    } as const;
+  },
+};
 
 // The tests bring their own store and policy. No agent YAML file or demo seed is read.
 async function buildApp(): Promise<INestApplication> {
@@ -80,6 +94,8 @@ async function buildApp(): Promise<INestApplication> {
     )
     .overrideProvider(WORK_ITEM_POLICY)
     .useValue(POLICY)
+    .overrideProvider(FixService)
+    .useValue(fakeFixer)
     .compile();
   return configureApp(moduleRef.createNestApplication({ logger: false }));
 }
@@ -172,5 +188,27 @@ describe('work items API (e2e)', () => {
     const detail = await request(app.getHttpServer()).get('/api/work-items/wi-3').expect(200);
     expect(detail.body.assignee).toBe(NEEDS_HUMAN);
     expect(detail.body.autoFixAllowed).toBe(false);
+  });
+
+  test('POST fix-now moves the work item to the front of the fix queue', async () => {
+    const before = await request(app.getHttpServer()).get('/api/work-items/wi-1').expect(200);
+    expect(before.body.fixPriority).toBe(100);
+
+    const response = await request(app.getHttpServer())
+      .post('/api/work-items/wi-1/fix-now')
+      .send({ note: 'Check memory use' })
+      .expect(200);
+    expect(response.body.fixPriority).toBe(0);
+
+    const after = await request(app.getHttpServer()).get('/api/work-items/wi-1').expect(200);
+    expect(after.body.fixPriority).toBe(0);
+  });
+
+  test('POST fix-now rejects an unknown work item and a bad body', async () => {
+    await request(app.getHttpServer()).post('/api/work-items/missing/fix-now').send({}).expect(404);
+    await request(app.getHttpServer())
+      .post('/api/work-items/wi-1/fix-now')
+      .send({ unknown: true })
+      .expect(400);
   });
 });

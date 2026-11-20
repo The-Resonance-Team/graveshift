@@ -22,3 +22,9 @@ export type WorkItemListResponse = z.infer<typeof workItemListResponseSchema>;
 
 export const triageRequestSchema = z.object({ assignee: AssigneeSchema }).strict();
 export type TriageRequest = z.infer<typeof triageRequestSchema>;
+
+// A Fix now request may carry a short human note. It never grants permission.
+export const fixNowRequestSchema = z
+  .object({ note: z.string().min(1).max(500).optional() })
+  .strict();
+export type FixNowRequest = z.infer<typeof fixNowRequestSchema>;

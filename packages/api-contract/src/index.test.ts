@@ -46,6 +46,7 @@ describe('api contract', () => {
       service: 'api',
       diagnosisRef: 'diag-1',
       autoFixAllowed: false,
+      fixPriority: 100,
     };
     const list: WorkItemListResponse = { items: [detail], total: 1, offset: 0, limit: 20 };
     expect(list.items[0]?.id).toBe('wi-1');
