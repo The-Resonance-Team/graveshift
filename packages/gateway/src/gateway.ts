@@ -2,13 +2,15 @@ import { redact } from '@graveshift/redactor';
 
 import { createDailyBudget, type DailyBudget } from './budget';
 import { GatewayConfigSchema, type GatewayConfig } from './config';
-import type {
-  AgentBinding,
-  AuditEvent,
-  GeneratedObject,
-  GatewayResult,
-  GatewayTask,
-  Usage,
+import {
+  type AgentBinding,
+  type AuditEvent,
+  type FallbackReason,
+  type GeneratedObject,
+  type GatewayResult,
+  type GatewayTask,
+  type Usage,
+  GatewayConfigError,
 } from './types';
 
 export interface GatewayOptions {
@@ -19,14 +21,23 @@ export interface GatewayOptions {
 }
 
 type Attempt<T> =
-  | { kind: 'ok'; value: T; response: GeneratedObject; cost: number }
-  | { kind: 'invalid'; reason: string; response: GeneratedObject; cost: number }
-  | { kind: 'failed' };
+  | { kind: 'ok'; value: T }
+  | { kind: 'invalid'; reason: string }
+  | { kind: 'failed' }
+  | { kind: 'unpriced' };
 
-const NO_USAGE: Usage = { in: 0, out: 0 };
+const messageOf = (error: unknown): string =>
+  error instanceof Error ? error.message : 'unknown failure';
 
 export function createGateway(options: GatewayOptions) {
   const config = GatewayConfigSchema.parse(options.config);
+  const names = new Set<string>();
+  for (const { agent } of options.agents) {
+    if (names.has(agent.name)) {
+      throw new GatewayConfigError(`duplicate agent name: ${agent.name}`);
+    }
+    names.add(agent.name);
+  }
   const globalBudget = createDailyBudget(
     config.globalDailyBudgetUsd,
     config.priceTableUsdPer1M,
@@ -34,12 +45,10 @@ export function createGateway(options: GatewayOptions) {
   );
   const perAgent = new Map<string, DailyBudget>();
   for (const { agent } of options.agents) {
-    if (!perAgent.has(agent.name)) {
-      perAgent.set(
-        agent.name,
-        createDailyBudget(agent.dailyBudgetUsd, config.priceTableUsdPer1M, options.now),
-      );
-    }
+    perAgent.set(
+      agent.name,
+      createDailyBudget(agent.dailyBudgetUsd, config.priceTableUsdPer1M, options.now),
+    );
   }
 
   // The result is only redacted, schema-validated data. No tool runs and no permission is granted.
@@ -50,50 +59,64 @@ export function createGateway(options: GatewayOptions) {
       (entry) => entry.agent.name === task.agent,
     );
     const budget = perAgent.get(task.agent);
+    // ponytail: check and charge are not atomic; concurrent calls can overshoot the budget, reserve tokens when calls run in parallel
+    const total: Usage = { in: 0, out: 0 };
+    let cost = 0;
+    let model = '';
 
-    const finish = (
-      result: GatewayResult<T>,
-      usage: Usage = NO_USAGE,
-      cost = 0,
-      model?: string,
-      reason?: string,
-    ): GatewayResult<T> => {
+    const totals = () => ({ usage: { ...total }, costUsd: cost });
+
+    const finish = (result: GatewayResult<T>, reason?: string): GatewayResult<T> => {
       options.onAudit?.({
         agent: task.agent,
         task: task.task,
         status: result.status,
-        tokensIn: usage.in,
-        tokensOut: usage.out,
+        tokensIn: total.in,
+        tokensOut: total.out,
         costUsd: cost,
-        ...(model === undefined ? {} : { model }),
+        ...(model.length === 0 ? {} : { model }),
         ...(reason === undefined ? {} : { reason: redact(reason) }),
       });
       return result;
     };
 
-    const unavailable = (reason: string): GatewayResult<T> =>
-      task.rulesOnly === undefined
-        ? finish({ status: 'unavailable' }, NO_USAGE, 0, undefined, reason)
-        : finish(
-            { status: 'rules_only', value: task.rulesOnly(), reason: 'unavailable' },
-            NO_USAGE,
-            0,
-            undefined,
-            reason,
-          );
+    // A failing fallback still ends in a typed result and one audit event.
+    const fallback = (reason: FallbackReason, auditReason: string): GatewayResult<T> => {
+      if (task.rulesOnly === undefined) return finish({ status: 'unavailable' }, auditReason);
+      try {
+        return finish({ status: 'rules_only', value: task.rulesOnly(), reason }, auditReason);
+      } catch {
+        return finish({ status: 'unavailable' }, `${auditReason}; rules-only fallback failed`);
+      }
+    };
 
-    if (binding === undefined || budget === undefined) return unavailable('no adapter for agent');
-    if (!(await binding.adapter.available())) return unavailable('provider unavailable');
+    const invalid = (reason: string): GatewayResult<T> => {
+      const redacted = redact(reason);
+      if (task.rulesOnly === undefined) {
+        return finish({ status: 'invalid', reason: redacted, ...totals() }, redacted);
+      }
+      try {
+        return finish(
+          { status: 'rules_only', value: task.rulesOnly(), reason: 'invalid' },
+          redacted,
+        );
+      } catch {
+        return finish({ status: 'unavailable' }, 'rules-only fallback failed');
+      }
+    };
+
+    if (binding === undefined || budget === undefined) {
+      return fallback('unavailable', 'no adapter for agent');
+    }
+    let available = false;
+    try {
+      available = await binding.adapter.available();
+    } catch {
+      available = false;
+    }
+    if (!available) return fallback('unavailable', 'provider unavailable');
     if (globalBudget.exhausted() || budget.exhausted()) {
-      return task.rulesOnly === undefined
-        ? finish({ status: 'unavailable' }, NO_USAGE, 0, undefined, 'budget exhausted')
-        : finish(
-            { status: 'rules_only', value: task.rulesOnly(), reason: 'budget' },
-            NO_USAGE,
-            0,
-            undefined,
-            'budget exhausted',
-          );
+      return fallback('budget', 'budget exhausted');
     }
 
     // Transport errors are retried from config. The raw error never reaches a log or an audit event.
@@ -113,55 +136,55 @@ export function createGateway(options: GatewayOptions) {
     const generate = async (text: string): Promise<Attempt<T>> => {
       const response = await call(text, config.maxRetries);
       if (response === undefined) return { kind: 'failed' };
-      const cost = budget.record(response.model, response.usage);
-      globalBudget.record(response.model, response.usage);
-      const parsed = task.schema.safeParse(response.object);
-      const problem = parsed.success ? task.validate?.(parsed.data) : redact(parsed.error.message);
-      if (parsed.success && problem === undefined) {
-        return { kind: 'ok', value: parsed.data, response, cost };
+      let charged: number;
+      try {
+        charged = budget.record(response.model, response.usage);
+        globalBudget.record(response.model, response.usage);
+      } catch {
+        return { kind: 'unpriced' };
       }
-      return { kind: 'invalid', reason: problem ?? 'invalid output', response, cost };
-    };
+      total.in += response.usage.in;
+      total.out += response.usage.out;
+      cost += charged;
+      model = response.model;
 
-    const outcome = (final: Attempt<T>): GatewayResult<T> => {
-      if (final.kind === 'ok') {
-        return {
-          status: 'ok',
-          value: final.value,
-          model: final.response.model,
-          usage: final.response.usage,
-          costUsd: final.cost,
-        };
+      const parsed = task.schema.safeParse(response.object);
+      let problem: string | undefined;
+      if (parsed.success) {
+        try {
+          problem = task.validate?.(parsed.data);
+        } catch (error) {
+          problem = messageOf(error);
+        }
+        if (problem === undefined) return { kind: 'ok', value: parsed.data };
+      } else {
+        problem = parsed.error.message;
       }
-      if (final.kind === 'failed') {
-        return task.rulesOnly === undefined
-          ? { status: 'unavailable' }
-          : { status: 'rules_only', value: task.rulesOnly(), reason: 'unavailable' };
-      }
-      return task.rulesOnly === undefined
-        ? { status: 'invalid', reason: final.reason }
-        : { status: 'rules_only', value: task.rulesOnly(), reason: 'invalid' };
+      return { kind: 'invalid', reason: problem ?? 'invalid output' };
     };
 
     const first = await generate(prompt);
-    // Exactly one validation retry; the reason is redacted before it leaves the gateway.
-    const final =
-      first.kind === 'invalid'
-        ? await generate(
-            `${prompt}\n\n<validation_error>${redact(first.reason)}</validation_error>\nReturn corrected JSON only.`,
-          )
-        : first;
-    const result = outcome(final);
-    const usage = final.kind === 'failed' ? NO_USAGE : final.response.usage;
-    const cost = final.kind === 'failed' ? 0 : final.cost;
-    const model = final.kind === 'failed' ? undefined : final.response.model;
-    const reason =
-      final.kind === 'invalid'
-        ? final.reason
-        : final.kind === 'failed'
-          ? 'transport failure'
-          : undefined;
-    return finish(result, usage, cost, model, reason);
+    if (first.kind === 'unpriced') {
+      return fallback('unavailable', 'model missing from price table');
+    }
+    let final: Attempt<T> = first;
+    if (first.kind === 'invalid') {
+      // The first attempt may have used the last of a budget. Do not spend on a second call.
+      if (globalBudget.exhausted() || budget.exhausted()) {
+        return fallback('budget', 'budget exhausted before validation retry');
+      }
+      final = await generate(
+        `${prompt}\n\n<validation_error>${redact(first.reason)}</validation_error>\nReturn corrected JSON only.`,
+      );
+      if (final.kind === 'unpriced') {
+        return fallback('unavailable', 'model missing from price table');
+      }
+    }
+    if (final.kind === 'ok') {
+      return finish({ status: 'ok', value: final.value, model, ...totals() });
+    }
+    if (final.kind === 'failed') return fallback('unavailable', 'transport failure');
+    return invalid(final.reason);
   }
 
   return { run, globalBudget, perAgent };

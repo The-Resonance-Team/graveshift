@@ -1,4 +1,4 @@
-import type { Usage } from './types';
+import { GatewayConfigError, type Usage } from './types';
 
 type PriceTable = Record<string, { in: number; out: number }>;
 
@@ -24,8 +24,11 @@ export function createDailyBudget(
       return spent >= limitUsd;
     },
     record(model: string, usage: Usage): number {
+      const price = prices[model];
+      if (price === undefined) {
+        throw new GatewayConfigError(`model ${model} is missing from the price table`);
+      }
       roll();
-      const price = prices[model] ?? { in: 0, out: 0 };
       const cost = (usage.in * price.in + usage.out * price.out) / 1_000_000;
       spent += cost;
       return cost;

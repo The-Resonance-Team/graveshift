@@ -12,6 +12,7 @@ Graveshift is read-only toward production by default. These rules match `.kiro/s
 6. **No Docker socket, no cluster-admin.** The daemon reaches Docker only through the read-only socket proxy. `docker.sock` is mounted only into the two proxies. The Kubernetes source uses the in-cluster ServiceAccount.
 7. **No secrets in the repository.** `.env*` is gitignored. Example files hold placeholders. `scripts/kiro/secret-scan.mjs` runs on save through a Kiro hook.
 8. **Circuit breaker.** If a haunting reopens within 10 minutes of an action, auto-actions for that service stop. The helper is in `packages/core` and the actuator applies it. **Paging humans needs Discord and is not built.**
+9. **Agent model calls.** `packages/gateway` is the single model path for an Agent. It reads each key from the process environment variable named by `apiKeyEnv` in the Agent config, never from YAML, and rejects an unset or placeholder key. Every call applies redaction, a per-Agent and global UTC daily budget, one audit event, transport retry from config, one redacted validation retry, evidence validation and a rules-only fallback. A model output cannot grant a permission. The budget check and the charge are separate steps, so concurrent calls can spend more than the daily limit. Diagnosis still uses `packages/llm`; issue #40 will move it into the gateway.
 
 ## Audit chain
 
@@ -33,5 +34,5 @@ Every tool input has a Zod schema with limits (`list_incidents` at most 50, `get
 - Consumed actuator token IDs are in memory; a restart inside the 15-minute window forgets them.
 - The Kubernetes network policy allows all egress. Egress allowlisting is not done.
 - The `pods/log` rule exposes log contents to the daemon. For real users, use a namespace-scoped Role instead of the ClusterRole.
-- The model endpoint uses a bearer API key from `OPENAI_COMPATIBLE_API_KEY`. The key is read from the environment only and never from config files. The configured `baseUrl` may be plain HTTP on a private network; use a trusted network or TLS.
+- Agent keys come from the environment variable named by `apiKeyEnv`. The key is never read from YAML, and an unset or placeholder value rejects the adapter. The Agent config schema requires an https `baseUrl` with no URL credentials. Diagnosis still uses the `OPENAI_COMPATIBLE_API_KEY` path in `packages/llm`; issue #40 will unify the two paths. The budget check and the charge are not atomic, so a burst of concurrent calls can spend more than the daily limit.
 - Kubernetes code is tested with fixtures only.

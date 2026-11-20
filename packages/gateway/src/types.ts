@@ -60,7 +60,7 @@ export interface AuditEvent {
 export type GatewayResult<T> =
   | { status: 'ok'; value: T; model: string; usage: Usage; costUsd: number }
   | { status: 'rules_only'; value: T; reason: FallbackReason }
-  | { status: 'invalid'; reason: string }
+  | { status: 'invalid'; reason: string; usage: Usage; costUsd: number }
   | { status: 'unavailable' };
 
 export class GatewayConfigError extends GraveshiftError<'GATEWAY_CONFIG_ERROR'> {

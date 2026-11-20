@@ -23,9 +23,9 @@ The v1 daemon is at `apps/_daemon`. It is reference only. The repository does no
 | Metrics | `packages/metrics` | Prometheus instant-query client and the watcher queries. |
 | Wraith | `packages/watcher` | Rules, fingerprint dedupe, per-service incident, Salt-line silences, PromQL poller. |
 | Medium | `packages/diagnoser` | Context builder, untrusted wrapping, evidence validation, rules-only fallback. |
-| LLM | `packages/llm` | `LlmGateway`: single AI SDK model, retry, timeout, daily budget, prompt redaction. The only place provider calls are made for diagnosis. |
+| LLM | `packages/llm` | `LlmGateway`: the diagnosis-only model path from ADR 0002. It keeps the same controls but does not use the Agent gateway yet. Issue #40 will move it. |
 | Agents | `packages/agents` | Zod schemas for agent config, system template merge and the routing agent. Pure helpers only; no provider call. |
-| Gateway | `packages/gateway` | The only model call path for an Agent. Redaction, daily budgets, audit events, transport retry, one validation retry, evidence validation and rules-only fallback. One thin adapter per official provider package. |
+| Gateway | `packages/gateway` | The single model call path for an Agent. Redaction, daily budgets, audit events, transport retry, one validation retry, evidence validation and rules-only fallback. One thin adapter per official provider package. |
 | Exorcist | `packages/fixer` | Patch guard, GitHub App auth, `graveshift/` branches, draft pull requests. No merge call exists. |
 | Actuator | `packages/actuator` | Separate service. Verifies and executes approved actions. |
 | MCP | `apps/api/src/mcp` | `graveshift-mcp` through the official `@nestjs/mcp` module: Streamable HTTP at `/mcp` with a bearer token, plus a stdio launcher. |
@@ -156,7 +156,9 @@ Every call applies these controls:
 
 Model output cannot grant a permission. The gateway runs no tool and returns no permission grant. A Ghost gets its permission from policy.
 
-The diagnoser keeps its own `LlmGateway` for diagnosis. Its controls match this list.
+There are two model paths today. `packages/gateway` is the single path for an Agent. `packages/llm` is a separate, diagnosis-only gateway from ADR 0002. It predates Agent config and is not wired to `packages/gateway`. Issue #40 moves diagnosis into `packages/gateway` so that one gateway serves every model call. Do not add another provider path.
+
+The budget check and the charge are two separate steps. Concurrent calls can spend more than the daily limit. A reservation taken before the model call is the upgrade path when the daemon runs calls in parallel.
 
 ## Daemon local surface
 

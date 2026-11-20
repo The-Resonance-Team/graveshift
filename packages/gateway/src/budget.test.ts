@@ -1,8 +1,15 @@
 import { describe, expect, test } from 'bun:test';
 
 import { createDailyBudget } from './budget';
+import { GatewayConfigError } from './types';
 
 describe('daily budget', () => {
+  test('a model missing from the price table is rejected', () => {
+    const budget = createDailyBudget(10, { m: { in: 1, out: 1 } }, () => new Date());
+    expect(() => budget.record('unpriced', { in: 1, out: 0 })).toThrow(GatewayConfigError);
+    expect(budget.spentUsd()).toBe(0);
+  });
+
   test('cost adds input and output tokens from the price table', () => {
     const budget = createDailyBudget(10, { m: { in: 2, out: 3 } }, () => new Date());
     expect(budget.record('m', { in: 1_000_000, out: 1_000_000 })).toBe(5);
