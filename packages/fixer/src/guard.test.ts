@@ -141,6 +141,12 @@ describe('branch', () => {
     );
   });
 
+  test('handles long hyphen runs without regex backtracking', () => {
+    expect(branchRef('inc7', '-'.repeat(500), 'graveshift/')).toBe(
+      'refs/heads/graveshift/inc-inc7-fix',
+    );
+  });
+
   test('property: refs always stay under the prefix with safe characters', () => {
     fc.assert(
       fc.property(fc.string(), fc.string(), (id, title) => {

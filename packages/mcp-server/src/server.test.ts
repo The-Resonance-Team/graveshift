@@ -117,6 +117,7 @@ describe('tools', () => {
     );
     expect(checkPromql('rate(http_requests_total[2h])')).toContain('range');
     expect(checkPromql('up offset 5m')).toBeDefined();
+    expect(checkPromql(`up{job="${'\\'.repeat(5000)}"}`)).toBeUndefined();
   });
 });
 

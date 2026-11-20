@@ -29,10 +29,20 @@ export function checkPromql(query: string): string | undefined {
     if (Number(n) * (UNIT_MINUTES[unit ?? ''] ?? Infinity) > MAX_RANGE_MINUTES)
       return `range exceeds ${MAX_RANGE_MINUTES}m`;
   }
-  const bare = query
-    .replace(/"(?:[^"\\]|\\.)*"/g, '""')
-    .replace(/\[\d+[smh]\]/g, '')
-    .replace(/\b\d+(?:\.\d+)?(?:e-?\d+)?\b/g, '');
+  let unquoted = '';
+  let inQuote = false;
+  let escaped = false;
+  for (const char of query) {
+    if (inQuote) {
+      if (escaped) escaped = false;
+      else if (char === '\\') escaped = true;
+      else if (char === '"') inQuote = false;
+      continue;
+    }
+    if (char === '"') inQuote = true;
+    else unquoted += char;
+  }
+  const bare = unquoted.replace(/\[\d+[smh]\]/g, '').replace(/\b\d+(?:\.\d+)?(?:e-?\d+)?\b/g, '');
   if (/[@`;]|\boffset\b/.test(bare)) return 'forbidden syntax';
   for (const word of bare.match(/[A-Za-z_][A-Za-z0-9_:]*/g) ?? []) {
     if (!ALLOWED.has(word)) return `identifier not allowed: ${word}`;

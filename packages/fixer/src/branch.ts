@@ -12,14 +12,13 @@ export function branchRef(incidentId: string, title: string, prefix: string): st
       .toLowerCase()
       .replace(/[^a-z0-9]/g, '')
       .slice(0, 8) || 'x';
-  const slug =
-    title
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 40)
-      .replace(/-+$/, '') || 'fix';
-  return `refs/heads/${prefix}inc-${shortId}-${slug}`;
+  const parts = title
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+  let slug = parts.join('-').slice(0, 40);
+  while (slug.endsWith('-')) slug = slug.slice(0, -1);
+  return `refs/heads/${prefix}inc-${shortId}-${slug || 'fix'}`;
 }
 
 export function assertBranchPrefix(ref: string, prefix: string): void {
