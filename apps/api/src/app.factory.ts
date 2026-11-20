@@ -2,8 +2,8 @@ import 'reflect-metadata';
 import { StandardSchemaValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { SwaggerModule } from '@nestjs/swagger';
-import { AppModule } from './app.module.js';
-import { createOpenApiDocument } from './openapi.js';
+import { AppModule } from './app.module';
+import { createOpenApiDocument } from './openapi';
 
 export async function createApp() {
   const app = await NestFactory.create(AppModule, { logger: false });

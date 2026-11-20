@@ -3,8 +3,8 @@
 // v7 needs TypeScript 5 and this repo uses TypeScript 7.
 import { mkdir } from 'node:fs/promises';
 import openapiTS, { type OpenAPI3 } from 'openapi-typescript';
-import { createApp } from '../../../apps/api/src/app.factory.js';
-import { createOpenApiDocument } from '../../../apps/api/src/openapi.js';
+import { createApp } from '../../../apps/api/src/app.factory';
+import { createOpenApiDocument } from '../../../apps/api/src/openapi';
 
 const check = process.argv.includes('--check');
 const app = await createApp();

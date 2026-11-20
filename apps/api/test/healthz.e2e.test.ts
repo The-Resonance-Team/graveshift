@@ -1,7 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import request from 'supertest';
-import { createApp } from '../src/app.factory.js';
+import { createApp } from '../src/app.factory';
 
 describe('external API (e2e)', () => {
   let app!: INestApplication;

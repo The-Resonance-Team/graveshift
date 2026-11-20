@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { describe, expect, test } from 'bun:test';
 import contractPackage from '../package.json';
-import { API_CONTRACT_VERSION, type HealthResponse } from './index.js';
+import { API_CONTRACT_VERSION, type HealthResponse } from './index';
 import openapi from './openapi.json';
 
 describe('api contract', () => {
