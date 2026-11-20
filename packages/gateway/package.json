@@ -1,0 +1,27 @@
+{
+  "name": "@graveshift/gateway",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./adapters": "./src/adapters.ts",
+    "./budget": "./src/budget.ts",
+    "./config": "./src/config.ts",
+    "./types": "./src/types.ts"
+  },
+  "scripts": {
+    "typecheck": "bun check --no-script",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@ai-sdk/anthropic": "4.0.107",
+    "@ai-sdk/google": "4.0.123",
+    "@ai-sdk/openai-compatible": "3.0.93",
+    "@graveshift/agents": "workspace:*",
+    "@graveshift/core": "workspace:*",
+    "@graveshift/redactor": "workspace:*",
+    "ai": "7.0.177",
+    "zod": "^4.6.7"
+  }
+}

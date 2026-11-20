@@ -23,8 +23,9 @@ The v1 daemon is at `apps/_daemon`. It is reference only. The repository does no
 | Metrics | `packages/metrics` | Prometheus instant-query client and the watcher queries. |
 | Wraith | `packages/watcher` | Rules, fingerprint dedupe, per-service incident, Salt-line silences, PromQL poller. |
 | Medium | `packages/diagnoser` | Context builder, untrusted wrapping, evidence validation, rules-only fallback. |
-| LLM | `packages/llm` | `LlmGateway`: single AI SDK model, retry, timeout, daily budget, prompt redaction. The only place provider calls are made. |
+| LLM | `packages/llm` | `LlmGateway`: single AI SDK model, retry, timeout, daily budget, prompt redaction. The only place provider calls are made for diagnosis. |
 | Agents | `packages/agents` | Zod schemas for agent config, system template merge and the routing agent. Pure helpers only; no provider call. |
+| Gateway | `packages/gateway` | The only model call path for an Agent. Redaction, daily budgets, audit events, transport retry, one validation retry, evidence validation and rules-only fallback. One thin adapter per official provider package. |
 | Exorcist | `packages/fixer` | Patch guard, GitHub App auth, `graveshift/` branches, draft pull requests. No merge call exists. |
 | Actuator | `packages/actuator` | Separate service. Verifies and executes approved actions. |
 | MCP | `apps/api/src/mcp` | `graveshift-mcp` through the official `@nestjs/mcp` module: Streamable HTTP at `/mcp` with a bearer token, plus a stdio launcher. |
@@ -136,7 +137,26 @@ An **Agent** is a configured Ghost. Its config block holds a name, slug, role, d
 
 Each param is one key-value map. Its key is a `{{PARAM}}` placeholder in the prompt. The YAML value is a **default**: the routing agent uses it when the request has no value for that param. An empty value means there is no default. Params and placeholders must declare each other, and param names must be unique. A missing param without a default leads to one question to the user. If the param is still missing, the result is `needs_human` with a reason.
 
-The **Routing agent** is a built-in role. It reads a request and selects a target Agent by the trigger keywords in the description. When two Agents score the same, the first Agent in the list wins. Request text and filled param values are wrapped as `<untrusted_*>` data before they enter any prompt, using the same convention as the diagnoser. The question is written through an injected `RoutingModel` interface. This package imports no provider package and makes no model call. Redaction, budget and audit controls stay in ticket #26.
+The **Routing agent** is a built-in role. It reads a request and selects a target Agent by the trigger keywords in the description. When two Agents score the same, the first Agent in the list wins. Request text and filled param values are wrapped as `<untrusted_*>` data before they enter any prompt, using the same convention as the diagnoser. The question is written through an injected `RoutingModel` interface. This package imports no provider package and makes no model call.
+
+## Gateway
+
+The gateway in `packages/gateway` makes every model call for an **Agent**. No other package calls a model for an Agent. One call uses one thin adapter for the provider package named in the Agent config. The adapter uses an official `@ai-sdk/*` package. There is no hand-written HTTP adapter and no vendor chain.
+
+The gateway reads the API key from the process environment variable named by `apiKeyEnv`. It never reads a key from YAML. An unset key or a placeholder value rejects the adapter.
+
+Every call applies these controls:
+
+- Redaction of the system prompt, the prompt and any untrusted content before the model.
+- A daily budget in UTC, checked for the Agent and for Graveshift as a whole.
+- One audit event on every terminal path. It carries `agent`, `task`, `status`, token counts and cost.
+- Transport retry from config. The gateway owns the retry; the SDK does not retry.
+- At most one validation retry. The validation reason is redacted before the model sees it again.
+- Evidence validation and a deterministic rules-only fallback. This fallback runs when the output is invalid, the provider is unavailable or the budget is used up.
+
+Model output cannot grant a permission. The gateway runs no tool and returns no permission grant. A Ghost gets its permission from policy.
+
+The diagnoser keeps its own `LlmGateway` for diagnosis. Its controls match this list.
 
 ## Daemon local surface
 
