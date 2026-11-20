@@ -21,7 +21,7 @@ on:
         required: true
         type: string
       policy_decision:
-        description: Recorded policy decision; effect must be allow for open_pr.
+        description: Recorded policy decision with context; re-evaluated before any write.
         required: true
         type: string
       pr_title:
@@ -52,5 +52,4 @@ jobs:
       pr_title: ${{ inputs.pr_title }}
       base_ref: ${{ inputs.base_ref }}
     secrets:
-      model_api_key: ${{ secrets.MODEL_API_KEY }}
       pr_token: ${{ secrets.GRAVESHIFT_PR_TOKEN }}

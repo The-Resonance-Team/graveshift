@@ -1,20 +1,21 @@
 import {
+  assertBaseRef,
   assertBranchSlug,
   assertPayloadSize,
-  assertPolicyAllow,
+  evaluatePolicyAllow,
   fail,
+  loadOneShotPolicy,
   redactPatch,
-  repoRules,
   validatePatch,
 } from './one-shot';
 
 try {
   assertBranchSlug(process.env.BRANCH_SLUG);
-  assertPolicyAllow(process.env.POLICY_DECISION);
-  if (!process.env.MODEL_API_KEY) throw new Error('model key is missing');
+  assertBaseRef(process.env.BASE_REF);
+  const { policy, rules } = await loadOneShotPolicy();
+  evaluatePolicyAllow(process.env.POLICY_DECISION, policy);
   const payload = assertPayloadSize(process.env.PATCH_PAYLOAD);
 
-  const rules = await repoRules();
   const patch = redactPatch(validatePatch(payload, rules));
   validatePatch(JSON.stringify(patch), rules);
 

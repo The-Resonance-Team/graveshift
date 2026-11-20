@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'bun:test';
 
 import {
+  assertBaseRef,
   assertBranchSlug,
   assertPayloadSize,
   assertPolicyAllow,
@@ -13,6 +14,7 @@ import {
 
 type Step = {
   env?: Record<string, string>;
+  id?: string;
   name?: string;
   run?: string;
   uses?: string;
@@ -109,7 +111,7 @@ describe('one-shot Actions workflows', () => {
       expect(call?.inputs?.[name]?.type).toBe('string');
       expect(dispatch?.inputs?.[name]?.type).toBe('string');
     }
-    expect(Object.keys(call?.secrets ?? {})).toEqual(['model_api_key', 'pr_token']);
+    expect(Object.keys(call?.secrets ?? {})).toEqual(['pr_token']);
   });
 
   test('manual workflow forwards inputs and secrets to the reusable workflow', () => {
@@ -120,7 +122,6 @@ describe('one-shot Actions workflows', () => {
     }
     expect(job?.with).not.toHaveProperty('github_token');
     expect(job?.secrets).toEqual({
-      model_api_key: '${{ secrets.MODEL_API_KEY }}',
       pr_token: '${{ secrets.GRAVESHIFT_PR_TOKEN }}',
     });
   });
@@ -183,50 +184,59 @@ describe('one-shot Actions workflows', () => {
     expect(pr.run).toContain('--draft');
     expect(pr.run).toContain('--base "$BASE_REF"');
     expect(pr.run).toContain('--head "$BRANCH_SLUG"');
-    expect(pr.env?.BASE_REF).toBe('${{ inputs.base_ref }}');
+    expect(pr.env?.BASE_REF).toBe('${{ steps.refs.outputs.base_ref }}');
     expect(pr.env?.GH_TOKEN).toBe('${{ secrets.pr_token }}');
     for (const step of steps(reusable)) {
       if (step.uses?.startsWith('actions/checkout@')) {
-        expect(step.with?.ref).toBe('${{ inputs.base_ref }}');
+        expect(step.with?.ref).toBe('${{ steps.refs.outputs.base_ref }}');
       }
     }
   });
 
-  test('model key is masked before use and never echoed', () => {
-    const prepare = stepNamed(reusable, 'Prepare patch');
-    const lines = (prepare.run ?? '').split('\n');
-    const maskAt = lines.findIndex((line) => line.includes('::add-mask::$MODEL_API_KEY'));
-    const useAt = lines.findIndex((line) => line.includes('bun run'));
-    expect(maskAt).toBeGreaterThanOrEqual(0);
-    expect(useAt).toBeGreaterThan(maskAt);
-    for (const [index, line] of lines.entries()) {
-      if (index === maskAt) continue;
-      if (/\b(echo|printf)\b/.test(line)) expect(line).not.toContain('MODEL_API_KEY');
+  test('base ref is validated before checkout in both jobs', () => {
+    for (const job of Object.values(reusable.jobs ?? {})) {
+      const jobSteps = job.steps ?? [];
+      const validateAt = jobSteps.findIndex((step) => step.name === 'Validate refs');
+      const checkoutAt = jobSteps.findIndex((step) => step.uses?.startsWith('actions/checkout@'));
+      expect(validateAt).toBeGreaterThanOrEqual(0);
+      expect(checkoutAt).toBeGreaterThan(validateAt);
+      const validate = jobSteps[validateAt];
+      expect(validate?.id).toBe('refs');
+      expect(validate?.env).toMatchObject({
+        BASE_REF: '${{ inputs.base_ref }}',
+        ALLOWED_BASE_REFS: '${{ vars.GRAVESHIFT_ALLOWED_BASE_REFS }}',
+      });
+      expect(validate?.run).toContain('ALLOWED_BASE_REFS');
     }
-    expect(prepare.env?.MODEL_API_KEY).toBe('${{ secrets.model_api_key }}');
   });
 
-  test('prepare and apply validate inputs before any patch write', () => {
+  test('no model key or model call is present in Actions', () => {
+    const text = allText(reusable) + allText(entry);
+    expect(text).not.toContain('MODEL_API_KEY');
+    expect(text).not.toContain('model_api_key');
+    for (const step of steps(reusable)) {
+      expect(step.env?.MODEL_API_KEY).toBeUndefined();
+    }
+  });
+
+  test('prepare and apply receive the validated inputs', () => {
     const prepare = stepNamed(reusable, 'Prepare patch');
     expect(prepare.env).toMatchObject({
+      BASE_REF: '${{ steps.refs.outputs.base_ref }}',
       BRANCH_SLUG: '${{ inputs.branch_slug }}',
       PATCH_PAYLOAD: '${{ inputs.patch_payload }}',
       POLICY_DECISION: '${{ inputs.policy_decision }}',
     });
     expect(prepare.run).toContain('scripts/actions/prepare-patch.ts');
-    const prepareSource = readFileSync(
-      join(root, 'scripts', 'actions', 'prepare-patch.ts'),
-      'utf8',
-    );
-    expect(prepareSource.indexOf('assertBranchSlug')).toBeLessThan(
-      prepareSource.indexOf('Bun.write'),
-    );
-    expect(prepareSource).toContain('redactPatch');
 
     const apply = stepNamed(reusable, 'Apply patch and push branch');
-    expect(apply.env?.BRANCH_SLUG).toBe('${{ inputs.branch_slug }}');
-    const applySource = readFileSync(join(root, 'scripts', 'actions', 'apply-patch.ts'), 'utf8');
-    expect(applySource.indexOf('assertBranchSlug')).toBeLessThan(applySource.indexOf('git(['));
+    expect(apply.env).toMatchObject({
+      BASE_REF: '${{ steps.refs.outputs.base_ref }}',
+      BRANCH_SLUG: '${{ inputs.branch_slug }}',
+      POLICY_DECISION: '${{ inputs.policy_decision }}',
+      PR_TOKEN: '${{ secrets.pr_token }}',
+    });
+    expect(apply.run).toContain('scripts/actions/apply-patch.ts');
   });
 
   test('unsafe branch slugs are rejected', () => {
@@ -244,11 +254,21 @@ describe('one-shot Actions workflows', () => {
     expect(() => assertBranchSlug(undefined)).toThrow();
   });
 
+  test('base ref is a safe git ref', () => {
+    for (const ref of ['../main', 'main\nrm -rf /', 'main//x', '', 'main/../x']) {
+      expect(() => assertBaseRef(ref)).toThrow();
+    }
+    expect(assertBaseRef('v2/29-fix-paths')).toBe('v2/29-fix-paths');
+    expect(() => assertBaseRef(undefined)).toThrow();
+  });
+
   test('untrusted payload and policy decision fail closed', () => {
+    const allow = '{"effect":"allow","action":"open_pr","context":{"service":"api"}}';
     expect(() => assertPolicyAllow('{"effect":"deny"}')).toThrow();
     expect(() => assertPolicyAllow('{"effect":"allow","action":"restart_service"}')).toThrow();
     expect(() => assertPolicyAllow('not json')).toThrow();
-    expect(() => assertPolicyAllow('{"effect":"allow","action":"open_pr"}')).not.toThrow();
+    expect(() => assertPolicyAllow('{"effect":"allow","action":"open_pr"}')).toThrow();
+    expect(() => assertPolicyAllow(allow)).not.toThrow();
     expect(() => assertPayloadSize('x'.repeat(MAX_PATCH_PAYLOAD_BYTES + 1))).toThrow();
     expect(() => assertPayloadSize(undefined)).toThrow();
   });
