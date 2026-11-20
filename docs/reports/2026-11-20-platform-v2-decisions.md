@@ -172,3 +172,7 @@ Detect rule overrides at config load and at save. Show a warning and require exp
 ### Q6 — agreed
 
 The frontend consumes generated OpenAPI types from the NestJS API plus a published TypeScript package for event and state types. The frontend engineer owns the visual design. The images are not a contract.
+
+## Closure
+
+The decisions were committed on `feat/platform-v2` as `1c87eb1`. PR #17 was closed unmerged. ADR 0001 and ADR 0002 were marked superseded. The wayfinder map is [Platform v2: AI-first agentic DevOps](https://github.com/The-Resonance-Team/graveshift/issues/18), with twelve child tickets and native blocking edges. The first takeable tickets are #19 and #20. Charting is done; no ticket was resolved in this session.
