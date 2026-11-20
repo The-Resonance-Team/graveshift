@@ -10,7 +10,7 @@ Consequence: every worker in this build uses the Kiro agent, each code slice fol
 
 ## 1. Surfaces
 
-- CLI: the build workers were Kiro CLI v3 terminals (binary `kiro-cli`), dispatched one task at a time through Orca. There is no `init` command; setup was manual. V3 hooks use PascalCase triggers: `PreToolUse` blocks only on exit code `2`, and `PostTaskExec` is the spec-task trigger. One worker was replaced after passing 40% context, with `docs/HANDOFF.md` as its starting state.
+- CLI: the build workers were Kiro CLI v3 terminals (binary `kiro-cli`), dispatched one task at a time through Orca. There is no `init` command; setup was manual. V3 hooks use PascalCase triggers: `PreToolUse` blocks only on exit code `2`, and `PostTaskExec` is the spec-task trigger. One worker was replaced after passing 40% context, with a written handoff as its first prompt.
 - IDE: capture pending. No IDE-specific evidence is recorded in the repository.
 - Crew: not used; the optional Gravekeeper app was not built.
 - Free tier question: capture pending.
@@ -73,7 +73,7 @@ Capture pending. Facts to build on: sequential single-task workers kept each cha
 
 ## Build log
 
-Dates are from `docs/HANDOFF.md` (20 Nov 2026, ICT). "Corrected" lists fixes recorded there.
+Dates are from the build run on 20 Nov 2026 (ICT). "Corrected" lists fixes made during that run.
 
 | Task | Generated | Corrected |
 | --- | --- | --- |

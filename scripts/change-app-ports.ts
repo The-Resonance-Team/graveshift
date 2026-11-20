@@ -64,9 +64,6 @@ const map: Record<string, Replacement[]> = {
     { from: 'port 3200', to: 'port 2603', count: 1 },
   ],
   'docs/qa/coverage-matrix.md': [{ from: 'localhost:3300', to: 'localhost:2604', count: 21 }],
-  'docs/HANDOFF.md': [
-    { from: 'Host port 3000 is occupied', to: 'Demo API port 2600 may be occupied', count: 1 },
-  ],
 };
 
 const checkOnly = process.argv.includes('--check');
