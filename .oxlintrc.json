@@ -28,12 +28,6 @@
   },
   "overrides": [
     {
-      "files": ["apps/_daemon/scripts/diagnose-real-model.ts"],
-      "rules": {
-        "no-await-in-loop": "off"
-      }
-    },
-    {
       "files": ["**/*.{test,spec}.{ts,tsx}"],
       "plugins": ["jest", "vitest"],
       "rules": {
@@ -58,6 +52,7 @@
     "www/**",
     "test-results/**",
     ".expo/**",
+    "apps/_daemon/**",
     "**/next-env.d.ts"
   ]
 }

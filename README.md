@@ -41,7 +41,7 @@ export ACTUATOR_HMAC_SECRET=$(openssl rand -hex 32)   # actuator refuses to star
 docker compose -f deploy/compose/graveshift.compose.yml -f deploy/compose/demo.compose.yml up -d --build
 ```
 
-The new daemon serves `GET /healthz` on port 2602 by default. Set `PORT` to change the port. Compose does not start the daemon. No dashboard ships in this branch; a Next.js UI will be scaffolded separately.
+The new daemon serves `GET /healthz` on port 2602 and binds to 127.0.0.1 by default. Set `PORT` to change the port. Compose does not start the daemon. No dashboard ships in this branch; a Next.js UI will be scaffolded separately.
 
 The v1 daemon still ran without an LLM config and wrote rules-only diagnoses. To use a model with that reference code, copy `graveshift.config.example.yaml`, set `llm.model` and `llm.baseUrl`, and put the key in `OPENAI_COMPATIBLE_API_KEY` (see `.env.example`).
 

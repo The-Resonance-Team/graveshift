@@ -63,7 +63,7 @@ The new daemon serves one route. The v1 routes in `apps/_daemon` are reference o
 | --- | --- |
 | `GET /healthz` | `{status: "ok"}` |
 
-The daemon listens on port 2602 by default. The `PORT` environment variable changes the port. The daemon has no authentication. Bind it to localhost.
+The daemon listens on port 2602 and binds to 127.0.0.1 by default. The `PORT` environment variable changes the port. The daemon has no authentication. Keep the bind on localhost.
 
 ## Decisions
 
