@@ -17,7 +17,13 @@ export class McpResources {
     mimeType: 'text/markdown',
   })
   async postmortem({ id }: { id: string }): Promise<string> {
-    const view = await this.backend.getIncident(decodeURIComponent(id));
+    let incidentId: string;
+    try {
+      incidentId = decodeURIComponent(id);
+    } catch {
+      throw new NotFoundException('resource not found');
+    }
+    const view = await this.backend.getIncident(incidentId);
     if (!view) throw new NotFoundException();
     return deepRedact(writeAutopsy(view));
   }

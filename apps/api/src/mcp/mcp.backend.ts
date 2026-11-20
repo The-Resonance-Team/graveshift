@@ -26,7 +26,7 @@ export class UnavailableMcpBackend implements McpBackend {
   }
 
   async verifyChain(): Promise<unknown> {
-    return undefined;
+    return { ok: false, unavailable: true, reason: 'the daemon exposes no audit read API' };
   }
 
   async tailLogs(_service: string, _lines: number): Promise<string[]> {

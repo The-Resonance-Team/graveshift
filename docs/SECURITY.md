@@ -25,11 +25,11 @@ Graveshift is read-only toward production by default. These rules match `.kiro/s
 
 ## MCP server
 
-Every tool input has a Zod schema with limits (`list_incidents` at most 50, `get_audit_log` at most 100, `tail_logs` at most 200 lines). `query_metric` accepts only allowlisted metric and function names and range selectors of at most 60 minutes. `propose_fix` returns a policy decision and never executes. The HTTP transport requires a bearer token of 32 or more characters, compared in constant time. It has not been deployed or tested over a network.
+Every tool input has a Zod schema with limits (`list_incidents` at most 50, `get_audit_log` at most 100, `tail_logs` at most 200 lines). `query_metric` accepts only allowlisted metric and function names and range selectors of at most 60 minutes. `propose_fix` returns a policy decision and never executes; its reply says that rate and budget limits are not enforced because the daemon exposes no counters. The HTTP route requires a static bearer token of 32 or more characters, compared in constant time. The `/mcp` bearer path is tested in-process only (HTTP e2e against the Nest application), not over a real network. The stdio launcher has no authentication by design: it trusts the local process and must only be started by a local user.
 
 ## Known gaps
 
-- The daemon HTTP API and the Haunt endpoint have no authentication beyond the demo token; run them on localhost.
+- The v2 daemon serves only `/healthz` on localhost. The `/mcp` bearer path is checked in-process only, and stdio is unauthenticated by design.
 - Consumed actuator token IDs are in memory; a restart inside the 15-minute window forgets them.
 - The Kubernetes network policy allows all egress. Egress allowlisting is not done.
 - The `pods/log` rule exposes log contents to the daemon. For real users, use a namespace-scoped Role instead of the ClusterRole.

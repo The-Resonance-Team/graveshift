@@ -114,7 +114,12 @@ export class McpTools {
     };
     const decision = decide(this.policy, ctx, action);
     // ponytail: the decision is not written to the audit log (daemon has no append endpoint), upgrade when it does
-    return deepRedact({ decision, audit: toAuditEvent(decision, ctx, action), executed: false });
+    return deepRedact({
+      decision,
+      audit: toAuditEvent(decision, ctx, action),
+      executed: false,
+      caveat: 'Counters are unavailable, so rate and budget limits are not enforced.',
+    });
   }
 
   @Tool({

@@ -1,19 +1,15 @@
 import 'reflect-metadata';
-import type { AuthInfo } from '@modelcontextprotocol/server';
 import type { Client } from '@modelcontextprotocol/client';
-import { Injectable } from '@nestjs/common';
-import type { McpTokenVerifier } from '@nestjs/mcp';
 import { connectMcpClient } from '@nestjs/mcp/testing';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { parsePolicy } from '@graveshift/policy';
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 
 import { AppModule } from '../src/app.module';
-import { McpTokenVerifierService, MCP_RESOURCE } from '../src/mcp/mcp-token.verifier';
+import { UnavailableMcpBackend } from '../src/mcp/mcp.backend';
 import { MCP_BACKEND, MCP_ENV_MODE, MCP_POLICY } from '../src/mcp/mcp.types';
 import { FakeMcpBackend, SECRET } from './fakes/fake-mcp-backend';
 
-const TEST_TOKEN = 'test-token';
 const REQUIRED_TOOLS = [
   'list_services',
   'list_incidents',
@@ -42,20 +38,6 @@ const policy = parsePolicy({
   default: 'deny',
 });
 
-@Injectable()
-class TestTokenVerifier implements McpTokenVerifier {
-  async verifyAccessToken(token: string): Promise<AuthInfo | null> {
-    if (token !== TEST_TOKEN) return null;
-    return {
-      token,
-      clientId: 'test-client',
-      scopes: [],
-      expiresAt: Math.floor(Date.now() / 1000) + 3600,
-      resource: new URL(MCP_RESOURCE),
-    };
-  }
-}
-
 const toolText = (result: unknown): string => {
   const content = (result as { content: Array<{ text?: string }> }).content;
   return content[0]?.text ?? '';
@@ -75,11 +57,9 @@ describe('MCP server (in-memory client)', () => {
       .useValue(policy)
       .overrideProvider(MCP_ENV_MODE)
       .useValue(undefined)
-      .overrideProvider(McpTokenVerifierService)
-      .useClass(TestTokenVerifier)
       .compile();
-    client = await connectMcpClient(moduleRef, { token: TEST_TOKEN });
-    legacy = await connectMcpClient(moduleRef, { token: TEST_TOKEN, era: 'legacy' });
+    client = await connectMcpClient(moduleRef);
+    legacy = await connectMcpClient(moduleRef, { era: 'legacy' });
   });
 
   afterAll(async () => {
@@ -145,6 +125,7 @@ describe('MCP server (in-memory client)', () => {
       expect(JSON.parse(toolText(pr))).toMatchObject({
         executed: false,
         decision: { effect: 'allow' },
+        caveat: expect.stringContaining('limits are not enforced'),
       });
 
       const restart = await client.callTool({
@@ -168,8 +149,18 @@ describe('MCP server (in-memory client)', () => {
     }
   });
 
-  test('refuses a client without a token', async () => {
-    const anonymous = await connectMcpClient(moduleRef).catch((error: unknown) => error);
-    expect(anonymous).toBeInstanceOf(Error);
+  test('answers a malformed resource URI with not found, not a server error', async () => {
+    const resource = await client
+      .readResource({ uri: 'graveshift://incidents/%E0%A4%A/postmortem' })
+      .catch((error: unknown) => error);
+    expect(resource).toBeInstanceOf(Error);
+    expect(String((resource as Error).message)).toContain('not found');
+  });
+});
+
+describe('production MCP backend', () => {
+  test('reports the audit chain as explicitly unavailable', async () => {
+    const result = await new UnavailableMcpBackend().verifyChain();
+    expect(result).toMatchObject({ ok: false, unavailable: true });
   });
 });

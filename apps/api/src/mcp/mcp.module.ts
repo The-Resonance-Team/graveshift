@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, UseGuards } from '@nestjs/common';
 import { McpModule } from '@nestjs/mcp';
 import { ApiExcludeController } from '@nestjs/swagger';
 import { loadPolicy, parsePolicy, type Policy } from '@graveshift/policy';
@@ -6,7 +6,7 @@ import { loadPolicy, parsePolicy, type Policy } from '@graveshift/policy';
 import { UnavailableMcpBackend } from './mcp.backend';
 import { McpPrompts } from './mcp.prompts';
 import { McpResources } from './mcp.resources';
-import { McpTokenVerifierService, MCP_RESOURCE } from './mcp-token.verifier';
+import { McpBearerGuard, McpTokenVerifierService } from './mcp-token.verifier';
 import { MCP_BACKEND, MCP_ENV_MODE, MCP_POLICY } from './mcp.types';
 import { McpTools } from './mcp.tools';
 
@@ -32,6 +32,8 @@ const DEFAULT_POLICY: Policy = parsePolicy({
     McpTools,
     McpPrompts,
     McpResources,
+    McpTokenVerifierService,
+    McpBearerGuard,
     { provide: MCP_BACKEND, useClass: UnavailableMcpBackend },
     {
       provide: MCP_POLICY,
@@ -42,7 +44,7 @@ const DEFAULT_POLICY: Policy = parsePolicy({
     },
     { provide: MCP_ENV_MODE, useFactory: () => process.env.GRAVESHIFT_MODE },
   ],
-  exports: [MCP_BACKEND, MCP_POLICY, MCP_ENV_MODE],
+  exports: [MCP_BACKEND, MCP_POLICY, MCP_ENV_MODE, McpTokenVerifierService, McpBearerGuard],
 })
 export class McpFeatureModule {}
 
@@ -55,12 +57,7 @@ export class McpFeatureModule {}
       instructions:
         'Read incidents, diagnoses and the audit log before proposing a fix. propose_fix never executes an action.',
       include: [McpFeatureModule],
-      decorators: [ApiExcludeController()],
-      auth: {
-        verifier: McpTokenVerifierService,
-        resource: MCP_RESOURCE,
-        authorizationServers: [MCP_RESOURCE],
-      },
+      decorators: [ApiExcludeController(), UseGuards(McpBearerGuard)],
     }),
   ],
 })

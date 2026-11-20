@@ -78,6 +78,14 @@ Structured logging is deferred to the production ticket.
 
 The API uses Zod through Nest's standard-schema pipe. When a route takes input, the route attaches a Zod schema with `@Body({ schema })`, `@Query({ schema })` or `@Param({ schema })`. No business logic, rate limits or SSE were added to the HTTP routes here. MCP is served by the official module at `/mcp`; its bearer token is the only authentication on this surface. Later tickets add the routes for graves and hauntings here.
 
+## MCP endpoint
+
+The official `@nestjs/mcp` module serves `graveshift-mcp` at `/mcp` from the API. A guard checks one static bearer token from `GRAVESHIFT_MCP_TOKEN` (32 or more characters) on the HTTP route. No OAuth resource or authorization server is configured: static bearer auth is the only supported path today. The stdio launcher has no authentication by design.
+
+MCP loads the policy in a provider factory, so a bad `POLICY_PATH` stops the API at boot. The nine tools, two prompts and the postmortem resource are injectable providers in `apps/api/src/mcp/`. Every reply passes through the redactor. `propose_fix` returns a policy decision and never executes an action.
+
+The v2 daemon serves only `/healthz`, so backend reads return empty or unavailable results. No counters are available: the `propose_fix` reply states that rate and budget limits are not enforced. Tests inject a fake backend.
+
 `packages/api-contract` generates its types from the OpenAPI document. It exports the generated types and the `API_CONTRACT_VERSION` marker through `package.json#exports` only. It does not define an event envelope or any domain event type.
 
 ## Event backbone
