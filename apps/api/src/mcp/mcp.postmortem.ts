@@ -1,4 +1,4 @@
-import type { IncidentView } from './backend';
+import type { IncidentView } from './mcp.types';
 
 /** Autopsy: the postmortem for a closed incident, built only from recorded facts. */
 export function writeAutopsy(view: IncidentView): string {

@@ -51,7 +51,7 @@ Whether and how often each hook fired during the build, and time saved: capture 
 
 ## 6. MCP servers
 
-Built: `graveshift-mcp` in `packages/mcp-server`, over stdio, with 7 tools always on (`list_services`, `list_incidents`, `get_incident`, `get_diagnosis`, `get_audit_log`, `verify_audit_chain`, `propose_fix`), `query_metric` when Prometheus is configured and `tail_logs` when a backend supplies it. It has two prompts (`triage-incident`, `write-postmortem`) and an Autopsy resource. It is a hand-written JSON-RPC server because the team library rules name no MCP SDK. Streamable HTTP with a bearer token is code only. Check run: a stdio session against a fake daemon returned `list_services` with an AWS key redacted.
+Built: `graveshift-mcp` is now served by the API in `apps/api` through the official `@nestjs/mcp` module (v0.0.4), over Streamable HTTP at `/mcp` with a bearer token and over stdio from a standalone application context. Nine tools are registered (`list_services`, `list_incidents`, `get_incident`, `get_diagnosis`, `get_audit_log`, `verify_audit_chain`, `propose_fix`, `tail_logs`, `query_metric`), with two prompts (`triage-incident`, `write-postmortem`) and an Autopsy resource. Tool logic stays in injectable providers; every reply is redacted and `propose_fix` never executes an action. Check run: an in-memory official MCP client with `era: 'legacy'` listed all nine tools and called `list_incidents` as a `2025-06-18` client, and redaction and decision-only tests passed.
 
 Consumed servers (GitHub, fetch, Kubernetes) are in `.kiro/settings/mcp.example.json`; the local `mcp.json` is gitignored. One task made possible by the built server in a live Kiro session: capture pending.
 
