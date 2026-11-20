@@ -2,13 +2,16 @@ import { z } from 'zod';
 
 const id = z.string().min(1);
 const timestamp = z.iso.datetime();
+const subjectToken = /^[A-Za-z0-9_-]+$/;
+// A type may span several NATS tokens, but every token must be non-empty.
+const subjectType = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/;
 
 export const EventEnvelopeSchema = z.object({
   id,
-  tenantId: id,
+  tenantId: z.string().regex(subjectToken),
   source: id,
   service: id,
-  type: id,
+  type: z.string().regex(subjectType),
   severity: z.enum(['info', 'warning', 'critical']),
   observedAt: timestamp,
   traceId: id,

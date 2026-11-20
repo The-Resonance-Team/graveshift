@@ -32,4 +32,34 @@ describe('EventEnvelope', () => {
     const { tenantId: _tenantId, ...rest } = envelope;
     expect(EventEnvelopeSchema.safeParse(rest).success).toBe(false);
   });
+
+  for (const field of ['tenantId', 'type'] as const) {
+    for (const bad of ['has space', '*', '>', '', 'a..b']) {
+      test(`rejects ${field} value ${JSON.stringify(bad)}`, () => {
+        expect(EventEnvelopeSchema.safeParse({ ...envelope, [field]: bad }).success).toBe(false);
+      });
+    }
+  }
+
+  const stringFields = [
+    'id',
+    'tenantId',
+    'source',
+    'service',
+    'type',
+    'observedAt',
+    'traceId',
+    'fingerprint',
+  ] as const;
+  for (const field of stringFields) {
+    test(`rejects empty ${field}`, () => {
+      expect(EventEnvelopeSchema.safeParse({ ...envelope, [field]: '' }).success).toBe(false);
+    });
+  }
+
+  for (const payload of ['not-an-object', [], null]) {
+    test(`rejects payload ${JSON.stringify(payload)}`, () => {
+      expect(EventEnvelopeSchema.safeParse({ ...envelope, payload }).success).toBe(false);
+    });
+  }
 });
