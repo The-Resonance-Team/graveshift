@@ -22,6 +22,9 @@ export interface OpenDraftPrInput {
   diagnosis: Diagnosis;
   category: string;
   dashboardUrl: string;
+  // Short, redacted text for the branch slug, commit subject and PR title.
+  // diagnosis.rootCause may carry untrusted wrappers and belongs only in the body.
+  headline?: string;
 }
 
 // Order matters: every check runs before the first client call, so a rejected patch pushes nothing.
@@ -31,7 +34,8 @@ export async function openDraftPr(input: OpenDraftPrInput): Promise<PrRef> {
     throw new RepoNotAllowedError(`service ${incident.service} is not mapped to ${repo.repo}`);
   }
   guardPatch(patch, repo);
-  const branch = branchRef(incident.id, diagnosis.rootCause, repo.branchPrefix);
+  const headline = (input.headline ?? diagnosis.rootCause).replace(/\s+/g, ' ').trim();
+  const branch = branchRef(incident.id, headline, repo.branchPrefix);
   assertBranchPrefix(branch, repo.branchPrefix);
 
   const baseSha = await client.getBaseSha(repo.repo, repo.baseBranch);
@@ -45,13 +49,13 @@ export async function openDraftPr(input: OpenDraftPrInput): Promise<PrRef> {
   const tree = await client.createTree(repo.repo, baseTree, entries);
   const headSha = await client.createCommit(
     repo.repo,
-    `fix: ${diagnosis.rootCause.slice(0, 60)} (incident ${incident.id})`,
+    `fix: ${headline.slice(0, 60)} (incident ${incident.id})`,
     tree,
     baseSha,
   );
   await client.createRef(repo.repo, branch, headSha);
 
-  const title = `Exorcism: ${diagnosis.rootCause.slice(0, 70)}`;
+  const title = `Exorcism: ${headline.slice(0, 70)}`;
   const body = renderPrBody({ ...input, files: patch.files.map((f) => f.path) });
   const pr = await client.createPullRequest(repo.repo, {
     title,

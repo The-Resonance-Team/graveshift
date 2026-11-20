@@ -2,7 +2,7 @@ import { type Patch } from '@graveshift/patch';
 import { GitHubApiError } from '@graveshift/fixer';
 import { describe, expect, test } from 'bun:test';
 
-import { baseItem, goodContext, serviceWith } from './fix.test-helpers';
+import { baseItem, goodContext, repo, serviceWith } from './fix.test-helpers';
 
 describe('fix use case', () => {
   test('auto-fix is allowed only when client config sets autoFixAllowed', async () => {
@@ -131,6 +131,62 @@ describe('fix use case', () => {
     expect(body).toContain('<untrusted_fix_now_note>');
     expect(body).toContain('<untrusted_root_cause>');
     expect(body).not.toContain('/incidents/');
+  });
+
+  test('title, commit subject and branch slug use clean redacted text', async () => {
+    const { service, calls } = serviceWith();
+    await service.fixNow(baseItem);
+    const create = calls.find((call) => call.method === 'createPullRequest');
+    const commit = calls.find((call) => call.method === 'createCommit');
+    const ref = calls.find((call) => call.method === 'createRef');
+    if (create === undefined || commit === undefined || ref === undefined) {
+      throw new Error('expected the PR calls');
+    }
+    const title = (create.args[1] as { title: string }).title;
+    const body = (create.args[1] as { body: string }).body;
+    expect(title).toBe('Exorcism: The api grave was drained by a leech.');
+    expect(title).not.toContain('\n');
+    expect(title).not.toContain('untrusted');
+    expect(commit.args[1]).toBe(
+      'fix: The api grave was drained by a leech. (incident wi-1-diag-1)',
+    );
+    expect(ref.args[1]).toContain('inc-wi1diag1-the-api-grave-was-drained-by-a-leech');
+    expect(ref.args[1]).not.toContain('untrusted');
+    expect(body).toContain('<untrusted_root_cause>');
+  });
+
+  test('an item with a draft PR is not fixed again', async () => {
+    const item = {
+      ...baseItem,
+      draftPr: {
+        repo: repo.repo,
+        number: 1,
+        url: 'https://github.test/1',
+        branch: 'refs/heads/graveshift/old',
+        headSha: 'old-sha',
+      },
+    };
+    const { service, gatewayCalls, calls } = serviceWith();
+    const result = await service.fixNow(item);
+    expect(result.ok).toBe(false);
+    expect(result.failure).toBe('already_fixed');
+    expect(gatewayCalls).toHaveLength(0);
+    expect(calls).toHaveLength(0);
+  });
+
+  test('a denied fix now does not promote queue priority', async () => {
+    const { service } = serviceWith({ allow: false });
+    const result = await service.fixNow(baseItem);
+    expect(result.item.fixPriority).toBe(100);
+  });
+
+  test('items sharing a diagnosis ref get different branch refs', async () => {
+    const { service, calls } = serviceWith();
+    await service.fixNow({ ...baseItem, id: 'wi-a', diagnosisRef: 'diag-shared' });
+    await service.fixNow({ ...baseItem, id: 'wi-b', diagnosisRef: 'diag-shared' });
+    const refs = calls.filter((call) => call.method === 'createRef').map((call) => call.args[1]);
+    expect(refs).toHaveLength(2);
+    expect(new Set(refs).size).toBe(2);
   });
 
   test('an openDraftPr throw becomes a typed failure, not a 500', async () => {

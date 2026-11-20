@@ -42,6 +42,8 @@ import {
   listWorkItemsQuerySchema,
   type TriageRequest,
   triageRequestSchema,
+  type TriageResultResponse,
+  triageResultSchema,
   type WorkItemListResponse,
   workItemListResponseSchema,
   type WorkItemParams,
@@ -89,14 +91,17 @@ export class WorkItemsController {
 
   @Post(':id/triage')
   @HttpCode(HttpStatus.OK)
-  @ApiOkResponse({ description: 'The triaged work item.', standardSchema: WorkItemSchema })
+  @ApiOkResponse({
+    description: 'The triaged work item and its auto-fix outcome.',
+    standardSchema: triageResultSchema,
+  })
   @ApiBadRequestResponse({ description: 'The assignee is not valid.' })
   @ApiConflictResponse({ description: 'The work item is in a terminal status.' })
   @ApiNotFoundResponse({ description: 'No work item has this id.' })
   async triage(
     @Param({ schema: workItemParamsSchema }) params: WorkItemParams,
     @Body({ schema: triageRequestSchema }) body: TriageRequest,
-  ): Promise<WorkItem> {
+  ): Promise<TriageResultResponse> {
     const item = this.store.get(params.id);
     if (!item) throw new NotFoundException(`Unknown work item: ${params.id}`);
 
@@ -118,10 +123,30 @@ export class WorkItemsController {
     if (!result.ok) throw new BadRequestException(result.error.message);
 
     // Triage is the real auto-fix trigger: client config sets autoFixAllowed here.
-    const fixed = result.value.autoFixAllowed ? await this.fixer.autoFix(result.value) : undefined;
-    const final = fixed?.item ?? result.value;
+    // A failed auto-fix is reported in the result; the triage state is still saved.
+    let final = result.value;
+    let autoFix: TriageResultResponse['autoFix'] = null;
+    if (result.value.autoFixAllowed) {
+      try {
+        const fixed = await this.fixer.autoFix(result.value);
+        final = fixed.item;
+        autoFix = {
+          ok: fixed.ok,
+          effect: fixed.effect,
+          reason: fixed.reason ?? null,
+          failure: fixed.failure,
+        };
+      } catch (error) {
+        autoFix = {
+          ok: false,
+          effect: 'deny',
+          reason: error instanceof Error ? error.message : 'unknown auto-fix failure',
+          failure: 'fix_error',
+        };
+      }
+    }
     this.store.save(final);
-    return final;
+    return { item: final, autoFix };
   }
 
   @Post(':id/fix-now')

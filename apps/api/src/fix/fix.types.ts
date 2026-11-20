@@ -38,7 +38,9 @@ export type FixFailureCode =
   | 'invalid_context'
   | 'policy_denied'
   | 'patch_rejected'
-  | 'pr_failed';
+  | 'pr_failed'
+  | 'fix_error'
+  | 'already_fixed';
 
 // All outside collaborators are injected. Tests supply fakes; no real model or GitHub call is wired.
 export interface FixDeps {

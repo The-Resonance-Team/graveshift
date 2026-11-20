@@ -50,7 +50,7 @@ export function fixCalls(): Call[] {
 }
 
 // The real FixService runs in e2e; only its outside collaborators are fakes.
-export function fakeFixDeps(over: { confidence?: number } = {}): FixDeps {
+export function fakeFixDeps(over: { confidence?: number; throwOnLoad?: boolean } = {}): FixDeps {
   const calls: Call[] = [];
   recorded = calls;
   const push = (method: string, ...args: unknown[]): void => {
@@ -115,6 +115,7 @@ export function fakeFixDeps(over: { confidence?: number } = {}): FixDeps {
     client,
     context: {
       async load() {
+        if (over.throwOnLoad) throw new Error('context provider failed');
         return {
           ok: true as const,
           value: {

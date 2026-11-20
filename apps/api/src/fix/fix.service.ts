@@ -8,6 +8,7 @@ import {
 } from '@graveshift/core';
 import { type Patch, type PrRef, openDraftPr } from '@graveshift/fixer';
 import { generatePatch, type RepoRules } from '@graveshift/patch';
+import { redact } from '@graveshift/redactor';
 import { decide, type Effect } from '@graveshift/policy';
 import { Inject, Injectable } from '@nestjs/common';
 
@@ -26,8 +27,10 @@ function toIncidentAndDiagnosis(
   note?: string,
 ): { incident: Incident; diagnosis: Diagnosis } {
   const now = new Date().toISOString();
+  // The work item id leads so branchRef's short id stays distinct when a diagnosis ref is shared.
+  const incidentId = `${item.id}-${item.diagnosisRef}`;
   const incident: Incident = {
-    id: item.diagnosisRef,
+    id: incidentId,
     service: item.service,
     state: 'diagnosed',
     signalIds: [...context.signals],
@@ -35,7 +38,7 @@ function toIncidentAndDiagnosis(
     updatedAt: now,
   };
   const diagnosis: Diagnosis = {
-    id: `dia-${item.diagnosisRef}`,
+    id: `dia-${incidentId}`,
     incidentId: incident.id,
     rootCause: wrapUntrusted('root_cause', item.description || item.title),
     evidence: [
@@ -95,15 +98,16 @@ export class FixService {
 
   private async run(item: WorkItem, trigger: FixTrigger, note?: string): Promise<FixResult> {
     const { policy, repo, gateway, client, context, agent, envMode } = this.deps;
-    const next = trigger === 'fix_now' ? promoteToFront(item) : item;
     const blocked = (effect: Effect, reason: string, failure: FixFailureCode): FixResult => ({
-      item: next,
+      item,
       trigger,
       effect,
       ok: false,
       reason,
       failure,
     });
+
+    if (item.draftPr !== null) return blocked('deny', 'already_fixed', 'already_fixed');
 
     const loaded = await context.load(item);
     if (!loaded.ok) return blocked('deny', loaded.reason, 'context_unavailable');
@@ -139,6 +143,10 @@ export class FixService {
     }
 
     const { incident, diagnosis } = toIncidentAndDiagnosis(item, parsed.data, note);
+    // The wrapper stays in the body. Titles, subjects and slugs use clean redacted text.
+    const headline = redact(item.description || item.title)
+      .replace(/\s+/g, ' ')
+      .trim();
     const patch: Patch = generated.patch;
     let pr: PrRef;
     try {
@@ -151,6 +159,7 @@ export class FixService {
         diagnosis,
         category,
         dashboardUrl: '',
+        headline,
       });
       pr = {
         repo: opened.repo,
@@ -163,6 +172,8 @@ export class FixService {
       const reason = error instanceof Error ? error.message : 'unknown PR failure';
       return blocked(decision.effect, `pr_failed: ${reason}`, 'pr_failed');
     }
+    // Fix now promotes the queue only after a successful fix.
+    const next = trigger === 'fix_now' ? promoteToFront(item) : item;
     return {
       item: withDraftPr(next, pr),
       trigger,

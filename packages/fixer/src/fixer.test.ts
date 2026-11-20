@@ -57,6 +57,27 @@ describe('openDraftPr', () => {
     );
   });
 
+  test('headline drives title, subject and slug while the body keeps the wrapped root cause', async () => {
+    const { client, calls } = fakeClient();
+    const wrapped = '<untrusted_root_cause>\nhello world\n</untrusted_root_cause>';
+    await openDraftPr({
+      client,
+      ...input,
+      headline: 'hello world',
+      diagnosis: { ...diagnosis, rootCause: wrapped },
+    });
+    const create = calls.find((c) => c.method === 'createPullRequest');
+    const commit = calls.find((c) => c.method === 'createCommit');
+    const ref = calls.find((c) => c.method === 'createRef');
+    if (create === undefined || commit === undefined || ref === undefined) {
+      throw new Error('expected the PR calls');
+    }
+    expect((create.args[1] as { title: string }).title).toBe('Exorcism: hello world');
+    expect((create.args[1] as { body: string }).body).toContain(wrapped);
+    expect(commit.args[1]).toBe('fix: hello world (incident inc-7f3a9c21-aaaa)');
+    expect(ref.args[1]).not.toContain('untrusted');
+  });
+
   test('property: a rejected patch makes zero client calls', async () => {
     await fc.assert(
       fc.asyncProperty(

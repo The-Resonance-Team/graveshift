@@ -127,13 +127,33 @@ describe('work items API (e2e)', () => {
       .post('/api/work-items/wi-1/triage')
       .send({ assignee: AGENT_ASSIGNEE })
       .expect(200);
-    expect(response.body.assignee).toBe(AGENT_ASSIGNEE);
-    expect(response.body.autoFixAllowed).toBe(true);
-    expect(response.body.draftPr).toMatchObject({ number: 7 });
+    expect(response.body.item.assignee).toBe(AGENT_ASSIGNEE);
+    expect(response.body.item.autoFixAllowed).toBe(true);
+    expect(response.body.item.draftPr).toMatchObject({ number: 7 });
+    expect(response.body.autoFix).toMatchObject({ ok: true, effect: 'allow', failure: 'none' });
     expect(fixCalls().some((call) => call.method === 'createPullRequest')).toBe(true);
 
     const detail = await request(app.getHttpServer()).get('/api/work-items/wi-1').expect(200);
     expect(detail.body.draftPr).toMatchObject({ number: 7 });
+  });
+
+  test('POST triage saves state and reports a thrown auto-fix', async () => {
+    await app.close();
+    app = await buildApp(fakeFixDeps({ throwOnLoad: true }));
+    await app.init();
+    const response = await request(app.getHttpServer())
+      .post('/api/work-items/wi-1/triage')
+      .send({ assignee: AGENT_ASSIGNEE })
+      .expect(200);
+    expect(response.body.item.assignee).toBe(AGENT_ASSIGNEE);
+    expect(response.body.autoFix).toMatchObject({
+      ok: false,
+      effect: 'deny',
+      failure: 'fix_error',
+      reason: 'context provider failed',
+    });
+    const detail = await request(app.getHttpServer()).get('/api/work-items/wi-1').expect(200);
+    expect(detail.body.assignee).toBe(AGENT_ASSIGNEE);
   });
 
   test('POST triage rejects an unknown agent and a malformed assignee', async () => {
@@ -153,7 +173,7 @@ describe('work items API (e2e)', () => {
       .post('/api/work-items/wi-2/triage')
       .send({ assignee: NEEDS_HUMAN })
       .expect(200);
-    expect(response.body.assignee).toBe(NEEDS_HUMAN);
+    expect(response.body.item.assignee).toBe(NEEDS_HUMAN);
     await request(app.getHttpServer())
       .post('/api/work-items/wi-3/triage')
       .send({ assignee: AGENT_ASSIGNEE })
@@ -207,6 +227,7 @@ describe('work items API (e2e)', () => {
       reason: 'low_confidence',
       pr: null,
     });
+    expect(response.body.item.fixPriority).toBe(100);
     expect(fixCalls().some((call) => call.method === 'createPullRequest')).toBe(false);
   });
 
