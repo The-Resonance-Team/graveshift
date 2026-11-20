@@ -43,7 +43,7 @@ const actuator = createActuator({
 const MAX_BODY = 16 * 1024;
 
 const server = Bun.serve({
-  port: Number(env.PORT ?? 3200),
+  port: Number(env.PORT ?? 2603),
   async fetch(req) {
     const { pathname } = new URL(req.url);
     if (req.method === 'GET' && pathname === '/healthz') return Response.json({ status: 'ok' });

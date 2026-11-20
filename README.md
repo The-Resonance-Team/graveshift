@@ -39,12 +39,12 @@ export ACTUATOR_HMAC_SECRET=$(openssl rand -hex 32)   # actuator refuses to star
 docker compose -f deploy/compose/graveshift.compose.yml -f deploy/compose/demo.compose.yml up -d --build
 ```
 
-The daemon listens on `127.0.0.1:3100`. Start the dashboard against it:
+The daemon listens on `127.0.0.1:2602`. Start the dashboard against it:
 
 ```sh
 cd apps/dashboard
-DAEMON_URL=http://127.0.0.1:3100 bun run build
-bun run start        # http://localhost:3300
+DAEMON_URL=http://127.0.0.1:2602 bun run build
+bun run start        # http://localhost:2604
 ```
 
 `DAEMON_URL` is baked in at build time. Without an LLM config the daemon still runs and writes rules-only diagnoses. To use a model, copy `graveshift.config.example.yaml`, replace the placeholder model IDs, and supply provider keys through the environment.
@@ -109,7 +109,7 @@ bun run verify
 
 ## MCP server
 
-`packages/mcp-server` is `graveshift-mcp`: read tools for services, incidents, diagnoses and the audit log, plus `propose_fix`, which only asks the policy engine and never executes. It also serves the `triage-incident` and `write-postmortem` prompts and an Autopsy resource at `graveshift://incidents/{id}/postmortem`. Run it over stdio with `DAEMON_URL=http://127.0.0.1:3100 POLICY_PATH=policy.example.yaml bun run --cwd packages/mcp-server start:stdio`. The HTTP transport (bearer `GRAVESHIFT_MCP_TOKEN`) exists as code and has not been deployed. The local `.kiro/settings/mcp.json` entry may still be disabled; enable it yourself.
+`packages/mcp-server` is `graveshift-mcp`: read tools for services, incidents, diagnoses and the audit log, plus `propose_fix`, which only asks the policy engine and never executes. It also serves the `triage-incident` and `write-postmortem` prompts and an Autopsy resource at `graveshift://incidents/{id}/postmortem`. Run it over stdio with `DAEMON_URL=http://127.0.0.1:2602 POLICY_PATH=policy.example.yaml bun run --cwd packages/mcp-server start:stdio`. The HTTP transport (bearer `GRAVESHIFT_MCP_TOKEN`) exists as code and has not been deployed. The local `.kiro/settings/mcp.json` entry may still be disabled; enable it yourself.
 
 ## Roadmap
 

@@ -4,5 +4,5 @@ ENV NODE_ENV=production
 COPY package.json ./
 COPY src ./src
 USER bun
-EXPOSE 3000 3001
+EXPOSE 2600 2601
 CMD ["bun", "src/api-main.ts"]

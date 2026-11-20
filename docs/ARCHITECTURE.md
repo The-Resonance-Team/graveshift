@@ -42,10 +42,10 @@ The state machine lives in `packages/core/src/state.ts`. Incident states: see `I
 
 `deploy/compose/graveshift.compose.yml` runs:
 
-- `graveshift` (daemon, port `127.0.0.1:3100`, read-only root filesystem, all capabilities dropped).
+- `graveshift` (daemon, port `127.0.0.1:2602`, read-only root filesystem, all capabilities dropped).
 - `socket-proxy`: `tecnativa/docker-socket-proxy`, read-only (`POST=0`), the only Docker path for the daemon.
 - `socket-proxy-actuator`: allows container restart only, on an internal network used by the actuator.
-- `actuator` (port 3200, not published). It exits at startup if `ACTUATOR_HMAC_SECRET` is shorter than 32 characters.
+- `actuator` (port 2603, not published). It exits at startup if `ACTUATOR_HMAC_SECRET` is shorter than 32 characters.
 - `prometheus`, scraping the demo app jobs.
 
 `docker.sock` is mounted into the two proxies and nowhere else.

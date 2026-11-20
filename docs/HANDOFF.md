@@ -31,7 +31,7 @@ Do not submit to Devpost. External work lives in issues #12–#16.
 - Daemon exposes no approval or silence endpoints, so Blessing and Salt line are glossary terms only in the UI. Discord Banshee is issue #13.
 - Dashboard is English only; the VI column is unused. `DAEMON_URL` is baked at build time by Next rewrites. Haunt panel has no approver auth because the daemon has none.
 - K8s source is fixture-tested only; no cluster was available. Public k3s demo is issue #14.
-- Host port 3000 is occupied by another local app; reach the demo API from inside the Compose network.
+- Demo API port 2600 may be occupied by another local app; reach the demo API from inside the Compose network.
 - Bedrock uses bearer API-key auth only; SigV4 is a `ponytail:` upgrade. Diagnosis category values were chosen locally.
 - ORM choice in `docs/DECISIONS.md` still says owner-unconfirmed for Drizzle versus Bun.SQL.
 

@@ -4,9 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "next dev -p 3300",
+    "dev": "next dev -p 2604",
     "build": "next build",
-    "start": "next start -p 3300",
+    "start": "next start -p 2604",
     "typecheck": "bun check --no-script",
     "test": "bun test"
   },

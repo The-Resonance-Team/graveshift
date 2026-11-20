@@ -199,8 +199,8 @@ describe('http api', () => {
     const s = stack({
       http: {
         haunt: {
-          apiUrl: 'http://api:3000',
-          workerUrl: 'http://worker:3001',
+          apiUrl: 'http://api:2600',
+          workerUrl: 'http://worker:2601',
           token: 'demo-token',
           minIntervalMs: 30_000,
         },
@@ -221,8 +221,8 @@ describe('http api', () => {
     expect((await post('memory-leech')).status).toBe(202);
     expect((await post('nope')).status).toBe(400);
     expect(forwarded).toEqual([
-      { url: 'http://api:3000/__haunt', token: 'demo-token' },
-      { url: 'http://worker:3001/__haunt', token: 'demo-token' },
+      { url: 'http://api:2600/__haunt', token: 'demo-token' },
+      { url: 'http://worker:2601/__haunt', token: 'demo-token' },
     ]);
     expect((await s.audit.list()).map((e) => e.type)).toEqual(['demo.haunt', 'demo.haunt']);
   });

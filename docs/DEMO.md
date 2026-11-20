@@ -1,6 +1,6 @@
 # Demo: Haunted Candy Shop
 
-`examples/haunted-candy-shop` is a fault-injectable app: an `api` (port 3000), a `worker` (port 3001) and Postgres. Graveshift watches it through the read-only docker-socket-proxy and Prometheus.
+`examples/haunted-candy-shop` is a fault-injectable app: an `api` (port 2600), a `worker` (port 2601) and Postgres. Graveshift watches it through the read-only docker-socket-proxy and Prometheus.
 
 Themed names are UI copy only. In code and APIs they are `incident`, `approval` and `service`.
 
@@ -28,15 +28,15 @@ The `daemon` and `actuator` images build from `deploy/compose/bun.Dockerfile`. T
 export ACTUATOR_HMAC_SECRET=$(openssl rand -hex 32)
 ```
 
-The daemon API is on `127.0.0.1:3100`. The demo api and worker publish ports 3000 and 3001 on `127.0.0.1`; if another app holds port 3000, run the curl commands below from inside the Compose network (`docker compose exec`).
+The daemon API is on `127.0.0.1:2602`. The demo api and worker publish ports 2600 and 2601 on `127.0.0.1`; if another app holds port 2600, run the curl commands below from inside the Compose network (`docker compose exec`).
 
 ## Watch the Haunting
 
-1. Open the dashboard: `cd apps/dashboard && DAEMON_URL=http://127.0.0.1:3100 bun run build && bun run start`, then visit `http://localhost:3300`. The Haunt panel can inject a scenario with a 30 s cooldown (the daemon needs `HAUNT_TOKEN`).
+1. Open the dashboard: `cd apps/dashboard && DAEMON_URL=http://127.0.0.1:2602 bun run build && bun run start`, then visit `http://localhost:2604`. The Haunt panel can inject a scenario with a 30 s cooldown (the daemon needs `HAUNT_TOKEN`).
 2. Inject `null-candy` (below). Within seconds the api grave shows a Haunting, and the timeline moves from Wraith to Medium. Without a configured LLM the diagnosis comes from the rules-only fallback and says so.
-3. Check the audit chain: `curl localhost:3100/api/audit/verify` returns `{"ok":true,"length":N}`.
+3. Check the audit chain: `curl localhost:2602/api/audit/verify` returns `{"ok":true,"length":N}`.
 
-What does not happen yet: no draft pull request opens, because no patch generator is wired; no Discord message is sent; the daemon has no approval endpoint, so the `memory-leech` restart cannot be blessed. The actuator rejects an unsigned request with 403, which you can check with `curl -X POST localhost:3200/actions` from inside the network.
+What does not happen yet: no draft pull request opens, because no patch generator is wired; no Discord message is sent; the daemon has no approval endpoint, so the `memory-leech` restart cannot be blessed. The actuator rejects an unsigned request with 403, which you can check with `curl -X POST localhost:2603/actions` from inside the network.
 
 ## Observability
 
@@ -49,13 +49,13 @@ What does not happen yet: no draft pull request opens, because no patch generato
 Inject with `POST /__haunt` and the header `x-haunt-token: $HAUNT_TOKEN` (or `Authorization: Bearer ...`). A bad token returns 401, an unknown scenario 400.
 
 ```sh
-curl -X POST localhost:3000/__haunt -H "x-haunt-token: $HAUNT_TOKEN" -d '{"scenario":"null-candy"}'
+curl -X POST localhost:2600/__haunt -H "x-haunt-token: $HAUNT_TOKEN" -d '{"scenario":"null-candy"}'
 ```
 
 | Scenario | Target | Fault | Expected signal | Expected outcome |
 | --- | --- | --- | --- | --- |
 | `null-candy` | api | candy 1 gets a `NULL` price; `GET /candies/1` throws a `TypeError` (500) | `log.error-burst`, `metric.5xx-rate` | diagnosis `code_bug`; the draft PR with a null guard is the target, not yet produced |
-| `memory-leech` | worker (port 3001) | the worker keeps 8 MB per second until the 128 MB limit kills it | `runtime.oom`, `runtime.restart-loop` | approval, then restart, plus a draft PR removing the leak |
+| `memory-leech` | worker (port 2601) | the worker keeps 8 MB per second until the 128 MB limit kills it | `runtime.oom`, `runtime.restart-loop` | approval, then restart, plus a draft PR removing the leak |
 | `wrong-potion` | api | the api switches to a stale `DATABASE_URL_STALE` | `log.error-burst`, `runtime.unhealthy` | draft PR reverting the config |
 | `slow-curse` (stretch) | api | `GET /candies/search` loses its index and takes about 1.8 s | `metric.p95-latency` | draft PR adding the index |
 | `image-ghost` (stretch, Kubernetes) | deploy | bad image tag, applied by deploy tooling, the endpoint only acknowledges it | `k8s.image-pull` | propose a rollback image, needs approval |
@@ -67,8 +67,8 @@ curl -X POST localhost:3000/__haunt -H "x-haunt-token: $HAUNT_TOKEN" -d '{"scena
 `POST /__reset` with `x-haunt-token: $OWNER_TOKEN` restores prices, the index and the database connection on that process, and clears the leak on the worker. The `HAUNT_TOKEN` cannot reset. Reset both processes:
 
 ```sh
-curl -X POST localhost:3000/__reset -H "x-haunt-token: $OWNER_TOKEN"
-curl -X POST localhost:3001/__reset -H "x-haunt-token: $OWNER_TOKEN"
+curl -X POST localhost:2600/__reset -H "x-haunt-token: $OWNER_TOKEN"
+curl -X POST localhost:2601/__reset -H "x-haunt-token: $OWNER_TOKEN"
 ```
 
 Closing demo PRs and archiving incidents is not implemented, and the daemon keeps incidents in memory, so `docker compose restart graveshift` clears the graveyard (the audit log stays). A `bun run demo:reset` wrapper is not provided. A scheduled daily reset belongs to the public demo (issue #14).

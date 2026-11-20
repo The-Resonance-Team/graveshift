@@ -1,6 +1,6 @@
 import type { NextConfig } from 'next';
 
-const daemon = process.env.DAEMON_URL ?? 'http://localhost:3100';
+const daemon = process.env.DAEMON_URL ?? 'http://localhost:2602';
 
 const config: NextConfig = {
   reactStrictMode: true,

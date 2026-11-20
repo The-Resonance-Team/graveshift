@@ -27,7 +27,7 @@ const parseTargets = (value: string | undefined) =>
 
 export function readConfig(env: Env): DaemonConfig {
   return {
-    port: Number(env.PORT ?? 3000),
+    port: Number(env.PORT ?? 2602),
     dataDir: env.DATA_DIR ?? './data',
     policyPath: env.POLICY_PATH ?? 'policy.yaml',
     configPath: env.CONFIG_PATH ?? 'graveshift.config.yaml',
@@ -37,8 +37,8 @@ export function readConfig(env: Env): DaemonConfig {
     ...(env.HAUNT_TOKEN
       ? {
           haunt: {
-            apiUrl: env.DEMO_API_URL ?? 'http://api:3000',
-            workerUrl: env.DEMO_WORKER_URL ?? 'http://worker:3001',
+            apiUrl: env.DEMO_API_URL ?? 'http://api:2600',
+            workerUrl: env.DEMO_WORKER_URL ?? 'http://worker:2601',
             token: env.HAUNT_TOKEN,
           },
         }

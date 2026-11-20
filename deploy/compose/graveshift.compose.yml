@@ -29,16 +29,16 @@ services:
       POLICY_PATH: /config/policy.yaml
       CONFIG_PATH: /config/graveshift.config.yaml
       HAUNT_TOKEN: ${HAUNT_TOKEN:-}
-      DEMO_API_URL: http://api:3000
-      DEMO_WORKER_URL: http://worker:3001
-      ACTUATOR_URL: http://actuator:3200
+      DEMO_API_URL: http://api:2600
+      DEMO_WORKER_URL: http://worker:2601
+      ACTUATOR_URL: http://actuator:2603
       DATA_DIR: /data
       BUN_RUNTIME_TRANSPILER_CACHE_PATH: '0'
     volumes:
       - graveshift-data:/data
       - ../../policy.example.yaml:/config/policy.yaml:ro
       - ../../graveshift.config.example.yaml:/config/graveshift.config.yaml:ro
-    ports: ['127.0.0.1:3100:3000']
+    ports: ['127.0.0.1:2602:2602']
     networks: [core, candy]
     depends_on: [socket-proxy, prometheus]
     healthcheck:
@@ -47,7 +47,7 @@ services:
           'CMD',
           'bun',
           '-e',
-          "fetch('http://localhost:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+          "fetch('http://localhost:2602/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 10s
       timeout: 3s
@@ -105,7 +105,7 @@ services:
           'CMD',
           'bun',
           '-e',
-          "fetch('http://localhost:3200/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+          "fetch('http://localhost:2603/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
         ]
       interval: 10s
       timeout: 3s
