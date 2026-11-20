@@ -97,6 +97,19 @@ describe('openDraftPr', () => {
     expect(body).toContain('https://g.example/incidents/inc-7f3a9c21-aaaa');
     expect(body).toContain('never merged automatically');
   });
+
+  test('an empty dashboard URL adds no broken link to the PR body', () => {
+    const body = renderPrBody({
+      incident,
+      diagnosis,
+      category: 'code_bug',
+      dashboardUrl: '',
+      files: ['src/app.ts'],
+    });
+    expect(body).not.toContain('/incidents/');
+    expect(body).not.toContain('](');
+    expect(body).toContain('never merged automatically');
+  });
 });
 
 describe('rest client and app auth', () => {

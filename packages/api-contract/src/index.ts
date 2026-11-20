@@ -19,4 +19,7 @@ export type TriageRequest =
 export type FixNowRequest =
   paths['/api/work-items/{id}/fix-now']['post']['requestBody']['content']['application/json'];
 
+export type FixNowResponse =
+  paths['/api/work-items/{id}/fix-now']['post']['responses'][200]['content']['application/json'];
+
 export type Assignee = WorkItemResponse['assignee'];

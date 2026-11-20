@@ -1,15 +1,28 @@
-import { type Diagnosis, type Incident, promoteToFront, type WorkItem } from '@graveshift/core';
+import { wrapUntrusted } from '@graveshift/agents/untrusted';
+import {
+  type Diagnosis,
+  type Incident,
+  promoteToFront,
+  type WorkItem,
+  withDraftPr,
+} from '@graveshift/core';
 import { type Patch, type PrRef, openDraftPr } from '@graveshift/fixer';
 import { generatePatch, type RepoRules } from '@graveshift/patch';
 import { decide, type Effect } from '@graveshift/policy';
 import { Inject, Injectable } from '@nestjs/common';
 
-import { FIX_DEPS, type FixDeps } from './fix.types';
+import {
+  type FixContext,
+  FixContextSchema,
+  FIX_DEPS,
+  type FixDeps,
+  type FixFailureCode,
+} from './fix.types';
 
-// Incident and diagnosis fields come from the work item. No new data is invented,
-// and no model or daemon read supplies a permission.
+// Every value below is request data. Wrapping keeps tags and secrets out of the PR body.
 function toIncidentAndDiagnosis(
   item: WorkItem,
+  context: FixContext,
   note?: string,
 ): { incident: Incident; diagnosis: Diagnosis } {
   const now = new Date().toISOString();
@@ -17,19 +30,21 @@ function toIncidentAndDiagnosis(
     id: item.diagnosisRef,
     service: item.service,
     state: 'diagnosed',
-    signalIds: [item.diagnosisRef],
+    signalIds: [...context.signals],
     openedAt: now,
     updatedAt: now,
   };
   const diagnosis: Diagnosis = {
     id: `dia-${item.diagnosisRef}`,
     incidentId: incident.id,
-    rootCause: item.description || item.title,
+    rootCause: wrapUntrusted('root_cause', item.description || item.title),
     evidence: [
-      { ref: item.diagnosisRef, excerpt: item.title },
-      ...(note === undefined ? [] : [{ ref: 'fix-now-note', excerpt: note }]),
+      { ref: item.diagnosisRef, excerpt: wrapUntrusted('title', item.title) },
+      ...(note === undefined
+        ? []
+        : [{ ref: 'fix-now-note', excerpt: wrapUntrusted('fix_now_note', note) }]),
     ],
-    confidence: 1,
+    confidence: context.confidence,
     createdAt: now,
   };
   return { incident, diagnosis };
@@ -44,6 +59,7 @@ export interface FixResult {
   readonly ok: boolean;
   readonly pr?: PrRef;
   readonly reason?: string;
+  readonly failure: FixFailureCode;
 }
 
 const rulesFrom = (repo: FixDeps['repo']): RepoRules => ({
@@ -61,7 +77,14 @@ export class FixService {
 
   async autoFix(item: WorkItem, note?: string): Promise<FixResult> {
     if (!item.autoFixAllowed) {
-      return { item, trigger: 'auto_fix', effect: 'deny', ok: false, reason: 'auto_fix_disabled' };
+      return {
+        item,
+        trigger: 'auto_fix',
+        effect: 'deny',
+        ok: false,
+        reason: 'auto_fix_disabled',
+        failure: 'auto_fix_disabled',
+      };
     }
     return this.run(item, 'auto_fix', note);
   }
@@ -71,34 +94,38 @@ export class FixService {
   }
 
   private async run(item: WorkItem, trigger: FixTrigger, note?: string): Promise<FixResult> {
-    const { policy, repo, gateway, client, agent, envMode } = this.deps;
+    const { policy, repo, gateway, client, context, agent, envMode } = this.deps;
+    const next = trigger === 'fix_now' ? promoteToFront(item) : item;
+    const blocked = (effect: Effect, reason: string, failure: FixFailureCode): FixResult => ({
+      item: next,
+      trigger,
+      effect,
+      ok: false,
+      reason,
+      failure,
+    });
+
+    const loaded = await context.load(item);
+    if (!loaded.ok) return blocked('deny', loaded.reason, 'context_unavailable');
+    const parsed = FixContextSchema.safeParse(loaded.value);
+    if (!parsed.success) return blocked('deny', 'invalid_fix_context', 'invalid_context');
+    const { confidence, category, signals, counters } = parsed.data;
+
     const decision = decide(
       policy,
       {
         service: item.service,
-        category: 'code_bug',
-        signals: [item.diagnosisRef],
-        confidence: 1,
+        category,
+        signals: [...signals],
+        confidence,
         ...(envMode === undefined ? {} : { envMode }),
-        counters: {
-          openPrsLastHour: 0,
-          actionsLast10Min: 0,
-          diagnosisLoops: 0,
-          llmSpentTodayUsd: 0,
-        },
+        counters,
       },
       { name: 'open_pr' },
     );
 
-    const next = trigger === 'fix_now' ? promoteToFront(item) : item;
     if (decision.effect !== 'allow') {
-      return {
-        item: next,
-        trigger,
-        effect: decision.effect,
-        ok: false,
-        reason: decision.reason,
-      };
+      return blocked(decision.effect, decision.reason, 'policy_denied');
     }
 
     const generated = await generatePatch({
@@ -108,27 +135,41 @@ export class FixService {
       diagnosis: item.description || item.title,
     });
     if (!generated.ok) {
-      return {
-        item: next,
-        trigger,
-        effect: decision.effect,
-        ok: false,
-        reason: generated.error.message,
-      };
+      return blocked(decision.effect, generated.error.message, 'patch_rejected');
     }
 
-    const { incident, diagnosis } = toIncidentAndDiagnosis(item, note);
+    const { incident, diagnosis } = toIncidentAndDiagnosis(item, parsed.data, note);
     const patch: Patch = generated.patch;
-    // openDraftPr runs guardPatch before its first client call.
-    const pr = await openDraftPr({
-      client,
-      repo,
-      patch,
-      incident,
-      diagnosis,
-      category: 'code_bug',
-      dashboardUrl: '',
-    });
-    return { item: next, trigger, effect: decision.effect, ok: true, pr };
+    let pr: PrRef;
+    try {
+      // openDraftPr runs guardPatch before its first client call.
+      const opened = await openDraftPr({
+        client,
+        repo,
+        patch,
+        incident,
+        diagnosis,
+        category,
+        dashboardUrl: '',
+      });
+      pr = {
+        repo: opened.repo,
+        number: opened.number,
+        url: opened.url,
+        branch: opened.branch,
+        headSha: opened.headSha,
+      };
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'unknown PR failure';
+      return blocked(decision.effect, `pr_failed: ${reason}`, 'pr_failed');
+    }
+    return {
+      item: withDraftPr(next, pr),
+      trigger,
+      effect: decision.effect,
+      ok: true,
+      pr,
+      failure: 'none',
+    };
   }
 }

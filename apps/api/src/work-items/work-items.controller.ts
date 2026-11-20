@@ -36,6 +36,8 @@ import { WORK_ITEM_POLICY, type WorkItemPolicy } from './work-item.policy';
 import {
   type FixNowRequest,
   fixNowRequestSchema,
+  type FixResultResponse,
+  fixResultSchema,
   type ListWorkItemsQuery,
   listWorkItemsQuerySchema,
   type TriageRequest,
@@ -91,10 +93,10 @@ export class WorkItemsController {
   @ApiBadRequestResponse({ description: 'The assignee is not valid.' })
   @ApiConflictResponse({ description: 'The work item is in a terminal status.' })
   @ApiNotFoundResponse({ description: 'No work item has this id.' })
-  triage(
+  async triage(
     @Param({ schema: workItemParamsSchema }) params: WorkItemParams,
     @Body({ schema: triageRequestSchema }) body: TriageRequest,
-  ): WorkItem {
+  ): Promise<WorkItem> {
     const item = this.store.get(params.id);
     if (!item) throw new NotFoundException(`Unknown work item: ${params.id}`);
 
@@ -115,27 +117,42 @@ export class WorkItemsController {
           );
     if (!result.ok) throw new BadRequestException(result.error.message);
 
-    this.store.save(result.value);
-    return result.value;
+    // Triage is the real auto-fix trigger: client config sets autoFixAllowed here.
+    const fixed = result.value.autoFixAllowed ? await this.fixer.autoFix(result.value) : undefined;
+    const final = fixed?.item ?? result.value;
+    this.store.save(final);
+    return final;
   }
 
   @Post(':id/fix-now')
   @HttpCode(HttpStatus.OK)
   @ApiOkResponse({
-    description: 'The work item after Fix now moved it to the front of the fix queue.',
-    standardSchema: WorkItemSchema,
+    description: 'The fix result with the work item, the policy effect and the draft PR ref.',
+    standardSchema: fixResultSchema,
   })
   @ApiBadRequestResponse({ description: 'The request body is not valid.' })
+  @ApiConflictResponse({ description: 'The work item is in a terminal status.' })
   @ApiNotFoundResponse({ description: 'No work item has this id.' })
   async fixNow(
     @Param({ schema: workItemParamsSchema }) params: WorkItemParams,
     @Body({ schema: fixNowRequestSchema }) body: FixNowRequest,
-  ): Promise<WorkItem> {
+  ): Promise<FixResultResponse> {
     const item = this.store.get(params.id);
     if (!item) throw new NotFoundException(`Unknown work item: ${params.id}`);
 
+    const allowed = assertTriageAllowed(item);
+    if (!allowed.ok) throw new ConflictException(allowed.error.message);
+
     const result = await this.fixer.fixNow(item, body.note);
     this.store.save(result.item);
-    return result.item;
+    return {
+      item: result.item,
+      trigger: result.trigger,
+      effect: result.effect,
+      ok: result.ok,
+      pr: result.pr ?? null,
+      reason: result.reason ?? null,
+      failure: result.failure,
+    };
   }
 }

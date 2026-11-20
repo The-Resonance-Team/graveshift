@@ -37,11 +37,18 @@ export function renderPrBody({
       files.map((f) => `- \`${f}\``).join('\n'),
     ].join('\n'),
   );
+  // No dashboard URL means no link: an empty base would produce a broken relative link.
+  const link =
+    dashboardUrl === ''
+      ? []
+      : [
+          `[Open the incident in the dashboard](${dashboardUrl}/incidents/${encodeURIComponent(incident.id)})`,
+          '',
+        ];
   return [
     redacted,
     '',
-    `[Open the incident in the dashboard](${dashboardUrl}/incidents/${encodeURIComponent(incident.id)})`,
-    '',
+    ...link,
     '> Opened as a draft by Graveshift. It is never merged automatically: review, run CI, then merge it yourself.',
   ].join('\n');
 }

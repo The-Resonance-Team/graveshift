@@ -40,6 +40,7 @@ const workItem: WorkItem = {
   diagnosisRef: 'diag-1',
   autoFixAllowed: false,
   fixPriority: 100,
+  draftPr: null,
 };
 
 const clientConfig = WorkItemClientConfigSchema.parse({ autoFixAllowed: true });

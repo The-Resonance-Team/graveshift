@@ -23,6 +23,7 @@ function workItem(id: string, title: string, overrides: Partial<WorkItem> = {}):
     diagnosisRef: 'diag-1',
     autoFixAllowed: false,
     fixPriority: 100,
+    draftPr: null,
     ...overrides,
   };
 }

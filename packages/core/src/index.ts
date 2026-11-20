@@ -51,6 +51,7 @@ export {
   FIX_QUEUE_FRONT,
   NEEDS_HUMAN,
   parseAssignee,
+  PrRefSchema,
   promoteToFront,
   SubtaskSchema,
   SubtasksSchema,
@@ -62,6 +63,7 @@ export {
   WORK_ITEM_SEVERITIES,
   WorkItemSeveritySchema,
   WORK_ITEM_STATUSES,
+  withDraftPr,
   WorkItemClientConfigSchema,
   WorkItemSchema,
   WorkItemStatusSchema,
@@ -69,6 +71,7 @@ export {
 export type {
   AgentAssignee,
   Assignee,
+  PrRef,
   Subtask,
   Subtasks,
   WorkItem,

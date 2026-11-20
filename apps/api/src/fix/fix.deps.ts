@@ -1,8 +1,15 @@
+import { GraveshiftError } from '@graveshift/core';
 import { GitHubApiError, type GitHubClient, type RepoPolicy } from '@graveshift/fixer';
 import type { PatchGateway } from '@graveshift/patch';
 import { loadPolicy, parsePolicy, type Policy } from '@graveshift/policy';
 
-import type { FixDeps } from './fix.types';
+import type { FixContextProvider, FixDeps } from './fix.types';
+
+export class FixConfigError extends GraveshiftError<'FIX_CONFIG_ERROR'> {
+  constructor(message: string) {
+    super('FIX_CONFIG_ERROR', message);
+  }
+}
 
 // The v2 API has no real model or GitHub wiring. A fix attempt stops at the guard
 // instead of calling a live endpoint. Tests inject their own deps.
@@ -22,6 +29,8 @@ const DEFAULT_POLICY: Policy = parsePolicy({
   default: 'deny',
 });
 
+// Placeholder only. It maps no service and allows no path, so a fix fails closed
+// until a real policy supplies a repo. It is never used to open a PR.
 const DEFAULT_REPO: RepoPolicy = {
   repo: 'unconfigured/unconfigured',
   services: [],
@@ -57,9 +66,26 @@ const unavailableClient: GitHubClient = {
   getPullRequest: reject,
 };
 
+// No daemon read API exists, so no confidence, category, signal or counter is available.
+const unavailableContext: FixContextProvider = {
+  async load() {
+    return { ok: false, reason: 'diagnosis_context_unavailable' };
+  },
+};
+
 export async function createFixDeps(): Promise<FixDeps> {
   const path = process.env.POLICY_PATH;
-  const policy = path ? await loadPolicy(path) : DEFAULT_POLICY;
+  let policy: Policy;
+  if (path) {
+    try {
+      policy = await loadPolicy(path);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new FixConfigError(`Cannot read policy at ${path}: ${detail}`);
+    }
+  } else {
+    policy = DEFAULT_POLICY;
+  }
   const repo =
     policy.github.repos.find((candidate) => candidate.services.includes('api')) ??
     policy.github.repos[0] ??
@@ -70,6 +96,7 @@ export async function createFixDeps(): Promise<FixDeps> {
     repo,
     gateway: unavailableGateway,
     client: unavailableClient,
+    context: unavailableContext,
     agent: 'SRE Bot',
     ...(envMode === undefined ? {} : { envMode }),
   };

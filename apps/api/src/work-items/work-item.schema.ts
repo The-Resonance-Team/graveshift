@@ -1,4 +1,4 @@
-import { AssigneeSchema, WorkItemSchema } from '@graveshift/core';
+import { AssigneeSchema, PrRefSchema, WorkItemSchema } from '@graveshift/core';
 import { z } from 'zod';
 
 export const workItemParamsSchema = z.object({ id: z.string().min(1) }).strict();
@@ -28,3 +28,25 @@ export const fixNowRequestSchema = z
   .object({ note: z.string().min(1).max(500).optional() })
   .strict();
 export type FixNowRequest = z.infer<typeof fixNowRequestSchema>;
+
+// The full result is returned so a client can tell a denial from a started fix.
+export const fixResultSchema = z
+  .object({
+    item: WorkItemSchema,
+    trigger: z.enum(['auto_fix', 'fix_now']),
+    effect: z.enum(['allow', 'deny', 'require_approval', 'dry_run']),
+    ok: z.boolean(),
+    pr: PrRefSchema.nullable(),
+    reason: z.string().nullable(),
+    failure: z.enum([
+      'none',
+      'auto_fix_disabled',
+      'context_unavailable',
+      'invalid_context',
+      'policy_denied',
+      'patch_rejected',
+      'pr_failed',
+    ]),
+  })
+  .strict();
+export type FixResultResponse = z.infer<typeof fixResultSchema>;
