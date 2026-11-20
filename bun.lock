@@ -142,7 +142,9 @@
         "@graveshift/core": "workspace:*",
         "@graveshift/events": "workspace:*",
         "@graveshift/integrations": "workspace:*",
+        "@graveshift/redactor": "workspace:*",
         "@nestjs/common": "12.6.0",
+        "rxjs": "7.8.2",
       },
     },
     "packages/policy": {

@@ -2,7 +2,13 @@ import { EventEnvelopeSchema } from '@graveshift/core';
 import { createInMemoryPublisher, type InMemoryPublisher } from '@graveshift/events/testing';
 import { describe, expect, test } from 'bun:test';
 
-import { type Clock, type Context, envelopeBuilder, type Integration } from './index';
+import {
+  type Clock,
+  type Context,
+  envelopeBuilder,
+  type Integration,
+  validateContext,
+} from './index';
 
 const fixedClock: Clock = {
   now: () => '2026-11-20T10:00:00.000Z',
@@ -83,6 +89,21 @@ const fakeCollector: Integration = {
   },
   stop() {},
 };
+
+describe('validateContext', () => {
+  test('accepts a valid context', () => {
+    const { context } = makeContext();
+    expect(() => validateContext(context)).not.toThrow();
+  });
+
+  test('rejects a missing publisher, tenantId or service', () => {
+    const { context } = makeContext();
+    expect(() => validateContext({ ...context, publisher: {} as never })).toThrow('publisher');
+    expect(() => validateContext({ ...context, tenantId: 'bad tenant' })).toThrow('tenantId');
+    expect(() => validateContext({ ...context, service: '' })).toThrow('service');
+    expect(() => validateContext(undefined as never)).toThrow('object');
+  });
+});
 
 describe('Collector example', () => {
   test('publishes one valid envelope when started', async () => {
