@@ -33,7 +33,7 @@ Do not submit to Devpost. External work lives in issues #12–#16.
 - K8s source is fixture-tested only; no cluster was available. Public k3s demo is issue #14.
 - Demo API port 2600 may be occupied by another local app; reach the demo API from inside the Compose network.
 - Diagnosis category values were chosen locally.
-- ORM choice in `docs/DECISIONS.md` still says owner-unconfirmed for Drizzle versus Bun.SQL.
+- ORM choice is owner-unconfirmed for Drizzle versus Bun.SQL. The store ships `drizzle-orm@0.45.4` with Bun drivers as the working assumption.
 
 ## Verification commands
 

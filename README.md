@@ -117,4 +117,4 @@ Open work is tracked in issues #11 to #16.
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Third-party code and templates will be disclosed in `docs/DECISIONS.md` as they are added.
+Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Third-party code and templates will be disclosed in the ADRs under `docs/adr/` as they are added.

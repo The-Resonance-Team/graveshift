@@ -73,4 +73,4 @@ The daemon has no authentication. Bind it to localhost, as the Compose file does
 
 ## Decisions
 
-See `docs/DECISIONS.md` and `docs/adr/0001-full-scope-for-kiroween.md`.
+See `docs/adr/0001-full-scope-for-kiroween.md` and `docs/adr/0002-single-ai-sdk-provider.md`.
