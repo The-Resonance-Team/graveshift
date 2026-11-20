@@ -120,6 +120,20 @@ describe('rule engine', () => {
     expect(detectRuleOverrides(system, client)).toEqual({ ids: [], warning: '' });
   });
 
+  test('duplicate ids do not make evaluation or merge order-dependent', () => {
+    const suppress = rule('rule-dup', 'suppress', 10, { services: ['api'] });
+    const escalate = rule('rule-dup', 'escalate', 10, { services: ['api'] });
+    expect(evaluateEnvelope(envelope, [suppress, escalate])).toBe('escalate');
+    expect(evaluateEnvelope(envelope, [escalate, suppress])).toBe('escalate');
+
+    const systems = [rule('rule-s', 'suppress', 10, {}), rule('rule-s', 'detect', 5, {})];
+    const clients = [suppress, escalate, rule('rule-c', 'escalate', 30, {})];
+    const merged = mergeRules(systems, clients);
+    expect(merged).toEqual(mergeRules([...systems].reverse(), [...clients].reverse()));
+    expect(merged.filter((entry) => entry.id === 'rule-dup')).toHaveLength(1);
+    expect(merged.filter((entry) => entry.id === 'rule-s')).toHaveLength(1);
+  });
+
   test('gives the same output for the same input', () => {
     const system = [rule('rule-1', 'suppress', 10, {})];
     const client = [rule('rule-1', 'escalate', 10, {}), rule('rule-2', 'detect', 5, {})];

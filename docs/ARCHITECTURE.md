@@ -102,6 +102,8 @@ Two layers feed the one engine. System rules give defaults. Client rules overrid
 
 `POST /api/rules/validate` validates system and client rule arrays with Zod. It returns the override ids and warning. It rejects a Rule override unless the body sets `confirmOverrides: true`. The route stores no rule and evaluates no event. Rule evaluation stays in the daemon. It never runs in a **Plugin** or a **Collector**.
 
+The audit event for Rule override detection is deferred with the rest of the audit work.
+
 ## Daemon local surface
 
 The daemon keeps only health and a local command inbox (**not built**). It listens on port 2602 and binds to 127.0.0.1 by default. The `PORT` environment variable changes the port. No client calls the daemon directly. Keep the bind on localhost.

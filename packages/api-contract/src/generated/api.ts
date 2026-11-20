@@ -92,7 +92,12 @@ export interface operations {
       };
       /** @description The rule overrides are not confirmed. */
       409: {
-        content: never;
+        content: {
+          "application/json": {
+            overrideIds: string[];
+            warning: string;
+          };
+        };
       };
     };
   };

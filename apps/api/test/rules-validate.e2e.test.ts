@@ -74,4 +74,32 @@ describe('POST /api/rules/validate (e2e)', () => {
       })
       .expect(400);
   });
+
+  test('rejects duplicate ids in one layer', async () => {
+    await request(app.getHttpServer())
+      .post('/api/rules/validate')
+      .send({
+        systemRules: [systemRule],
+        clientRules: [clientRule, { ...clientRule, action: 'suppress' }],
+      })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/api/rules/validate')
+      .send({
+        systemRules: [systemRule, { ...systemRule, priority: 20 }],
+        clientRules: [],
+      })
+      .expect(400);
+  });
+
+  test('rejects more than 200 rules in one layer', async () => {
+    const manyRules = Array.from({ length: 201 }, (_, index) => ({
+      ...systemRule,
+      id: `rule-${index}`,
+    }));
+    await request(app.getHttpServer())
+      .post('/api/rules/validate')
+      .send({ systemRules: manyRules, clientRules: [] })
+      .expect(400);
+  });
 });

@@ -46,6 +46,7 @@
                 "type": "object",
                 "properties": {
                   "systemRules": {
+                    "maxItems": 200,
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -115,6 +116,7 @@
                     }
                   },
                   "clientRules": {
+                    "maxItems": 200,
                     "type": "array",
                     "items": {
                       "type": "object",
@@ -230,7 +232,30 @@
             }
           },
           "409": {
-            "description": "The rule overrides are not confirmed."
+            "description": "The rule overrides are not confirmed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "overrideIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "warning": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "overrideIds",
+                    "warning"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
           }
         },
         "tags": [
