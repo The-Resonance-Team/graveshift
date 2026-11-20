@@ -1,18 +1,23 @@
 'use client';
 
+import { HStack } from '@astryxdesign/core/HStack';
+import { StatusDot } from '@astryxdesign/core/StatusDot';
+import { Text } from '@astryxdesign/core/Text';
+
 import type { LiveState } from '../lib/use-live';
 
-const COPY: Record<LiveState, { text: string; className: string }> = {
-  connecting: { text: 'Connecting to live updates', className: 'text-fog' },
-  live: { text: 'Live', className: 'text-ectoplasm' },
-  reconnecting: { text: 'Reconnecting, data may be stale', className: 'text-pumpkin' },
+const COPY: Record<LiveState, { text: string; variant: 'accent' | 'neutral' | 'warning' }> = {
+  connecting: { text: 'Connecting to live updates', variant: 'neutral' },
+  live: { text: 'Live', variant: 'accent' },
+  reconnecting: { text: 'Reconnecting, data may be stale', variant: 'warning' },
 };
 
 export function LiveStatus({ state }: { state: LiveState }) {
-  const { text, className } = COPY[state];
+  const { text, variant } = COPY[state];
   return (
-    <p role="status" className={`text-xs ${className}`}>
-      {text}
-    </p>
+    <HStack gap={1} vAlign="center" aria-live="polite">
+      <StatusDot variant={variant} label={text} />
+      <Text type="supporting">{text}</Text>
+    </HStack>
   );
 }

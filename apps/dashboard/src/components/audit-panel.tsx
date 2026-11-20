@@ -1,26 +1,25 @@
 'use client';
 
-import { formatTime } from '../lib/data/incident-model';
+import { Card } from '@astryxdesign/core/Card';
+import { Heading } from '@astryxdesign/core/Heading';
+import { HStack } from '@astryxdesign/core/HStack';
+import { List, ListItem } from '@astryxdesign/core/List';
+import { Text } from '@astryxdesign/core/Text';
+import { Timestamp } from '@astryxdesign/core/Timestamp';
+import { Token } from '@astryxdesign/core/Token';
+import { VStack } from '@astryxdesign/core/VStack';
+
 import { useAudit, useChain } from '../lib/use-audit';
 import { Term } from './term';
 
 function ChainBadge() {
   const { data, isError } = useChain();
-  if (isError)
-    return (
-      <span className="rounded-sm border border-pumpkin px-2 py-0.5 text-xs text-pumpkin">
-        Chain not checked
-      </span>
-    );
-  if (!data) return <span className="text-xs text-fog">Checking…</span>;
+  if (isError) return <Token label="Chain not checked" color="orange" />;
+  if (!data) return <Text type="supporting">Checking…</Text>;
   return data.ok ? (
-    <span className="rounded-sm border border-ectoplasm px-2 py-0.5 text-xs text-ectoplasm">
-      Chain verified: {data.length} entries
-    </span>
+    <Token label={`Chain verified: ${data.length} entries`} color="green" />
   ) : (
-    <span role="alert" className="rounded-sm border border-blood px-2 py-0.5 text-xs text-blood">
-      Chain broken at entry {data.brokenAtSeq}: {data.reason}
-    </span>
+    <Token label={`Chain broken at ${data.brokenAtSeq}: ${data.reason}`} color="red" />
   );
 }
 
@@ -28,28 +27,41 @@ export function AuditPanel() {
   const { data } = useAudit();
   const recent = (data ?? []).toReversed().slice(0, 8);
   return (
-    <section aria-labelledby="audit-title" className="rounded-md border border-mist bg-crypt p-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id="audit-title" className="text-sm font-semibold text-bone">
-          <Term name="auditLog" />
-        </h2>
-        <ChainBadge />
-      </div>
-      {recent.length === 0 ? (
-        <p className="mt-2 text-sm text-fog">No decisions recorded yet.</p>
-      ) : (
-        <ol className="mt-2 space-y-1 text-xs">
-          {recent.map((entry) => (
-            <li key={entry.seq} className="flex gap-2">
-              <span className="w-8 shrink-0 text-right text-fog">#{entry.seq}</span>
-              <span className="text-bone">{entry.type}</span>
-              <time dateTime={entry.at} className="ml-auto shrink-0 text-fog">
-                {formatTime(entry.at)}
-              </time>
-            </li>
-          ))}
-        </ol>
-      )}
-    </section>
+    <Card>
+      <VStack gap={2}>
+        <HStack gap={2} hAlign="between" wrap="wrap">
+          <Heading level={2}>
+            <Term name="auditLog" />
+          </Heading>
+          <ChainBadge />
+        </HStack>
+        {recent.length === 0 ? (
+          <Text type="supporting">No decisions recorded yet.</Text>
+        ) : (
+          <List hasDividers density="compact">
+            {recent.map((entry) => (
+              <ListItem
+                key={entry.seq}
+                itemKey={entry.seq}
+                label={
+                  <HStack gap={2} wrap="wrap">
+                    <Text type="supporting">#{entry.seq}</Text>
+                    <Text type="label">{entry.type}</Text>
+                  </HStack>
+                }
+                endContent={
+                  <Timestamp
+                    value={entry.at}
+                    format="time"
+                    timezoneID="Asia/Ho_Chi_Minh"
+                    type="supporting"
+                  />
+                }
+              />
+            ))}
+          </List>
+        )}
+      </VStack>
+    </Card>
   );
 }

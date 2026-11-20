@@ -64,8 +64,13 @@ notifier | Banshee | Ma khóc | The ghost that notifies people and collects appr
 - Content width caps at `max-w-7xl`. Long values (commands, branch names) scroll inside their block with `overflow-x-auto` instead of widening the page.
 - Every control stays reachable below 1024 px; the dashboard has no hidden navigation.
 
+## Component system
+
+- The dashboard builds with Astryx (`@astryxdesign/core`) components and page-template frames. The Graveshift theme extends the Gothic theme and maps the palette above to Astryx color tokens.
+- Component slots use Astryx `Layout`, `Card`, `List`, `StatusDot`, `Token`, `Stepper`, `Step`, `RadioList`, `SegmentedControl`, `Tooltip` and `Button`. Tailwind utilities remain for the palette tokens asserted by tests; no second styling system is introduced.
+
 ## Icon vocabulary
 
-- The dashboard ships no icons. Status is shown with a coloured dot (`aria-hidden`) next to a text label, so meaning never depends on colour or a glyph alone.
+- The dashboard ships no standalone icons. Status is shown with Astryx `StatusDot` next to a text label, so meaning never depends on colour or a glyph alone.
 - No Unicode glyphs or emoji as icons (`✓`, `→`, `☠`). Separators in UI text are commas.
 - When icons are needed, add one concept-keyed registry (`ICON.<concept>`, for example `ICON.incident`, `ICON.healthy`, `ICON.fixPr`) in a shared UI package, keyed by the internal terms of the Term table. Icons are `aria-hidden`, and icon-only buttons carry an `aria-label`. Do not add per-component icon sets.

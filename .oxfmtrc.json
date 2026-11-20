@@ -1,5 +1,14 @@
 {
   "singleQuote": true,
   "sortPackageJson": false,
-  "ignorePatterns": ["*.md", "**/next-env.d.ts"]
+  "ignorePatterns": [
+    "*.md",
+    "**/next-env.d.ts",
+    "apps/dashboard/src/astryx-themes.ts",
+    "apps/dashboard/src/themes/graveshift/graveshift.js",
+    "apps/dashboard/src/themes/graveshift/graveshift.css",
+    "apps/dashboard/src/themes/graveshift/graveshift.fonts.css",
+    "apps/dashboard/src/themes/graveshift/graveshift.d.ts",
+    "apps/dashboard/src/themes/graveshift/graveshift.css.d.ts"
+  ]
 }

@@ -1,54 +1,83 @@
 'use client';
 
-import Link from 'next/link';
+import { EmptyState } from '@astryxdesign/core/EmptyState';
+import { HStack } from '@astryxdesign/core/HStack';
+import { Heading } from '@astryxdesign/core/Heading';
+import { List, ListItem } from '@astryxdesign/core/List';
+import { SegmentedControl, SegmentedControlItem } from '@astryxdesign/core/SegmentedControl';
+import { StatusDot } from '@astryxdesign/core/StatusDot';
+import { Text } from '@astryxdesign/core/Text';
+import { Timestamp } from '@astryxdesign/core/Timestamp';
+import { Token } from '@astryxdesign/core/Token';
+import { VStack } from '@astryxdesign/core/VStack';
+import { useState } from 'react';
 
-import { formatTime, isOpen } from '../lib/data/incident-model';
+import { isOpen } from '../lib/data/incident-model';
 import { useIncidents } from '../lib/use-incidents';
 import { Term } from './term';
 
-const SEVERITY_TEXT = {
-  info: 'text-fog',
-  warning: 'text-pumpkin',
-  critical: 'text-blood',
+const SEVERITY = {
+  info: 'neutral',
+  warning: 'warning',
+  critical: 'error',
 } as const;
 
 export function IncidentList() {
   const { data } = useIncidents();
-  const open = (data ?? []).filter(isOpen);
+  const [view, setView] = useState('open');
+  const all = data ?? [];
+  const shown = view === 'open' ? all.filter(isOpen) : all;
   return (
     <section aria-labelledby="incidents-title">
-      <h2 id="incidents-title" className="mb-3 text-lg font-semibold text-bone">
-        Open <Term name="incident" />s{' '}
-        <span className="text-sm font-normal text-fog">({open.length})</span>
-      </h2>
-      {open.length === 0 ? (
-        <p className="rounded-md border border-mist bg-crypt p-4 text-sm text-fog">
-          Nothing is haunted right now.
-        </p>
-      ) : (
-        <ul className="space-y-2">
-          {open.map((view) => (
-            <li key={view.incident.id}>
-              <Link
-                href={`/incidents/${encodeURIComponent(view.incident.id)}`}
-                className="flex flex-wrap items-baseline gap-x-3 gap-y-1 rounded-md border border-mist bg-crypt p-3 hover:bg-night focus-visible:outline-2 focus-visible:outline-ectoplasm"
-              >
-                <span className={`text-sm font-semibold ${SEVERITY_TEXT[view.severity]}`}>
-                  {view.severity}
-                </span>
-                <span className="font-medium text-bone">{view.incident.service}</span>
-                <span className="text-sm text-fog">{view.incident.state.replace('_', ' ')}</span>
-                {view.pr ? (
-                  <span className="text-xs text-ectoplasm">draft PR #{view.pr.number}</span>
-                ) : null}
-                <time dateTime={view.incident.updatedAt} className="ml-auto text-xs text-fog">
-                  {formatTime(view.incident.updatedAt)}
-                </time>
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
+      <VStack gap={3}>
+        <HStack gap={3} hAlign="between" wrap="wrap">
+          <Heading level={2} id="incidents-title">
+            Open <Term name="incident" />s <Text type="supporting">({shown.length})</Text>
+          </Heading>
+          <SegmentedControl label="Incident view" value={view} onChange={setView} size="sm">
+            <SegmentedControlItem value="open" label="Open" />
+            <SegmentedControlItem value="all" label="All" />
+          </SegmentedControl>
+        </HStack>
+        {shown.length === 0 ? (
+          <EmptyState
+            headingLevel={3}
+            title="Nothing is haunted right now"
+            description="Inject a fault with the Haunt panel to see an incident."
+          />
+        ) : (
+          <List hasDividers density="compact">
+            {shown.map((item) => (
+              <ListItem
+                key={item.incident.id}
+                itemKey={item.incident.id}
+                href={`/incidents/${encodeURIComponent(item.incident.id)}`}
+                label={
+                  <HStack gap={2} vAlign="center" wrap="wrap">
+                    <StatusDot variant={SEVERITY[item.severity]} label={item.severity} />
+                    <Text type="label" weight="semibold">
+                      {item.incident.service}
+                    </Text>
+                    <Token label={item.incident.state.replace('_', ' ')} />
+                    {item.pr ? <Token label={`Draft PR #${item.pr.number}`} color="green" /> : null}
+                  </HStack>
+                }
+                description={
+                  <HStack gap={2} hAlign="between" wrap="wrap">
+                    <Text type="supporting">{item.category ?? 'Awaiting diagnosis'}</Text>
+                    <Timestamp
+                      value={item.incident.updatedAt}
+                      format="date_time"
+                      timezoneID="Asia/Ho_Chi_Minh"
+                      type="supporting"
+                    />
+                  </HStack>
+                }
+              />
+            ))}
+          </List>
+        )}
+      </VStack>
     </section>
   );
 }

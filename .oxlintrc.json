@@ -28,6 +28,19 @@
   },
   "overrides": [
     {
+      "files": ["apps/dashboard/src/themes/graveshift/graveshift.js"],
+      "rules": {
+        "max-lines": "off"
+      }
+    },
+    {
+      "files": ["apps/dashboard/src/**/*.tsx"],
+      "rules": {
+        "react-perf/jsx-no-jsx-as-prop": "off",
+        "react-perf/jsx-no-new-object-as-prop": "off"
+      }
+    },
+    {
       "files": ["apps/daemon/scripts/diagnose-real-model.ts"],
       "rules": {
         "no-await-in-loop": "off"
