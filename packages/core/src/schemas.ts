@@ -3,6 +3,20 @@ import { z } from 'zod';
 const id = z.string().min(1);
 const timestamp = z.iso.datetime();
 
+export const EventEnvelopeSchema = z.object({
+  id,
+  tenantId: id,
+  source: id,
+  service: id,
+  type: id,
+  severity: z.enum(['info', 'warning', 'critical']),
+  observedAt: timestamp,
+  traceId: id,
+  fingerprint: id,
+  payload: z.record(z.string(), z.unknown()),
+});
+export type EventEnvelope = z.infer<typeof EventEnvelopeSchema>;
+
 export const SIGNAL_KINDS = [
   'oom',
   'crash_loop',

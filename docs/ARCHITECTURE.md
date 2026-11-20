@@ -9,10 +9,11 @@ The v1 daemon is at `apps/_daemon`. It is reference only. The repository does no
 | Component | Path | Role |
 | --- | --- | --- |
 | API | `apps/api` | NestJS app. The only external surface. Serves `GET /healthz`, the OpenAPI document and the Swagger UI. |
-| API contract | `packages/api-contract` | Publishes generated TypeScript types and a version marker from the OpenAPI document. No event envelope. |
+| API contract | `packages/api-contract` | Publishes generated TypeScript types and a version marker from the OpenAPI document. |
 | Daemon (v1) | `apps/_daemon` | Reference only. Wires Wraith, Medium, policy, optional fixer and the audit log. Not built and not started. |
 | Daemon (v2) | `apps/daemon` | New Effect v4 skeleton on Bun. Serves `GET /healthz` only. |
-| Core | `packages/core` | Zod schemas (source of truth), incident state machine, circuit-breaker helper, config loader, `RuntimeSource` contract. |
+| Core | `packages/core` | Zod schemas (source of truth), event envelope schema, incident state machine, circuit-breaker helper, config loader, `RuntimeSource` contract. |
+| Events | `packages/events` | `Publisher` interface, NATS JetStream publisher and an in-memory fake. No consumer is wired yet. |
 | Store | `packages/store` | Hash-chained, append-only audit log on `bun:sqlite` through Drizzle. |
 | Policy | `packages/policy` | YAML loader and `decide()`. Pure and deterministic. |
 | Redactor | `packages/redactor` | Twelve ordered detectors, idempotent. |
@@ -73,7 +74,20 @@ Structured logging is deferred to the production ticket.
 
 The API uses Zod through Nest's standard-schema pipe. When a route takes input, the route attaches a Zod schema with `@Body({ schema })`, `@Query({ schema })` or `@Param({ schema })`. This ticket adds no business logic, authentication, rate limits, MCP or SSE. Later tickets add the routes for graves and hauntings here.
 
-`packages/api-contract` generates its types from the OpenAPI document. It exports the generated types and the `API_CONTRACT_VERSION` marker through `package.json#exports` only. It does not define an event envelope or any domain event type; a later ticket owns the envelope.
+`packages/api-contract` generates its types from the OpenAPI document. It exports the generated types and the `API_CONTRACT_VERSION` marker through `package.json#exports` only. It does not define an event envelope or any domain event type.
+
+## Event backbone
+
+Every Plugin and Collector publishes one **Event envelope** to the queue. `EventEnvelopeSchema` in `packages/core` is the source of truth. The envelope carries `tenantId` from v2. Its `id` is the idempotency key that makes at-least-once delivery safe.
+
+Two lanes carry envelopes:
+
+| Lane | Severity | Use |
+| --- | --- | --- |
+| `telemetry` | `info` | Baselines and charts. |
+| `detection` | `warning`, `critical` | Detection by the Wraith. |
+
+`packages/events` owns the `Publisher` interface, `createNatsPublisher` and an in-memory fake for tests. Subjects have the form `graveshift.<tenantId>.<lane>.<type>`. The publisher uses the official NATS client and sends the envelope `id` as the `msgID` option. This ticket wires no daemon, API, Plugin, Collector or rule engine.
 
 ## Daemon local surface
 
