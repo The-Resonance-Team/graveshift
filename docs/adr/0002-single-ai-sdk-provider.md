@@ -1,6 +1,6 @@
 # One AI SDK provider for diagnosis
 
-Status: accepted
+Status: superseded by ADR 0007
 
 Diagnosis calls one model through the Vercel AI SDK (`ai` and `@ai-sdk/openai-compatible`), configured by `llm.provider`, `llm.model` and `llm.baseUrl`. The API key comes only from `OPENAI_COMPATIBLE_API_KEY`. The earlier plan was a Bedrock, Gemini, Ollama chain with hand-written HTTP adapters; that chain and its `llm.chain` setting are removed. When the model is unavailable or its output is invalid, Graveshift falls back to the deterministic rules-only diagnosis.
 
