@@ -12,7 +12,7 @@ const argsSchema = z.object({ incidentId: z.string().min(1).max(128) });
 @UseGuards(McpScopeGuard)
 export class McpPrompts {
   @Prompt({
-    name: 'triage-incident',
+    name: 'triage_incident',
     description: 'Triage a Haunting: read it, check evidence, decide the next step.',
     argsSchema,
   })
@@ -25,7 +25,7 @@ export class McpPrompts {
   }
 
   @Prompt({
-    name: 'write-postmortem',
+    name: 'write_postmortem',
     description: 'Write the Autopsy for a closed Haunting.',
     argsSchema,
   })

@@ -129,7 +129,7 @@ describe('POST /mcp bearer auth (e2e)', () => {
 
   test('refuses a wrong-scope prompts/get with 403', async () => {
     await call(metricsToken, 'prompts/get', {
-      name: 'triage-incident',
+      name: 'triage_incident',
       arguments: { incidentId: 'inc-1' },
     }).expect(403);
   });

@@ -16,4 +16,4 @@
 - R4.2 WHEN HTTP is used THE SYSTEM SHALL require an MCP bearer token issued by `POST /api/credentials` and verified by the shared credential component.
 
 ## R5 Resources and prompts
-- R5.1 The server SHALL expose `graveshift://incidents/{id}/postmortem` and the `triage-incident` / `write-postmortem` prompts.
+- R5.1 The server SHALL expose `graveshift://incidents/{id}/postmortem` and the `triage_incident` / `write_postmortem` prompts.

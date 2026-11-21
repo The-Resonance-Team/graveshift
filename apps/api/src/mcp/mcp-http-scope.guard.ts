@@ -14,12 +14,13 @@ export const MCP_READ_SCOPE_ORDER = [
   'metrics:read',
 ] as const;
 
+/** Keys are exact registered primitive names in snake_case. A wrong name is denied with 403. */
 export const PRIMITIVE_SCOPES: Record<string, string> = {
   list_services: 'incidents:read',
   list_incidents: 'incidents:read',
   get_incident: 'incidents:read',
-  'triage-incident': 'incidents:read',
-  'write-postmortem': 'incidents:read',
+  triage_incident: 'incidents:read',
+  write_postmortem: 'incidents:read',
   postmortem: 'incidents:read',
   get_diagnosis: 'diagnoses:read',
   get_audit_log: 'audit:read',

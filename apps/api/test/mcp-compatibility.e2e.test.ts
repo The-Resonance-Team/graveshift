@@ -72,8 +72,8 @@ describe('MCP server (in-memory client)', () => {
     const { tools } = await client.listTools();
     expect(tools.map((tool) => tool.name)).toEqual(expect.arrayContaining(REQUIRED_TOOLS));
     expect((await client.listPrompts()).prompts.map((p) => p.name)).toEqual([
-      'triage-incident',
-      'write-postmortem',
+      'triage_incident',
+      'write_postmortem',
     ]);
     expect((await client.listResourceTemplates()).resourceTemplates[0]?.uriTemplate).toBe(
       'graveshift://incidents/{id}/postmortem',
@@ -102,7 +102,7 @@ describe('MCP server (in-memory client)', () => {
       expect(toolText(result)).not.toContain(SECRET);
     }
     const prompt = await client.getPrompt({
-      name: 'triage-incident',
+      name: 'triage_incident',
       arguments: { incidentId: SECRET },
     });
     expect(JSON.stringify(prompt)).not.toContain(SECRET);
