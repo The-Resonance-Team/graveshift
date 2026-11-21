@@ -5,4 +5,4 @@ Banshee notifies people and collects approvals.
 ## Language
 
 **Banshee**:
-the ghost that notifies people and collects approvals.
+The ghost that notifies people and collects approvals.

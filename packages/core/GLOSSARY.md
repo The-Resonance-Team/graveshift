@@ -2,7 +2,7 @@
 
 Core holds the pure domain schemas and helpers. It owns the work item and triage vocabulary.
 
-## Work item and triage
+## Language
 
 **Work item**:
 The record created when an incident is defined and verified. It carries triage, fix state and subtasks.
@@ -32,9 +32,7 @@ The number that orders the fix queue. A lower number sits nearer the front.
 The pull request that is the last state of a fix. Graveshift does not merge it.
 
 **Diagnosis**:
-the stated root cause of a haunting, with supporting evidence and confidence.
-
-## Events and rules
+The stated root cause of a haunting, with supporting evidence and confidence.
 
 **Event envelope**:
 The normalised message that every source publishes to the queue.
