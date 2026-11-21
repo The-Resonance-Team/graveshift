@@ -93,7 +93,7 @@ Request bodies use `class-validator` DTO classes. The global `ValidationPipe` se
 
 ## Prisma migrations
 
-CI compares the SQL generated from `prisma/schema.prisma` with the committed migration SQL using `bun run migrate:drift:check`. This is a DB-free alternative to the ticket's literal `prisma migrate diff --from-migrations ... --to-schema ... --exit-code` command. It works only while migrations are additive. When a second or destructive migration lands, move to a shadow-database drift check and ask the coordinator to approve a CI Postgres service or an external test database. The local shadow-database command is `bun run migrate:drift:local`; it needs `DATABASE_URL`, `SHADOW_DATABASE_URL` and Docker Postgres.
+CI compares the SQL generated from `apps/api/prisma/schema.prisma` with the committed migration SQL using `bun run migrate:drift:check`. This is a DB-free alternative to the ticket's literal `prisma migrate diff --from-migrations ... --to-schema ... --exit-code` command. It works only while migrations are additive. When a second or destructive migration lands, move to a shadow-database drift check and ask the coordinator to approve a CI Postgres service or an external test database. The local shadow-database command is `bun run migrate:drift:local`; it needs `DATABASE_URL`, `SHADOW_DATABASE_URL` and Docker Postgres.
 
 ## Work items
 

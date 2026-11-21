@@ -7,7 +7,11 @@
     "start": "bun src/main.ts",
     "start:stdio": "bun src/stdio.ts",
     "test": "bun test",
-    "typecheck": "bun check --no-script"
+    "typecheck": "bun check --no-script",
+    "prisma:generate": "prisma generate",
+    "prisma:validate": "prisma validate",
+    "prisma:drift:check": "bun scripts/check-prisma-drift.ts",
+    "prisma:drift:local": "prisma migrate diff --from-migrations prisma/migrations --to-schema prisma --exit-code"
   },
   "dependencies": {
     "@graveshift/agents": "workspace:*",
