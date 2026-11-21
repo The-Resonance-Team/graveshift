@@ -12,7 +12,7 @@ The v1 daemon is at `apps/_daemon`. It is reference only. The repository does no
 | API contract | `packages/api-contract` | Publishes generated TypeScript types and a version marker from the OpenAPI document. |
 | Daemon (v1) | `apps/_daemon` | Reference only. Wires Wraith, Medium, policy, optional fixer and the audit log. Not built and not started. |
 | Daemon (v2) | `apps/daemon` | New Effect v4 skeleton on Bun. Serves `GET /healthz` only. |
-| Core | `packages/core` | Zod schemas (source of truth), event envelope schema, incident state machine, circuit-breaker helper, config loader, `RuntimeSource` contract. |
+| Core | `packages/core` | Zod schemas (source of truth), event envelope schema, incident state machine, circuit-breaker helper, config loader, `RuntimeSource` contract, pure rule engine. |
 | Events | `packages/events` | `Publisher` interface, NATS JetStream publisher and an in-memory fake. No consumer is wired yet. |
 | Store | `packages/store` | Hash-chained, append-only audit log on `bun:sqlite` through Drizzle. |
 | Policy | `packages/policy` | YAML loader and `decide()`. Pure and deterministic. |
@@ -67,6 +67,7 @@ The API in `apps/api` is the only external surface. A client calls this API, nev
 | `GET /healthz` | `{status: "ok"}` |
 | `GET /docs-json` | The OpenAPI document. |
 | `GET /docs` | The Swagger UI. |
+| `POST /api/rules/validate` | Override ids, warning and acceptance for a rule set. Validation only. |
 
 The API listens on 127.0.0.1 by default. Set `HOST` to change the bind address. Set `PORT` to change the port from 3000. Keep the localhost bind until authentication ships.
 
@@ -91,7 +92,17 @@ Two lanes carry envelopes:
 
 The JetStream stream is `GRAVESHIFT_EVENTS`. It filters subjects with `graveshift.>`. JetStream detects duplicate publishes by `msgID` inside `duplicate_window`. The default `duplicate_window` is two minutes. Redelivery after that window is not idempotent: a consumer must still handle a repeated envelope `id`.
 
-This ticket wires no daemon, API, Plugin, Collector or rule engine.
+This ticket wires no daemon, Plugin or Collector. The rule engine is in `packages/core`, and the API only validates rule overrides.
+
+## Rule engine
+
+One engine evaluates every **Event envelope**. The engine lives in `packages/core/src/rules.ts`. It is pure: no runtime, no I/O and no NATS import. `RuleSchema` defines an `id`, `enabled`, an explicit `priority`, a `match` object and an `action`. An action is `detect`, `suppress` or `escalate`. The match object filters by severities, services, event types and `tenantId`. Each filter is optional. `evaluateEnvelope` sorts rules by priority, then by id, and returns the action of the first matching enabled rule. Without a match it returns `detect`. The engine calls no model and writes no data.
+
+Two layers feed the one engine. System rules give defaults. Client rules override a system rule with the same `id`. This is a **Rule override**. `mergeRules` keeps system rules when the client has no entry for that id. `detectRuleOverrides` returns the ids that would be overridden and a ready-to-display warning. The config warns the user before save and needs explicit confirmation when a Rule override exists.
+
+`POST /api/rules/validate` validates system and client rule arrays with Zod. It returns the override ids and warning. It rejects a Rule override unless the body sets `confirmOverrides: true`. The route stores no rule and evaluates no event. Rule evaluation stays in the daemon. It never runs in a **Plugin** or a **Collector**.
+
+The audit event for Rule override detection is deferred with the rest of the audit work.
 
 ## Daemon local surface
 
@@ -99,4 +110,4 @@ The daemon keeps only health and a local command inbox (**not built**). It liste
 
 ## Decisions
 
-See `docs/adr/0001-full-scope-for-kiroween.md`, `docs/adr/0002-single-ai-sdk-provider.md`, `docs/adr/0003-platform-v2-starts-now.md`, `docs/adr/0004-effect-v4-daemon-on-bun.md` and `docs/adr/0006-nestjs-api-and-mcp.md`.
+See `docs/adr/0001-full-scope-for-kiroween.md`, `docs/adr/0002-single-ai-sdk-provider.md`, `docs/adr/0003-platform-v2-starts-now.md`, `docs/adr/0004-effect-v4-daemon-on-bun.md`, `docs/adr/0005-event-backbone-nats.md` and `docs/adr/0006-nestjs-api-and-mcp.md`.

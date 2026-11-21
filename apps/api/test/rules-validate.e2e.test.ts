@@ -1,0 +1,105 @@
+import type { INestApplication } from '@nestjs/common';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import request from 'supertest';
+import { createApp } from '../src/app.factory';
+
+const systemRule = {
+  id: 'rule-1',
+  enabled: true,
+  priority: 10,
+  match: { services: ['api'] },
+  action: 'suppress',
+};
+const clientOverride = { ...systemRule, action: 'escalate' };
+const clientRule = {
+  id: 'rule-2',
+  enabled: true,
+  priority: 20,
+  match: {},
+  action: 'detect',
+};
+
+describe('POST /api/rules/validate (e2e)', () => {
+  let app!: INestApplication;
+
+  beforeEach(async () => {
+    app = await createApp();
+    await app.init();
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test('accepts a rule set with no overrides', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/rules/validate')
+      .send({ systemRules: [systemRule], clientRules: [clientRule] })
+      .expect(200);
+    expect(response.body).toEqual({ accepted: true, overrideIds: [], warning: '' });
+    expect(response.body.accepted).toBe(true);
+  });
+
+  test('rejects an override without confirmation', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/rules/validate')
+      .send({ systemRules: [systemRule], clientRules: [clientOverride] })
+      .expect(409);
+    expect(response.body.overrideIds).toEqual(['rule-1']);
+    expect(response.body.warning).toContain('Confirm the rule overrides before save.');
+  });
+
+  test('accepts a confirmed override and returns the warning', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/rules/validate')
+      .send({
+        systemRules: [systemRule],
+        clientRules: [clientOverride],
+        confirmOverrides: true,
+      })
+      .expect(200);
+    expect(response.body).toEqual({
+      accepted: true,
+      overrideIds: ['rule-1'],
+      warning: expect.stringContaining('rule-1'),
+    });
+  });
+
+  test('rejects an unknown action', async () => {
+    await request(app.getHttpServer())
+      .post('/api/rules/validate')
+      .send({
+        systemRules: [{ ...systemRule, action: 'delete' }],
+        clientRules: [],
+      })
+      .expect(400);
+  });
+
+  test('rejects duplicate ids in one layer', async () => {
+    await request(app.getHttpServer())
+      .post('/api/rules/validate')
+      .send({
+        systemRules: [systemRule],
+        clientRules: [clientRule, { ...clientRule, action: 'suppress' }],
+      })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post('/api/rules/validate')
+      .send({
+        systemRules: [systemRule, { ...systemRule, priority: 20 }],
+        clientRules: [],
+      })
+      .expect(400);
+  });
+
+  test('rejects more than 200 rules in one layer', async () => {
+    const manyRules = Array.from({ length: 201 }, (_, index) => ({
+      ...systemRule,
+      id: `rule-${index}`,
+    }));
+    await request(app.getHttpServer())
+      .post('/api/rules/validate')
+      .send({ systemRules: manyRules, clientRules: [] })
+      .expect(400);
+  });
+});

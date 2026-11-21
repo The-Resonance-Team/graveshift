@@ -8,6 +8,9 @@ export interface paths {
   "/healthz": {
     get: operations["HealthController_getHealth"];
   };
+  "/api/rules/validate": {
+    post: operations["RulesController_validate"];
+  };
 }
 
 export type webhooks = Record<string, never>;
@@ -36,6 +39,63 @@ export interface operations {
           "application/json": {
             /** @enum {string} */
             status: "ok";
+          };
+        };
+      };
+    };
+  };
+  RulesController_validate: {
+    requestBody: {
+      content: {
+        "application/json": {
+          systemRules: ({
+              id: string;
+              enabled: boolean;
+              priority: number;
+              match: {
+                severities?: ("info" | "warning" | "critical")[];
+                services?: string[];
+                types?: string[];
+                tenantId?: string;
+              };
+              /** @enum {string} */
+              action: "detect" | "suppress" | "escalate";
+            })[];
+          clientRules: ({
+              id: string;
+              enabled: boolean;
+              priority: number;
+              match: {
+                severities?: ("info" | "warning" | "critical")[];
+                services?: string[];
+                types?: string[];
+                tenantId?: string;
+              };
+              /** @enum {string} */
+              action: "detect" | "suppress" | "escalate";
+            })[];
+          confirmOverrides?: boolean;
+        };
+      };
+    };
+    responses: {
+      /** @description The rule set is accepted. No rule is stored. */
+      200: {
+        content: {
+          "application/json": {
+            /** @enum {boolean} */
+            accepted: true;
+            overrideIds: string[];
+            warning: string;
+          };
+        };
+      };
+      /** @description The rule overrides are not confirmed. */
+      409: {
+        content: {
+          "application/json": {
+            overrideIds: string[];
+            warning: string;
           };
         };
       };
