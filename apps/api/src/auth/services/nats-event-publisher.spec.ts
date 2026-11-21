@@ -3,9 +3,14 @@ import { createInMemoryPublisher } from '@graveshift/events/testing';
 import type { NatsPublisherHandle } from '@graveshift/events/nats';
 import { describe, expect, test } from 'bun:test';
 
-import { TEST_CONFIG } from '../../../test/fakes/auth-test-config';
+import type { EventsConfig } from '../../mcp/events/events.config';
 import type { NatsConnector } from '../auth.types';
 import { NatsEventPublisher } from './nats-event-publisher';
+
+const config = (natsUrl?: string): EventsConfig => ({
+  natsUrl,
+  stream: 'GRAVESHIFT_EVENTS',
+});
 
 const envelope: EventEnvelope = {
   id: 'evt-1',
@@ -27,7 +32,7 @@ const makeHandle = (): NatsPublisherHandle => ({
 
 describe('NatsEventPublisher', () => {
   test('fails closed with 503 when NATS is not configured', async () => {
-    const publisher = new NatsEventPublisher({ ...TEST_CONFIG, natsUrl: undefined }, async () =>
+    const publisher = new NatsEventPublisher(config(), async () =>
       makeHandle(),
     );
     let code = 0;
@@ -47,7 +52,7 @@ describe('NatsEventPublisher', () => {
       return makeHandle();
     };
     const publisher = new NatsEventPublisher(
-      { ...TEST_CONFIG, natsUrl: 'nats://127.0.0.1:4222' },
+      config('nats://127.0.0.1:4222'),
       connect,
     );
     await Promise.all([
@@ -67,7 +72,7 @@ describe('NatsEventPublisher', () => {
       return makeHandle();
     };
     const publisher = new NatsEventPublisher(
-      { ...TEST_CONFIG, natsUrl: 'nats://127.0.0.1:4222' },
+      config('nats://127.0.0.1:4222'),
       connect,
     );
     let code = 0;
@@ -86,7 +91,7 @@ describe('NatsEventPublisher', () => {
       throw new Error('connection refused');
     };
     const publisher = new NatsEventPublisher(
-      { ...TEST_CONFIG, natsUrl: 'nats://127.0.0.1:4222' },
+      config('nats://127.0.0.1:4222'),
       connect,
     );
     expect(publisher.publish(envelope)).rejects.toThrow();

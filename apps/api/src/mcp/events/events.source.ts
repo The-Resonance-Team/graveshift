@@ -1,18 +1,22 @@
 import {
   Inject,
   Injectable,
+  Optional,
   ServiceUnavailableException,
   type OnModuleDestroy,
 } from '@nestjs/common';
 import { EventEnvelopeSchema, type EventEnvelope } from '@graveshift/core';
-import { jetstream, type JetStreamManager } from '@nats-io/jetstream';
-import { connect, type NatsConnection } from '@nats-io/transport-node';
+import {
+  connectNatsReader,
+  type EventsReader,
+  type NatsReaderHandle,
+} from '@graveshift/events/nats';
 
-import { CREDENTIAL_CONFIG, type AuthConfig } from '../../auth/auth.types';
+import { EVENTS_CONFIG, type EventsConfig } from './events.config';
 import type { EventReadResult, EventSource, StoredEvent } from './events.types';
 
-/** Default stream for normalised envelopes. JetStream is the only backbone. */
-export const DEFAULT_EVENTS_STREAM = 'GRAVESHIFT_EVENTS';
+/** Optional reader seam for tests. Production connects lazily on the first poll. */
+export const NATS_READER = Symbol('NATS_READER');
 
 /** Bounded source used by tests. `headSeq` is the last assigned sequence. */
 @Injectable()
@@ -26,66 +30,103 @@ export class InMemoryEventSource implements EventSource {
   }
 
   read(afterSeq: number | null, maxEvents: number): Promise<EventReadResult> {
-    const from = afterSeq === null ? this.seq + 1 : afterSeq + 1;
+    if (afterSeq === null) {
+      return Promise.resolve({
+        firstSeq: 1,
+        headSeq: this.seq,
+        scannedThroughSeq: this.seq,
+        events: [],
+        truncated: false,
+      });
+    }
+    const firstSeq = 1;
+    const truncated = afterSeq < firstSeq - 1;
+    const from = Math.max(afterSeq + 1, firstSeq);
+    const end = Math.min(this.seq, from + maxEvents - 1);
+    if (end < from) {
+      return Promise.resolve({
+        firstSeq,
+        headSeq: this.seq,
+        scannedThroughSeq: Math.max(this.seq, afterSeq),
+        events: [],
+        truncated,
+      });
+    }
     return Promise.resolve({
+      firstSeq,
       headSeq: this.seq,
-      events: this.stored.filter((item) => item.seq >= from).slice(0, maxEvents),
+      scannedThroughSeq: end,
+      events: this.stored.filter((item) => item.seq >= from && item.seq <= end),
+      truncated,
     });
   }
 }
 
 const decoder = new TextDecoder();
 
-/**
- * Reads envelopes from JetStream by stream sequence. The connection opens on
- * the first read, as the publisher does. A cursor is the stream sequence.
- */
+/** Reads envelopes from JetStream by stream sequence. A cursor is a sequence. */
 @Injectable()
 export class NatsEventSource implements EventSource, OnModuleDestroy {
-  private manager?: JetStreamManager;
-  private connection?: NatsConnection;
+  private cached?: EventsReader;
+  private handle?: NatsReaderHandle;
 
-  constructor(@Inject(CREDENTIAL_CONFIG) private readonly config: AuthConfig) {}
+  constructor(
+    @Inject(EVENTS_CONFIG) private readonly config: EventsConfig,
+    @Optional() @Inject(NATS_READER) private readonly injected?: EventsReader,
+  ) {}
 
-  private async js(): Promise<JetStreamManager> {
+  private async reader(): Promise<EventsReader> {
+    if (this.injected) return this.injected;
+    if (this.cached) return this.cached;
     if (!this.config.natsUrl) throw new ServiceUnavailableException('NATS is not configured');
-    if (!this.manager) {
-      this.connection = await connect({ servers: this.config.natsUrl });
-      this.manager = await jetstream(this.connection).jetstreamManager();
-    }
-    return this.manager;
-  }
-
-  private stream(): string {
-    return this.config.natsStream ?? DEFAULT_EVENTS_STREAM;
+    this.handle = await connectNatsReader(this.config.natsUrl);
+    this.cached = this.handle.reader;
+    return this.cached;
   }
 
   async read(afterSeq: number | null, maxEvents: number): Promise<EventReadResult> {
-    const js = await this.js();
-    const info = await js.streams.info(this.stream());
+    const reader = await this.reader();
+    const info = await reader.streams.info(this.config.stream);
+    const firstSeq = info.state.first_seq;
     const headSeq = info.state.last_seq;
-    if (afterSeq === null || headSeq <= afterSeq) {
-      return { headSeq, events: [] };
+    if (afterSeq === null) {
+      return { firstSeq, headSeq, scannedThroughSeq: headSeq, events: [], truncated: false };
     }
 
-    const last = Math.min(headSeq, afterSeq + maxEvents);
-    const seqs = Array.from({ length: last - afterSeq }, (_, index) => afterSeq + 1 + index);
-    const messages = await Promise.all(
-      seqs.map((seq) => js.streams.getMessage(this.stream(), { seq })),
-    );
-    const events: StoredEvent[] = [];
-    for (const message of messages) {
-      if (!message) continue;
-      const parsed = EventEnvelopeSchema.safeParse(
-        JSON.parse(decoder.decode(message.data)) as unknown,
-      );
-      if (!parsed.success) continue;
-      events.push({ seq: message.seq, envelope: parsed.data });
+    // A cursor below the retained window can no longer be served. Clamp it.
+    const truncated = afterSeq < firstSeq - 1;
+    const from = Math.max(afterSeq + 1, firstSeq);
+    const end = Math.min(headSeq, from + maxEvents - 1);
+    if (end < from) {
+      return {
+        firstSeq,
+        headSeq,
+        scannedThroughSeq: Math.max(headSeq, afterSeq),
+        events: [],
+        truncated,
+      };
     }
-    return { headSeq, events };
+
+    const seqs = Array.from({ length: end - from + 1 }, (_, index) => from + index);
+    const settled = await Promise.all(
+      seqs.map(async (seq): Promise<StoredEvent | undefined> => {
+        try {
+          const message = await reader.streams.getMessage(this.config.stream, { seq });
+          if (!message) return undefined;
+          const value: unknown = JSON.parse(decoder.decode(message.data));
+          const parsed = EventEnvelopeSchema.safeParse(value);
+          return parsed.success ? { seq: message.seq, envelope: parsed.data } : undefined;
+        } catch {
+          // A purged sequence or a bad entry must not stop the other entries.
+          return undefined;
+        }
+      }),
+    );
+    const events = settled.filter((item): item is StoredEvent => item !== undefined);
+    return { firstSeq, headSeq, scannedThroughSeq: end, events, truncated };
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.connection?.close();
+    await this.handle?.close();
   }
 }

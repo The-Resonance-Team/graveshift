@@ -10,6 +10,14 @@ import { EventPollService } from './events.service';
 const UNSUPPORTED = -32026;
 const EXTENSION = 'io.modelcontextprotocol/events';
 
+/** Thrown at boot when the SDK no longer exposes the factory field we wrap. */
+export class EventsBridgeError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'EventsBridgeError';
+  }
+}
+
 const listParams = z.object({}).loose();
 const listResult = z.object({ resultType: z.literal('complete'), events: z.array(z.unknown()) });
 const pollParams = z
@@ -18,7 +26,7 @@ const pollParams = z
     arguments: z.record(z.string(), z.unknown()).optional(),
     cursor: z.string().nullable().optional(),
     maxAgeMs: z.number().int().nonnegative().optional(),
-    maxEvents: z.number().int().positive().optional(),
+    maxEvents: z.number().int().optional(),
   })
   .loose();
 const pollResult = z.object({ resultType: z.literal('complete'), events: z.array(z.unknown()) });
@@ -108,7 +116,12 @@ export class EventsBridge implements OnModuleInit {
   onModuleInit(): void {
     const stdio = this.moduleRef.get(McpStdioServer, { strict: false });
     // Adapter boundary: `factory` is private in the SDK type but public at runtime.
-    const factory = (stdio as unknown as { factory: FactoryLike }).factory;
+    const factory = (stdio as unknown as { factory?: FactoryLike }).factory;
+    if (typeof factory?.create !== 'function') {
+      throw new EventsBridgeError(
+        'McpServerFactory.create is missing; @nestjs/mcp internals changed. Review the Events bridge.',
+      );
+    }
     const original = factory.create.bind(factory);
     // ponytail: wrap the factory until @nestjs/mcp exports a request-handler hook; upgrade when that hook ships.
     factory.create = (serving: ServingLike): McpServer => {

@@ -7,6 +7,7 @@ import {
   EVENT_TYPES,
   findEventType,
   MCP_EVENT_SOURCE,
+  type EventReadResult,
   type EventSource,
   type EventTypeDescriptor,
   type StoredEvent,
@@ -18,6 +19,8 @@ const INVALID_PARAMS = -32602;
 const DEFAULT_MAX_EVENTS = 50;
 const MAX_EVENTS_CEILING = 200;
 const NEXT_POLL_MS = 30_000;
+// Bound the work in one poll even when a long run of entries does not match.
+const SCAN_LIMIT = 10_000;
 
 export interface PollParams {
   name: string;
@@ -32,6 +35,16 @@ interface EventOccurrence {
   name: string;
   timestamp: string;
   data: Record<string, unknown>;
+}
+
+interface ScanState {
+  found: Array<{ occurrence: EventOccurrence; seq: number }>;
+  seen: Set<string>;
+  truncated: boolean;
+  scannedTotal: number;
+  reachedHead: boolean;
+  last: EventReadResult;
+  scanCursor: number | null;
 }
 
 export interface EventListResult {
@@ -49,6 +62,7 @@ export interface EventPollResult {
   resultType: 'complete';
   events: EventOccurrence[];
   cursor: string;
+  /** True when older or purged events were skipped. */
   truncated: boolean;
   hasMore: boolean;
   nextPollMs: number;
@@ -62,7 +76,11 @@ function decodeCursor(cursor: string): number {
   const text = Buffer.from(cursor, 'base64url').toString('utf8');
   const match = /^seq:(\d+)$/.exec(text);
   if (!match) throw new ProtocolError(INVALID_PARAMS, 'InvalidParams', { reason: 'cursor' });
-  return Number(match[1]);
+  const seq = Number(match[1]);
+  if (!Number.isSafeInteger(seq)) {
+    throw new ProtocolError(INVALID_PARAMS, 'InvalidParams', { reason: 'cursor' });
+  }
+  return seq;
 }
 
 function validateArguments(descriptor: EventTypeDescriptor, args: Record<string, unknown>): void {
@@ -109,41 +127,82 @@ export class EventPollService {
     const args = params.arguments ?? {};
     validateArguments(descriptor, args);
 
-    const bootstrap = params.cursor === null || params.cursor === undefined;
-    const afterSeq = bootstrap ? null : decodeCursor(params.cursor as string);
-    const maxEvents = Math.min(params.maxEvents ?? DEFAULT_MAX_EVENTS, MAX_EVENTS_CEILING);
-    if (maxEvents < 1)
-      throw new ProtocolError(INVALID_PARAMS, 'InvalidParams', { reason: 'maxEvents' });
-
-    const read = await this.source.read(afterSeq, maxEvents + 1);
+    const bootstrap = typeof params.cursor !== 'string';
+    let afterSeq: number | null = null;
+    if (typeof params.cursor === 'string') afterSeq = decodeCursor(params.cursor);
+    const maxEvents = Math.max(
+      1,
+      Math.min(params.maxEvents ?? DEFAULT_MAX_EVENTS, MAX_EVENTS_CEILING),
+    );
     const floor =
       !bootstrap && params.maxAgeMs !== undefined ? Date.now() - params.maxAgeMs : undefined;
 
-    let truncated = false;
-    const seen = new Set<string>();
-    const occurrences: Array<{ occurrence: EventOccurrence; seq: number }> = [];
-    for (const stored of read.events) {
-      if (!this.matches(stored, descriptor, args)) continue;
-      if (floor !== undefined && Date.parse(stored.envelope.observedAt) < floor) {
-        truncated = true;
-        continue;
-      }
-      if (seen.has(stored.envelope.id)) continue;
-      seen.add(stored.envelope.id);
-      occurrences.push({ occurrence: this.toOccurrence(stored, descriptor), seq: stored.seq });
-    }
+    const state: ScanState = {
+      found: [],
+      seen: new Set<string>(),
+      truncated: false,
+      scannedTotal: 0,
+      reachedHead: false,
+      last: { firstSeq: 0, headSeq: 0, scannedThroughSeq: 0, events: [], truncated: false },
+      scanCursor: afterSeq,
+    };
+    // A wider raw window limits recursion when many entries do not match.
+    const window = Math.max(maxEvents + 1, 100);
+    await this.scan(state, descriptor, args, floor, maxEvents, window);
 
-    const hasMore = occurrences.length > maxEvents;
-    const page = occurrences.slice(0, maxEvents);
-    const cursorSeq = page.length > 0 ? page[page.length - 1]!.seq : read.headSeq;
+    const hasMore = state.found.length > maxEvents || !state.reachedHead;
+    const page = state.found.slice(0, maxEvents);
+    // Advance only over scanned entries. `headSeq` is safe only at the head.
+    const cursorSeq =
+      page.length > 0
+        ? page[page.length - 1]!.seq
+        : state.reachedHead
+          ? state.last.headSeq
+          : state.last.scannedThroughSeq;
     return {
       resultType: 'complete',
       events: page.map((item) => item.occurrence),
       cursor: encodeCursor(cursorSeq),
-      truncated,
+      truncated: state.truncated,
       hasMore,
       nextPollMs: NEXT_POLL_MS,
     };
+  }
+
+  /** Scan one raw window, then continue from the last scanned sequence. */
+  private async scan(
+    state: ScanState,
+    descriptor: EventTypeDescriptor,
+    args: Record<string, unknown>,
+    floor: number | undefined,
+    maxEvents: number,
+    window: number,
+  ): Promise<void> {
+    const read = await this.source.read(state.scanCursor, window);
+    state.last = read;
+    state.truncated ||= read.truncated;
+    const progress = state.scanCursor === null ? 0 : read.scannedThroughSeq - state.scanCursor;
+    state.scannedTotal += Math.max(progress, 0);
+
+    for (const stored of read.events) {
+      if (!this.matches(stored, descriptor, args)) continue;
+      if (floor !== undefined && Date.parse(stored.envelope.observedAt) < floor) {
+        state.truncated = true;
+        continue;
+      }
+      if (state.seen.has(stored.envelope.id)) continue;
+      state.seen.add(stored.envelope.id);
+      state.found.push({ occurrence: this.toOccurrence(stored, descriptor), seq: stored.seq });
+      if (state.found.length > maxEvents) break;
+    }
+
+    state.reachedHead = read.scannedThroughSeq >= read.headSeq;
+    if (state.found.length > maxEvents || state.reachedHead || state.scannedTotal >= SCAN_LIMIT) {
+      return;
+    }
+    if (state.scanCursor !== null && read.scannedThroughSeq <= state.scanCursor) return;
+    state.scanCursor = read.scannedThroughSeq;
+    return this.scan(state, descriptor, args, floor, maxEvents, window);
   }
 
   private matches(
@@ -165,7 +224,7 @@ export class EventPollService {
       eventId: envelope.id,
       name: descriptor.name,
       timestamp: envelope.observedAt,
-      data: { ...envelope.payload, service: envelope.service, severity: envelope.severity },
+      data: descriptor.parsePayload(descriptor.payloadFrom(envelope)),
     });
   }
 }

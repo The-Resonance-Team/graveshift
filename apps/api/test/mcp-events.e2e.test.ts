@@ -37,29 +37,55 @@ const policy = parsePolicy({
 });
 
 // The client strips the wire `resultType` discriminator before validation.
-const resultSchema = z
-  .object({ resultType: z.string().optional(), events: z.array(z.unknown()).optional() })
-  .loose();
+const envelopeSchema = z.object({ resultType: z.string().optional() }).loose();
 
-interface PollResult {
-  events: Array<Record<string, any>>;
-  cursor: string;
-  truncated: boolean;
-  hasMore: boolean;
-  nextPollMs: number;
-}
+const descriptorSchema = z.object({
+  name: z.string(),
+  delivery: z.array(z.string()),
+  inputSchema: z.object({}).loose(),
+  payloadSchema: z.object({}).loose(),
+});
+const listSchema = z.object({ events: z.array(descriptorSchema) });
+const pollSchema = z.object({
+  events: z.array(
+    z.object({
+      eventId: z.string(),
+      name: z.string(),
+      timestamp: z.string(),
+      data: z.record(z.string(), z.unknown()),
+    }),
+  ),
+  cursor: z.string(),
+  truncated: z.boolean(),
+  hasMore: z.boolean(),
+  nextPollMs: z.number(),
+});
 
-const call = (client: Client, method: string, params: Record<string, unknown>) =>
-  client.request({ method, params }, resultSchema) as Promise<Record<string, any>>;
+const callRaw = (client: Client, method: string, params: Record<string, unknown>) =>
+  client.request({ method, params }, envelopeSchema) as Promise<unknown>;
 
-const errorCode = async (
+async function call<S extends z.ZodType>(
   client: Client,
   method: string,
   params: Record<string, unknown>,
-): Promise<number | undefined> => {
-  const error = await call(client, method, params).catch((reason: unknown) => reason);
-  return (error as { code?: number }).code;
-};
+  schema: S,
+): Promise<z.infer<S>> {
+  const value = await callRaw(client, method, params);
+  const parsed = schema.safeParse(value);
+  if (!parsed.success) throw new Error(`Invalid ${method} result: ${parsed.error.message}`);
+  return parsed.data;
+}
+
+async function errorCode(
+  client: Client,
+  method: string,
+  params: Record<string, unknown>,
+): Promise<number | undefined> {
+  const value = await callRaw(client, method, params).catch((reason: unknown) => reason);
+  if (typeof value !== 'object' || value === null || !('code' in value)) return undefined;
+  const code = (value as { code: unknown }).code;
+  return typeof code === 'number' ? code : undefined;
+}
 
 describe('MCP Events extension through /mcp (e2e)', () => {
   let app!: INestApplication;
@@ -113,9 +139,9 @@ describe('MCP Events extension through /mcp (e2e)', () => {
   });
 
   test('discovers six Event types with inputSchema, payloadSchema and poll delivery', async () => {
-    const result = await call(client, 'events/list', {});
+    const result = await call(client, 'events/list', {}, listSchema);
     expect(result.events).toHaveLength(6);
-    const type = result.events.find((entry: any) => entry.name === 'incident.changed');
+    const type = result.events.find((entry) => entry.name === 'incident.changed');
     expect(type).toMatchObject({
       delivery: ['poll'],
       inputSchema: { type: 'object' },
@@ -138,20 +164,20 @@ describe('MCP Events extension through /mcp (e2e)', () => {
   });
 
   test('bootstraps a poll with a null cursor and persists the returned cursor', async () => {
-    const result = (await call(client, 'events/poll', {
-      name: 'incident.changed',
-      arguments: {},
-      cursor: null,
-    })) as PollResult;
+    const result = await call(
+      client,
+      'events/poll',
+      { name: 'incident.changed', arguments: {}, cursor: null },
+      pollSchema,
+    );
     expect(result.events).toEqual([]);
     expect(result.truncated).toBe(false);
     expect(result.hasMore).toBe(false);
     expect(result.nextPollMs).toBeGreaterThan(0);
-    expect(typeof result.cursor).toBe('string');
     persistedCursor = result.cursor;
   });
 
-  test('polls a stored envelope with the persisted cursor and redacts the payload', async () => {
+  test('polls a stored envelope with the persisted cursor and returns schema data', async () => {
     source.push(
       validEnvelope({
         id: 'evt-poll-1',
@@ -159,28 +185,31 @@ describe('MCP Events extension through /mcp (e2e)', () => {
         payload: { note: 'contact alice@example.com', restarts: 3 },
       }),
     );
-    const result = (await call(client, 'events/poll', {
-      name: 'incident.changed',
-      arguments: {},
-      cursor: persistedCursor,
-    })) as PollResult;
+    const result = await call(
+      client,
+      'events/poll',
+      { name: 'incident.changed', arguments: {}, cursor: persistedCursor },
+      pollSchema,
+    );
     expect(result.events).toHaveLength(1);
     expect(result.events[0]).toMatchObject({
       eventId: 'evt-poll-1',
       name: 'incident.changed',
-      data: { service: 'api', severity: 'info', restarts: 3 },
+      data: { incidentId: 'evt-poll-1', service: 'api', state: 'open', severity: 'info' },
     });
     expect(JSON.stringify(result.events[0])).not.toContain('alice@example.com');
+    expect(JSON.stringify(result.events[0])).not.toContain('restarts');
     expect(result.cursor).not.toBe(persistedCursor);
     persistedCursor = result.cursor;
   });
 
   test('a second poll with the new cursor returns no events', async () => {
-    const result = (await call(client, 'events/poll', {
-      name: 'incident.changed',
-      arguments: {},
-      cursor: persistedCursor,
-    })) as PollResult;
+    const result = await call(
+      client,
+      'events/poll',
+      { name: 'incident.changed', arguments: {}, cursor: persistedCursor },
+      pollSchema,
+    );
     expect(result.events).toEqual([]);
     expect(result.hasMore).toBe(false);
   });
