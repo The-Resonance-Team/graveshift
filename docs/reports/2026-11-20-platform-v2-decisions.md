@@ -95,7 +95,7 @@ Confirmed. Adapt `@nestjs/mcp`.
 
 ### Q6 — Effect rebuild
 
-Confirmed. Move the current daemon to `apps/_daemon`. Scaffold an Effect v4 project from the official CLI and rebuild the daemon from scratch. If the CLI init needs interaction, the owner must run that step manually.
+Confirmed. Keep the original daemon as reference during the transition. Scaffold an Effect v4 project from the official CLI and rebuild the daemon from scratch. If the CLI init needs interaction, the owner must run that step manually.
 
 ### Q7 — rule overrides
 
@@ -143,7 +143,7 @@ The owner answered Q3 and Q4 and wrote "Agree remain recommends" for the rest. T
 
 ### Q1 — agreed
 
-Round 1 Q2 to Q9 are agreed, with gateway controls on every model call. PR #17 closes unmerged. ADR 0001 is superseded. The old daemon stays at `apps/_daemon` for reference only.
+Round 1 Q2 to Q9 are agreed, with gateway controls on every model call. PR #17 closes unmerged. ADR 0001 is superseded. The original daemon was kept for reference at this point. Its removal is recorded in [ADR 0009](../adr/0009-remove-v1-daemon-and-diagnosis-model-path.md).
 
 ### Q2 — agreed
 

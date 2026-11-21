@@ -108,9 +108,11 @@ describe('real generateObject wrapper with a fake fetch (no network)', () => {
     const seen: Seen[] = [];
     const adapter = createAdapter(compatible(), { env, fetch: replay(fixture, seen) });
     const result = await adapter.generateObject(request);
-    expect(result.object).toEqual({ category: 'code_bug', confidence: 0.8 });
-    expect(result.model).toBe('qwen3.8-flash-next');
-    expect(result.usage).toEqual({ in: 120, out: 30 });
+    expect(result).toEqual({
+      object: { category: 'code_bug', confidence: 0.8 },
+      model: 'qwen3.8-flash-next',
+      usage: { in: 120, out: 30 },
+    });
     expect(seen).toHaveLength(1);
     expect(seen[0]?.url).toBe('https://models.test/v1/chat/completions');
     expect(seen[0]?.hasSignal).toBe(true);

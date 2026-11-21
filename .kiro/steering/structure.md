@@ -10,21 +10,25 @@ graveshift/
 ├── .kiro/                         # NEVER gitignore (except settings/mcp.json)
 ├── apps/
 │   ├── api/                       # NestJS API: /healthz, /api/rules/validate, MCP /mcp and stdio launcher
-│   ├── dashboard/                 # Next.js graveyard UI
-│   └── daemon/                    # main process: watcher→diagnoser→fixer→notifier, HTTP API (Fastify) + SSE
+│   └── daemon/                    # Effect v4 on Bun, health route only
 ├── packages/
-│   ├── core/                      # Zod schemas, types, state machine, event bus, config loader
+│   ├── agents/                    # Agent config and routing
+│   ├── api-contract/              # Generated API types
+│   ├── core/                      # Zod schemas, state machine, rule engine
+│   ├── events/                    # Event publishing
+│   ├── integrations/              # Plugin and Collector contracts
+│   ├── patch/                     # Patch generation and guard
+│   ├── plugin-nestjs/             # NestJS Plugin
 │   ├── policy/                    # policy.yaml loader + PolicyEngine (pure, deterministic)
 │   ├── redactor/                  # secret/PII redaction (pure) + PBT
 │   ├── sources-docker/            # RuntimeSource via docker-socket-proxy (dockerode)
 │   ├── sources-k8s/               # RuntimeSource via @kubernetes/client-node
 │   ├── metrics/                   # Prometheus PromQL client
 │   ├── watcher/                   # Wraith: rules, dedupe, fingerprint
-│   ├── diagnoser/                 # Medium: context builder, prompts, evidence validator
-│   ├── fixer/                     # Exorcist: patch generation, path guard, GitHub App client, draft PRs
-│   ├── notifier-discord/          # Banshee: discord.js bot, embeds, buttons, slash commands
-│   ├── llm/                       # LlmGateway: diagnosis-only provider path + fallback + budget
-│   ├── gateway/                   # single Agent model-call path: redaction, budget, audit, retry, rules-only
+│   ├── diagnoser/                 # Medium: gateway, evidence validation and rules-only fallback
+│   ├── fixer/                     # Exorcist: GitHub App client and draft PRs
+│   ├── notifier-discord/          # Banshee stub
+│   ├── gateway/                   # Single model path for all Agents
 │   ├── store/                     # Drizzle ORM (SQLite default / Postgres), audit log
 │   └── actuator/                  # separate deployable: executes approved signed actions only
 ├── examples/haunted-candy-shop/   # fault-injectable demo app (api + worker + postgres)
@@ -36,7 +40,7 @@ graveshift/
 ├── powers/graveshift/             # Kiro Power (stretch)
 ├── scripts/kiro/                  # guard-shell.mjs, secret-scan.mjs (used by hooks)
 ├── docs/                          # ARCHITECTURE.md, SECURITY.md, DECISIONS.md, DEMO.md
-├── policy.example.yaml · graveshift.config.example.yaml
+├── policy.example.yaml · agents.example.yaml
 ├── KIRO_USAGE.md · README.md · LICENSE (Apache-2.0) · NOTICE
 ├── bunfig.toml · package.json · tsconfig.base.json
 ├── .oxfmtrc.json · .oxlintrc.json

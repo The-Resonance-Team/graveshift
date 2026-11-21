@@ -1,9 +1,0 @@
-# EXAMPLE - no real secrets. The API key comes only from OPENAI_COMPATIBLE_API_KEY in the environment.
-llm:
-  provider: openai-compatible
-  model: qwen3.8-flash-next
-  baseUrl: http://100.67.91.54:8888/v1
-  timeoutMs: 30000
-  maxRetries: 1
-  priceTableUsdPer1M:
-    qwen3.8-flash-next: { in: 0, out: 0 } # set real prices to make the daily budget meaningful

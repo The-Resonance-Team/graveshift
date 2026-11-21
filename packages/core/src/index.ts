@@ -1,6 +1,4 @@
-export { ConfigSchema, loadConfigFile, parseConfig } from './config';
-export type { Config } from './config';
-export { ConfigError, err, GraveshiftError, ok, TransitionError, TriageError } from './errors';
+export { err, GraveshiftError, ok, TransitionError, TriageError } from './errors';
 export type { Result, TransitionErrorCode, TriageErrorCode } from './errors';
 export {
   DEFAULT_RULE_ACTION,

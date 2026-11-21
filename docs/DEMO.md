@@ -1,6 +1,6 @@
 # Demo: Haunted Candy Shop
 
-`examples/haunted-candy-shop` is a fault-injectable app: an `api` (port 2600), a `worker` (port 2601) and Postgres. The v1 daemon watched it through the read-only docker-socket-proxy and Prometheus. That daemon is unavailable in v2.
+`examples/haunted-candy-shop` contains an API on port 2600, a worker on port 2601 and Postgres. The demo API can introduce faults on request.
 
 Themed names are UI copy only. In code and APIs they are `incident`, `approval` and `service`.
 
@@ -28,13 +28,11 @@ The `actuator` image builds from `deploy/compose/bun.Dockerfile`. The new daemon
 export ACTUATOR_HMAC_SECRET=$(openssl rand -hex 32)
 ```
 
-The new daemon serves only `GET /healthz` on port 2602 when run directly with Bun. Compose does not start it. The v1 `/api/*` routes are unavailable in v2. The demo api and worker publish ports 2600 and 2601 on `127.0.0.1`; if another app holds port 2600, run the curl commands below from inside the Compose network (`docker compose exec`).
+The daemon serves only `GET /healthz` on port 2602 when run directly with Bun. The demo API and worker publish ports 2600 and 2601 on `127.0.0.1`. If another app holds port 2600, run the curl commands from inside the Compose network with `docker compose exec`.
 
 ## Watch the Haunting
 
-1. No dashboard ships in this branch. The v1 daemon API and the curl commands below are unavailable in v2. Use the demo API directly. A Next.js UI will be scaffolded separately.
-2. In v1, injecting `null-candy` made the daemon report a `diagnosed` incident for `api`. Diagnosis used one configured AI SDK model (`llm` in `graveshift.config.yaml`, key in `OPENAI_COMPATIBLE_API_KEY`), with a rules-only fallback. This flow is unavailable in v2.
-3. In v1, `curl localhost:2602/api/audit/verify` returned `{"ok":true,"length":N}`. This route is unavailable in v2.
+Use the demo API directly. Check demo logs and Prometheus metrics when you introduce a fault. The dashboard and the daemon incident flow are planned.
 
 What does not happen yet: no draft pull request opens, because no patch generator is wired; no Discord message is sent; the daemon has no approval endpoint, so the `memory-leech` restart cannot be blessed. The actuator rejects an unsigned request with 403, which you can check with `curl -X POST localhost:2603/actions` from inside the network.
 
@@ -71,7 +69,7 @@ curl -X POST localhost:2600/__reset -H "x-haunt-token: $OWNER_TOKEN"
 curl -X POST localhost:2601/__reset -H "x-haunt-token: $OWNER_TOKEN"
 ```
 
-Closing demo PRs and archiving incidents is not implemented. The v1 daemon kept incidents in memory, but it is unavailable in v2, so `docker compose restart graveshift` no longer applies. A `bun run demo:reset` wrapper is not provided. A scheduled daily reset belongs to the public demo (issue #14).
+For now, reset the demo through the two endpoints above. A scheduled daily reset belongs to the public demo (issue #14).
 
 ## Kind (Kubernetes)
 
@@ -85,4 +83,4 @@ docker compose -f deploy/compose/graveshift.compose.yml -f deploy/compose/demo.c
 
 ## Verified locally
 
-Run on Docker with the demo compose file: `null-candy` (500 then 200 after reset), `slow-curse` (1.8 s then 9 ms), `wrong-potion` (503 then 200) and `memory-leech` (Docker emitted `oom` and `die` with exit code 137). These checks are for the demo app only. The v1 daemon checks (SSE, `diagnosed` with category `code_bug`, audit chain verification) are unavailable in v2. Kubernetes behavior is covered by fixture tests only; no cluster was available.
+Run on Docker with the demo compose file: `null-candy` (500 then 200 after reset), `slow-curse` (1.8 s then 9 ms), `wrong-potion` (503 then 200) and `memory-leech` (Docker emitted `oom` and `die` with exit code 137). These checks cover the demo app. Fixture tests cover Kubernetes behavior.

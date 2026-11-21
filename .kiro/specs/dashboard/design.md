@@ -1,7 +1,7 @@
 # Dashboard — Design
 
 ## Interfaces
-- Server-sent events endpoint from `apps/daemon` → client store.
+- Planned event stream from `apps/api` → client store.
 - Views: GraveyardGrid, IncidentTimeline, AuditPanel (chain badge), HauntPanel, ModeView, FirstRunWizard.
 
 ## Data flow

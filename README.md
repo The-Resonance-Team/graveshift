@@ -2,7 +2,7 @@
 
 A haunted on-call crew of AI agents that works the graveyard shift so you do not have to.
 
-> **Status:** the v1 daemon is at `apps/_daemon`. It is reference only and is not built or started. The new daemon at `apps/daemon` is an Effect v4 skeleton on Bun. It serves a health route and has no use cases yet. The v1 Wraith, Medium and other packages stay in `packages/`. Discord (the Banshee), the Kubernetes manifests and bootstrap, and a public demo are **not** done. See [Not done yet](#not-done-yet).
+> **Status.** The daemon in `apps/daemon` is an Effect v4 skeleton on Bun. It serves a health route. The incident flow, Discord, Kubernetes deployment and public demo are planned. See [Not done yet](#not-done-yet).
 
 ## Problem
 
@@ -15,14 +15,14 @@ Indie developers, teams of one to ten developers, students with deployed project
 ## How it works
 
 1. **Wraith** (`packages/watcher`) turns runtime events, logs and Prometheus queries into detections with seven rules, a 10-minute fingerprint dedupe and one haunting (incident) per service.
-2. **Medium** (`packages/diagnoser`) builds a diagnosis from logs and signals. Logs are wrapped as untrusted, evidence is validated, and one retry then `needs_human` applies. Model calls go only through `packages/llm` (one model through the Vercel AI SDK OpenAI-compatible provider; rules-only when the model is unavailable or its output is invalid).
+2. **Medium** (`packages/diagnoser`) builds a diagnosis from logs and signals. It sends redacted context to the selected Agent through `packages/gateway`. It checks evidence and uses a rules-only diagnosis when the model is unavailable, its budget is exhausted or its output remains invalid after one validation retry.
 3. **Policy** (`packages/policy`) decides every action. It is pure, deny-first and default deny.
 4. **Exorcist** (`packages/fixer`) pushes to a `graveshift/` branch and opens a draft pull request. It has no merge call. The daemon does not yet generate patches, so no real draft pull request opens today.
 5. **Actuator** (`packages/actuator`) is a separate service that runs only approved, HMAC-signed, unexpired, single-use actions.
-6. **Banshee** (Discord) is a stub. Notifications go to a no-op notifier and blessings cannot be given yet.
-7. Everything is written to a hash-chained audit log (`packages/store`), and the API in `apps/api` exposes `graveshift-mcp` read tools to Kiro.
+6. **Banshee** (Discord) is a stub. Notifications and blessings are planned.
+7. `packages/store` provides the audit chain. The API in `apps/api` exposes `graveshift-mcp` read tools to Kiro.
 
-These steps describe the v1 code at `apps/_daemon`. The new Effect v4 daemon does not run them yet.
+The packages implement these steps. The daemon still needs to connect them.
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md), [docs/SECURITY.md](docs/SECURITY.md) and [GLOSSARY.md](GLOSSARY.md).
 
@@ -43,8 +43,6 @@ docker compose -f deploy/compose/graveshift.compose.yml -f deploy/compose/demo.c
 
 The new daemon serves `GET /healthz` on port 2602 and binds to 127.0.0.1 by default. Set `PORT` to change the port. Compose does not start the daemon. No dashboard ships in this branch; a Next.js UI will be scaffolded separately.
 
-The v1 daemon still ran without an LLM config and wrote rules-only diagnoses. To use a model with that reference code, copy `graveshift.config.example.yaml`, set `llm.model` and `llm.baseUrl`, and put the key in `OPENAI_COMPATIBLE_API_KEY` (see `.env.example`).
-
 Inject a fault and reset it: see [docs/DEMO.md](docs/DEMO.md).
 
 ## Kubernetes
@@ -57,7 +55,7 @@ The Kubernetes runtime source (`packages/sources-k8s`) is tested against fixture
 - Runtime actions need a policy rule and a human blessing. In `act` mode a runtime action is still `require_approval`.
 - Every string sent to a language model, log line, audit payload or MCP response passes through the redactor.
 - A deterministic policy engine decides actions. Model output cannot grant permission.
-- Every decision is written to a hash-chained, append-only audit log.
+- Audit entries are append-only and hash-chained. Daemon audit wiring is planned.
 - The circuit breaker disables auto-actions for a service when a haunting reopens within 10 minutes of an action.
 
 ## Not done yet
@@ -66,14 +64,14 @@ The Kubernetes runtime source (`packages/sources-k8s`) is tested against fixture
 | --- | --- |
 | Discord Banshee bot, blessings and banishments, so no approval endpoint exists in the daemon | #13 |
 | Kubernetes Deployments, kind overlay, working `bootstrap.sh`, public k3s demo with daily reset | #14 |
-| Patch generation, so `openFix` is unset and no draft pull request opens | none yet |
+| Daemon and API wiring for model calls and draft pull requests | none yet |
 | Provider keys, GitHub App and Discord application | #12 |
 | Demo video and Devpost submission (human only) | #15 |
 | Kiro usage screenshots and final write-up | #16 |
 
 ## Configuration
 
-See `policy.example.yaml` and `graveshift.config.example.yaml`. No secrets are committed.
+See `policy.example.yaml` for policy and `agents.example.yaml` for Agent config. Each Agent names its model, provider and key environment variable. See `.env.example` for the key names used by the example Agents.
 
 ## Built with Kiro
 
@@ -83,9 +81,10 @@ The `.kiro` directory holds steering, specs, hooks and agents. See [KIRO_USAGE.m
 
 ```text
 .kiro/       steering, specs, hooks, agents and MCP settings
-apps/        _daemon (v1 reference only), api (NestJS API and MCP), daemon (new Effect v4 skeleton)
-packages/    core, store, policy, redactor, metrics, sources-docker, sources-k8s,
-             watcher, llm, diagnoser, fixer, actuator, notifier-discord (stub)
+apps/        api (NestJS API and MCP), daemon (Effect v4 skeleton)
+packages/    actuator, agents, api-contract, core, diagnoser, events, fixer, gateway,
+             integrations, metrics, notifier-discord, patch, plugin-nestjs, policy,
+             redactor, sources-docker, sources-k8s, store, watcher
 deploy/      compose (working), k8s base and kind (scaffold), helm (scaffold)
 examples/    the haunted candy shop demo app
 powers/      the Graveshift Kiro Power scaffold

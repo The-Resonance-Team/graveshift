@@ -1,9 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import fc from 'fast-check';
 
-import { parseConfig, loadConfigFile } from './config';
 import { runRuntimeSourceContract } from './contract';
-import { ConfigError } from './errors';
 import { action, approval, diagnosis, incidentAt } from './fixtures';
 import { type RuntimeEvent, RuntimeEventSchema, type RuntimeSource } from './runtime-source';
 import {
@@ -59,20 +57,6 @@ describe('schemas', () => {
         );
       }),
     );
-  });
-});
-
-describe('config', () => {
-  test('loads the example config', async () => {
-    const config = await loadConfigFile(
-      `${import.meta.dir}/../../../graveshift.config.example.yaml`,
-    );
-    expect(config.llm.provider).toBe('openai-compatible');
-    expect(config.llm.model).toBe('qwen3.8-flash-next');
-  });
-
-  test('rejects invalid config with a typed error', () => {
-    expect(() => parseConfig({ llm: { provider: 'gemini' } })).toThrow(ConfigError);
   });
 });
 

@@ -148,6 +148,9 @@ export function createGateway(options: GatewayOptions) {
       cost += charged;
       model = response.model;
 
+      if ('validationError' in response) {
+        return { kind: 'invalid', reason: response.validationError };
+      }
       const parsed = task.schema.safeParse(response.object);
       let problem: string | undefined;
       if (parsed.success) {

@@ -12,7 +12,7 @@ Graveshift is read-only toward production by default. These rules match `.kiro/s
 6. **No Docker socket, no cluster-admin.** The daemon reaches Docker only through the read-only socket proxy. `docker.sock` is mounted only into the two proxies. The Kubernetes source uses the in-cluster ServiceAccount.
 7. **No secrets in the repository.** `.env*` is gitignored. Example files hold placeholders. `scripts/kiro/secret-scan.mjs` runs on save through a Kiro hook.
 8. **Circuit breaker.** If a haunting reopens within 10 minutes of an action, auto-actions for that service stop. The helper is in `packages/core` and the actuator applies it. **Paging humans needs Discord and is not built.**
-9. **Agent model calls.** `packages/gateway` is the single model path for an Agent. It reads each key from the process environment variable named by `apiKeyEnv` in the Agent config, never from YAML, and rejects an unset or placeholder key. Every call applies redaction, a per-Agent and global UTC daily budget, one audit event, transport retry from config, one redacted validation retry, evidence validation and a rules-only fallback. A model output cannot grant a permission. The budget check and the charge are separate steps, so concurrent calls can spend more than the daily limit. Diagnosis still uses `packages/llm`; issue #40 will move it into the gateway.
+9. **Agent model calls.** `packages/gateway` is the single model path, including diagnosis. `apiKeyEnv` names an environment variable. Do not store keys in YAML. The adapter rejects an unset or placeholder key. The gateway redacts model inputs, applies per-Agent and global UTC daily budgets, and sends one audit event for each result to the supplied callback. Transport retry follows the gateway config. Validation gets one retry with a redacted reason if budget remains. Diagnosis checks evidence refs and supplies a rules-only fallback. Policy is the authority for permissions. ADR 0009 removed the reference daemon and `packages/llm`.
 
 ## Audit chain
 
@@ -22,7 +22,7 @@ Graveshift is read-only toward production by default. These rules match `.kiro/s
 - SQLite triggers abort every `UPDATE` and `DELETE`.
 - `verifyChain()` walks all entries and returns the first broken `seq` with a reason (`sequence gap or reorder`, `prevHash mismatch` or `hash mismatch`). Tests cover edits to any field, removal and reordering, and a payload with a `__proto__` key.
 - Limit: deleting the newest entries is not detected without publishing the head hash somewhere else.
-- LLM calls are reported through the gateway's audit callback. The daemon writes them to the pino log only, so they are not in the chain yet.
+- The gateway emits model call events through an audit callback. Connection to the audit chain is planned.
 
 ## MCP server
 
@@ -44,7 +44,7 @@ The store writes one JSON file with mode 0600 and an atomic replace. It keeps a 
 - Consumed actuator token IDs are in memory; a restart inside the 15-minute window forgets them.
 - The Kubernetes network policy allows all egress. Egress allowlisting is not done.
 - The `pods/log` rule exposes log contents to the daemon. For real users, use a namespace-scoped Role instead of the ClusterRole.
-- Agent keys come from the environment variable named by `apiKeyEnv`. The key is never read from YAML, and an unset or placeholder value rejects the adapter. The Agent config schema requires an https `baseUrl` with no URL credentials. Diagnosis still uses the `OPENAI_COMPATIBLE_API_KEY` path in `packages/llm`; issue #40 will unify the two paths. The budget check and the charge are not atomic, so a burst of concurrent calls can spend more than the daily limit.
+- Agent config requires an HTTPS `baseUrl` without URL credentials. The budget check and charge are separate steps. Concurrent calls can spend more than the daily limit.
 - Kubernetes code is tested with fixtures only.
 - The credential store is one file for one API process. Concurrent writers need an exclusive-lock store.
 - `GRAVESHIFT_OAUTH_JWT_SECRET` has no default. Set it to a secret of at least 32 characters before boot.

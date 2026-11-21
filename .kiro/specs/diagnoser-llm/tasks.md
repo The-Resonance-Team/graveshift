@@ -1,8 +1,8 @@
 # Diagnoser + LLM — Tasks
 
-- [ ] `LlmGateway` with one AI SDK provider and rules-only fallback (R1)
-- [ ] Budget tracking (R2.1)
-- [ ] Context builder with size caps and redaction (R3)
-- [ ] Evidence validator + one-retry / needs_human (R4)
-- [ ] Rules-only fallback (R5.1)
-- [ ] Recorded fixtures + per-adapter schema tests (R6)
+- [x] Diagnosis through the selected Agent in `packages/gateway` (R1)
+- [x] Agent and global budget checks (R2)
+- [x] Context size limits and redaction (R3)
+- [x] Evidence validation and one validation retry (R4)
+- [x] Rules-only fallback (R5)
+- [x] Recorded responses through the gateway adapter (R6)

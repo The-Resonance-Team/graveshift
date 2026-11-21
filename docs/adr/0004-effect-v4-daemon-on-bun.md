@@ -2,6 +2,8 @@
 
 Status: accepted
 
+> [ADR 0009](0009-remove-v1-daemon-and-diagnosis-model-path.md) removed the reference daemon and `packages/llm`.
+
 The new daemon is written from scratch in Effect v4 (`effect@4.1.5`, `@effect/platform-bun@4.1.5`) on Bun. The old daemon moves to `apps/_daemon` and is not extended. Scaffolding is non-interactive: `bun init -y`, then `bun add effect @effect/platform-bun`. No official Effect v4 + Bun scaffolder exists.
 
 The daemon is the only long-running service that owns use cases and orchestration. `packages/core` holds pure domain logic and schemas with no Effect runtime and no I/O.

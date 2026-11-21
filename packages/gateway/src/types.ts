@@ -7,11 +7,10 @@ export interface Usage {
   out: number;
 }
 
-export interface GeneratedObject {
-  object: unknown;
+export type GeneratedObject = {
   model: string;
   usage: Usage;
-}
+} & ({ object: unknown } | { validationError: string });
 
 export interface ModelRequest {
   system: string;
