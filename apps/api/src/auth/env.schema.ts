@@ -18,7 +18,7 @@ export const envSchema = z
     // Local-only placeholder. #74 will move this key into the single root boot schema.
     DATABASE_URL: z.preprocess(
       emptyToUndefined,
-      z.string().url().default('postgresql://graveshift@localhost:5436/graveshift'),
+      z.string().url().default('postgresql://graveshift:graveshift@localhost:5436/graveshift'),
     ),
     GRAVESHIFT_CREDENTIALS_PATH: z.preprocess(
       emptyToUndefined,
