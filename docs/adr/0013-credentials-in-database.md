@@ -6,9 +6,11 @@ An earlier design kept Credentials in a file store. On 2026-11-21 the owner chos
 
 The one-way hash of each Credential value stayed in the database. The value itself never entered the database. Names, scopes, tenant scoping, revocation and expiry kept their behavior. The audit trail used the same append-only chain as other decisions. A Credential change and its audit row were written in one transaction.
 
-This decision, ADR 0011 and ADR 0012 superseded the part of ADR 0003 that kept the v1 daemon for reference.
+ADR 0009 already removed the v1 daemon.
+This decision, ADR 0011 and ADR 0012 superseded the remaining part of ADR 0003 that kept the v1 daemon for reference.
 
-Recheck trigger: The owner reviews this decision when an external store for Credentials or their audit trail is proposed. The owner also reviews this decision when the append-only chain changes.
+Recheck trigger: The owner reviews this decision when a hosted secret manager is proposed for Credentials.
+The owner also reviews this decision when the append-only chain changes.
 
 Rejected alternative: keeping the file store as a fallback.
 
