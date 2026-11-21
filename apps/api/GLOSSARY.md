@@ -21,8 +21,8 @@ An opaque position in the event stream. A client stores it and sends it back to 
 A way to deliver Occurrences to a Subscription: poll, push or webhook. Poll is the only mode in v2.
 
 **Watermark**:
-A Cursor at or before which every Occurrence is acknowledged or abandoned. It is safe for the client to persist.
-_Source: the MCP Events extension (SEP-3415), adopted by ADR 0010; v2 ships poll delivery only._
+The highest stream sequence that a poll has scanned. The service returns it as the Cursor and moves it only over scanned sequences. A Cursor clamped below the retained stream window sets `truncated`.
+_Source: `docs/reports/2026-11-21-mcp-events-bridge.md` and `apps/api/src/mcp/events/events.service.ts`._
 
 **Audit chain**:
 The ordered, tamper-evident record of decisions.
