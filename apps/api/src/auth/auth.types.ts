@@ -21,7 +21,6 @@ export interface AuthConfig {
   eventRateLimit: number;
   eventRateTtlMs: number;
   oauthClients: Record<string, OAuthClientConfig>;
-  natsUrl?: string | undefined;
 }
 
 export interface CredentialRecord {

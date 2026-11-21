@@ -52,6 +52,7 @@ export const envSchema = z
     GRAVESHIFT_EVENT_RATE_LIMIT: z.coerce.number().int().min(1).default(60),
     GRAVESHIFT_EVENT_RATE_TTL_MS: z.coerce.number().int().min(1000).default(60_000),
     GRAVESHIFT_NATS_URL: z.preprocess(emptyToUndefined, z.string().url().optional()),
+    GRAVESHIFT_NATS_STREAM: z.preprocess(emptyToUndefined, z.string().default('GRAVESHIFT_EVENTS')),
   })
   .loose();
 

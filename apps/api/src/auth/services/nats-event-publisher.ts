@@ -8,12 +8,8 @@ import type { EventEnvelope } from '@graveshift/core';
 import type { Publisher } from '@graveshift/events';
 import type { NatsPublisherHandle } from '@graveshift/events/nats';
 
-import {
-  CREDENTIAL_CONFIG,
-  NATS_CONNECTOR,
-  type AuthConfig,
-  type NatsConnector,
-} from '../auth.types';
+import { EVENTS_CONFIG, type EventsConfig } from '../../mcp/events/events.config';
+import { NATS_CONNECTOR, type NatsConnector } from '../auth.types';
 
 /** The production publisher. One connection promise is shared by concurrent publishes. */
 @Injectable()
@@ -21,7 +17,7 @@ export class NatsEventPublisher implements Publisher, OnModuleDestroy {
   private handlePromise: Promise<NatsPublisherHandle> | undefined = undefined;
 
   constructor(
-    @Inject(CREDENTIAL_CONFIG) private readonly config: AuthConfig,
+    @Inject(EVENTS_CONFIG) private readonly config: EventsConfig,
     @Inject(NATS_CONNECTOR) private readonly connect: NatsConnector,
   ) {}
 

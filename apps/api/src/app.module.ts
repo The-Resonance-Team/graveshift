@@ -10,6 +10,7 @@ import { CredentialCoreModule } from './auth/credential-core.module';
 import { envSchema } from './auth/env.schema';
 import { ThrottleKeyGenerator } from './auth/throttle-key.generator';
 import { ThrottleKeyModule } from './auth/throttle-key.module';
+import { EventsConfigModule } from './mcp/events/events.config';
 import { GraveshiftMcpModule } from './mcp/mcp.module';
 import { RulesController } from './rules.controller';
 import { WorkItemsModule } from './work-items/work-items.module';
@@ -18,6 +19,7 @@ import { WorkItemsModule } from './work-items/work-items.module';
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validationSchema: envSchema }),
     AuthConfigModule,
+    EventsConfigModule,
     CredentialCoreModule,
     ThrottleKeyModule,
     ThrottlerModule.forRootAsync({

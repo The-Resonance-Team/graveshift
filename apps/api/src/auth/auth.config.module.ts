@@ -16,7 +16,6 @@ export function createAuthConfig(config: ConfigService): AuthConfig {
     eventRateLimit: config.getOrThrow<number>('GRAVESHIFT_EVENT_RATE_LIMIT'),
     eventRateTtlMs: config.getOrThrow<number>('GRAVESHIFT_EVENT_RATE_TTL_MS'),
     oauthClients: config.getOrThrow<Record<string, OAuthClientConfig>>('GRAVESHIFT_OAUTH_CLIENTS'),
-    natsUrl: config.get<string>('GRAVESHIFT_NATS_URL'),
   };
 }
 
