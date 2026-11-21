@@ -25,6 +25,9 @@ const verifier: CredentialVerifier = {
   },
 };
 const fixture = await readFile(new URL('./fixtures/sentry-event.envelope', import.meta.url));
+const sessionFixture = await readFile(
+  new URL('./fixtures/sentry-session.envelope', import.meta.url),
+);
 
 describe('POST /api/:projectId/envelope (e2e)', () => {
   let ctx!: AuthTestApp;
@@ -71,6 +74,12 @@ describe('POST /api/:projectId/envelope (e2e)', () => {
     expect(JSON.stringify(ctx.publisher.envelopes[0]?.payload.request ?? {})).not.toContain(
       'secret',
     );
+  });
+
+  test('accepts an envelope with only skipped items and publishes nothing', async () => {
+    const publishedBefore = ctx.publisher.envelopes.length;
+    await push('12345', sessionFixture).expect(200);
+    expect(ctx.publisher.envelopes).toHaveLength(publishedBefore);
   });
 
   test('rejects an invalid key and a project id bound to another Credential', async () => {

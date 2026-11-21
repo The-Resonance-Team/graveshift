@@ -75,6 +75,7 @@ export class SentryIngestService {
     }
     const safe = {
       ...mapped,
+      type: redact(mapped.type),
       fingerprint: redact(mapped.fingerprint),
       payload: redactValue(mapped.payload) as Record<string, unknown>,
     };

@@ -155,7 +155,7 @@ The adapter accepts `event` items and skips other item types, including `session
 | `fatal`, `error` | `severity: critical` |
 | `warning` | `severity: warning` |
 | `info`, `debug`, or another level | `severity: info` |
-| `timestamp` | `observedAt` |
+| `timestamp`, else envelope `sent_at`, else ingestion time | `observedAt` |
 | `contexts.trace.trace_id`, or event id | `traceId` |
 | Sentry fingerprint, or type + culprit + message | `fingerprint` |
 | Exception, message and request data | Redacted `payload` |
