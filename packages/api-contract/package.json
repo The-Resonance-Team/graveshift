@@ -1,0 +1,18 @@
+{
+  "name": "@graveshift/api-contract",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "bun check --no-script",
+    "test": "bun test",
+    "generate": "cd ../../apps/api && bun ../../packages/api-contract/scripts/generate.ts",
+    "generate:check": "cd ../../apps/api && bun ../../packages/api-contract/scripts/generate.ts --check"
+  },
+  "devDependencies": {
+    "openapi-typescript": "6.7.6"
+  }
+}
