@@ -52,9 +52,9 @@ describe('EventPollService', () => {
     expect(second.hasMore).toBe(false);
   });
 
-  test('does not skip a matching event after 60 non-matching entries', async () => {
+  test('does not skip a match after 250 non-matching entries fill many windows', async () => {
     const { source, service } = setup();
-    for (let index = 0; index < 60; index++) {
+    for (let index = 0; index < 250; index++) {
       source.push(validEnvelope({ id: `skip-${index}`, type: 'log.entry' }));
     }
     source.push(validEnvelope({ id: 'found', type: 'signal.oom' }));
@@ -62,6 +62,30 @@ describe('EventPollService', () => {
     expect(result.events.map((event) => event.eventId)).toEqual(['found']);
     expect(result.hasMore).toBe(false);
     expect(result.truncated).toBe(false);
+    expect(result.cursor).toBe(Buffer.from('seq:251', 'utf8').toString('base64url'));
+  });
+
+  test('resumes across sparse matches with a small scan window', async () => {
+    const { source, service } = setup();
+    service.windowSize = 3;
+    const expected: string[] = [];
+    for (let seq = 1; seq <= 450; seq++) {
+      const isMatch = seq % 97 === 0;
+      const id = isMatch ? `match-${seq}` : `skip-${seq}`;
+      source.push(validEnvelope({ id, type: isMatch ? 'signal.oom' : 'log.entry' }));
+      if (isMatch) expected.push(id);
+    }
+
+    const received: string[] = [];
+    const collect = async (cursor: string, stepsLeft: number): Promise<void> => {
+      if (stepsLeft < 0) return;
+      const result = await poll(service, { name: 'incident.changed', cursor, maxEvents: 2 });
+      received.push(...result.events.map((event) => event.eventId));
+      if (!result.hasMore) return;
+      return collect(result.cursor, stepsLeft - 1);
+    };
+    await collect(START, 20);
+    expect(received).toEqual(expected);
   });
 
   test('deduplicates by eventId within one poll', async () => {
@@ -137,8 +161,9 @@ describe('EventPollService', () => {
 
   test('any interleaving of types resumes without skip or repeat', async () => {
     await fc.assert(
-      fc.asyncProperty(fc.array(fc.boolean(), { maxLength: 40 }), async (flags) => {
+      fc.asyncProperty(fc.array(fc.boolean(), { maxLength: 350 }), async (flags) => {
         const { source, service } = setup();
+        service.windowSize = 3;
         const expected: string[] = [];
         flags.forEach((isMatch, index) => {
           const id = `evt-${index}`;

@@ -71,10 +71,11 @@ No v2 client is blocked by these limits. No linked wayfinder ticket is needed.
   as stubs that answer `-32026 Unsupported`. Push and webhook stay v3 work in
   tickets 68, 69 and 70.
 - The nine tools, two prompts and one resource template are unchanged.
-- Events are registered only for the modern protocol era. A legacy
-  2025-06-18 client gets no Events methods and answers `-32601`. stdio has no
-  bearer header, so scopes resolve to `[]` and every stdio poll returns
-  `-32024 Forbidden`.
+- Events are registered only for the modern protocol era. No Events handlers
+  are registered for legacy 2025-06-18 clients. stdio has no bearer header, so
+  scopes resolve to `[]` and every stdio poll returns `-32024 Forbidden`.
+- The JetStream source fetches at most 16 sequences at a time. A `getMessage`
+  error propagates so the client can retry; only bad payloads are skipped.
 
 ## Known gaps
 

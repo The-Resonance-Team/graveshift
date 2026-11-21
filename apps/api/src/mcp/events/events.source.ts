@@ -63,6 +63,8 @@ export class InMemoryEventSource implements EventSource {
 }
 
 const decoder = new TextDecoder();
+// Bound concurrent stream reads. A full window holds at most this many calls.
+const FETCH_CONCURRENCY = 16;
 
 /** Reads envelopes from JetStream by stream sequence. A cursor is a sequence. */
 @Injectable()
@@ -108,22 +110,38 @@ export class NatsEventSource implements EventSource, OnModuleDestroy {
     }
 
     const seqs = Array.from({ length: end - from + 1 }, (_, index) => from + index);
+    const events = await this.fetch(reader, seqs, 0, []);
+    return { firstSeq, headSeq, scannedThroughSeq: end, events, truncated };
+  }
+
+  /**
+   * Fetch one bounded batch at a time. A getMessage error propagates so the
+   * poll fails and the client can retry; only bad payloads are skipped.
+   */
+  private async fetch(
+    reader: EventsReader,
+    seqs: number[],
+    index: number,
+    acc: StoredEvent[],
+  ): Promise<StoredEvent[]> {
+    const batch = seqs.slice(index, index + FETCH_CONCURRENCY);
     const settled = await Promise.all(
-      seqs.map(async (seq): Promise<StoredEvent | undefined> => {
+      batch.map(async (seq): Promise<StoredEvent | undefined> => {
+        const message = await reader.streams.getMessage(this.config.stream, { seq });
+        if (!message) return undefined;
         try {
-          const message = await reader.streams.getMessage(this.config.stream, { seq });
-          if (!message) return undefined;
           const value: unknown = JSON.parse(decoder.decode(message.data));
           const parsed = EventEnvelopeSchema.safeParse(value);
           return parsed.success ? { seq: message.seq, envelope: parsed.data } : undefined;
         } catch {
-          // A purged sequence or a bad entry must not stop the other entries.
+          // A bad entry must not stop the other entries in this batch.
           return undefined;
         }
       }),
     );
-    const events = settled.filter((item): item is StoredEvent => item !== undefined);
-    return { firstSeq, headSeq, scannedThroughSeq: end, events, truncated };
+    const next = acc.concat(settled.filter((item): item is StoredEvent => item !== undefined));
+    if (index + FETCH_CONCURRENCY >= seqs.length) return next;
+    return this.fetch(reader, seqs, index + FETCH_CONCURRENCY, next);
   }
 
   async onModuleDestroy(): Promise<void> {

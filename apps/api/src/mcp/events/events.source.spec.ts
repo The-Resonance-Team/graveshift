@@ -51,14 +51,33 @@ describe('NatsEventSource', () => {
     expect(result.scannedThroughSeq).toBe(2);
   });
 
-  test('skips a sequence whose getMessage rejects', async () => {
+  test('propagates a transient getMessage error so the poll can retry', async () => {
     const source = new NatsEventSource(
       config,
       fakeReader({
         lastSeq: 2,
         message: (seq) =>
           seq === 1
-            ? Promise.reject(new Error('sequence purged'))
+            ? Promise.reject(new Error('transient NATS timeout'))
+            : Promise.resolve({
+                seq,
+                data: bytes(validEnvelope({ id: 'after', type: 'signal.oom' })),
+              }),
+      }),
+    );
+    const error = await source.read(0, 2).catch((reason: unknown) => reason);
+    expect(error).toBeInstanceOf(Error);
+    expect((error as { message: string }).message).toContain('transient NATS timeout');
+  });
+
+  test('skips a sequence that getMessage reports as missing', async () => {
+    const source = new NatsEventSource(
+      config,
+      fakeReader({
+        lastSeq: 2,
+        message: (seq) =>
+          seq === 1
+            ? Promise.resolve(null)
             : Promise.resolve({
                 seq,
                 data: bytes(validEnvelope({ id: 'after', type: 'signal.oom' })),
@@ -67,6 +86,7 @@ describe('NatsEventSource', () => {
     );
     const result = await source.read(0, 2);
     expect(result.events.map((event) => event.envelope.id)).toEqual(['after']);
+    expect(result.scannedThroughSeq).toBe(2);
   });
 
   test('clamps a cursor below the retained window and reports truncated', async () => {

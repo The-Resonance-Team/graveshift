@@ -102,6 +102,9 @@ function validateArguments(descriptor: EventTypeDescriptor, args: Record<string,
 /** Implements the two v2 Events methods. Payloads are untrusted and get redacted. */
 @Injectable()
 export class EventPollService {
+  /** Test seam: a small window exercises the recursive scan with few entries. */
+  windowSize?: number;
+
   constructor(@Inject(MCP_EVENT_SOURCE) private readonly source: EventSource) {}
 
   list(): EventListResult {
@@ -147,7 +150,7 @@ export class EventPollService {
       scanCursor: afterSeq,
     };
     // A wider raw window limits recursion when many entries do not match.
-    const window = Math.max(maxEvents + 1, 100);
+    const window = this.windowSize ?? Math.max(maxEvents + 1, 100);
     await this.scan(state, descriptor, args, floor, maxEvents, window);
 
     const hasMore = state.found.length > maxEvents || !state.reachedHead;
