@@ -115,6 +115,26 @@ describe('POST /api/events (e2e)', () => {
     await push(key, validEnvelope({ service: 'api', id: 'evt-bound' })).expect(202);
   });
 
+  test('an unbound plugin key publishes for any service in its tenant', async () => {
+    const fresh = await buildAuthApp();
+    const token = accessToken(fresh.jwt, ['tokens:manage', 'events:publish']);
+    const created = await request(fresh.app.getHttpServer())
+      .post('/api/credentials')
+      .set('authorization', `Bearer ${token}`)
+      .send({ kind: 'plugin', name: 'unbound', scopes: ['events:publish'] })
+      .expect(201);
+    const key = created.body.value as string;
+    const pushFresh = (service: string, id: string) =>
+      request(fresh.app.getHttpServer())
+        .post('/api/events')
+        .set('authorization', `Bearer ${key}`)
+        .send(validEnvelope({ service, id }));
+    await pushFresh('api', 'evt-unbound-1').expect(202);
+    await pushFresh('worker', 'evt-unbound-2').expect(202);
+    expect(fresh.publisher.envelopes.some((item) => item.id === 'evt-unbound-2')).toBe(true);
+    await fresh.app.close();
+  });
+
   test('rejects a revoked key', async () => {
     const key = await createKey({ kind: 'plugin', name: 'revoked', scopes: ['events:publish'] });
     const id = ctx.repo.records.find((item) => item.name === 'revoked')?.id;

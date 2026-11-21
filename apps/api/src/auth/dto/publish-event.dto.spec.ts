@@ -22,7 +22,7 @@ describe('PublishEventDto', () => {
   test('accepts the same fields as EventEnvelopeSchema', () => {
     const dto = plainToInstance(PublishEventDto, envelope);
     expect(validateSync(dto)).toEqual([]);
-    expect(Object.keys(dto).sort()).toEqual([...EventEnvelopeSchema.keyof().options].sort());
+    expect(Object.keys(dto).sort()).toEqual(Object.keys(EventEnvelopeSchema.shape).sort());
   });
 
   test('rejects an unknown field at the class-validator layer', () => {

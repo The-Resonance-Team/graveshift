@@ -48,7 +48,7 @@ export interface components {
       /** @description A display name chosen by the client. */
       name: string;
       scopes: ("incidents:read" | "diagnoses:read" | "audit:read" | "logs:read" | "metrics:read" | "fix:propose" | "events:publish")[];
-      /** @description Required for plugin keys. The Grave or service bound to the key. */
+      /** @description Optional Grave or service binding. Plugin keys only. */
       service?: string;
       /** @description Lifetime in seconds. The config default applies when absent. */
       ttlSeconds?: number;

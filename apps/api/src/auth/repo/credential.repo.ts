@@ -104,4 +104,4 @@ export class FileCredentialRepo extends CredentialRepo {
   }
 }
 
-// ponytail: the queue serializes writes in one process only; use a locked store before the API runs in more than one process or pod.
+// Note: the queue serializes writes in one process only. Use a locked store before the API runs in more than one process.

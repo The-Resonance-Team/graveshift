@@ -134,11 +134,21 @@ describe('credential routes (e2e)', () => {
     expect(response.body.items).toEqual([]);
   });
 
-  test('POST requires a service for a plugin key', async () => {
-    await post(manageToken, {
+  test('POST accepts a plugin key without a service binding', async () => {
+    const response = await post(manageToken, {
       kind: 'plugin',
       name: 'unbound',
       scopes: ['events:publish'],
+    }).expect(201);
+    expect(response.body.service).toBeNull();
+  });
+
+  test('POST rejects a service binding on an MCP token', async () => {
+    await post(manageToken, {
+      kind: 'mcp',
+      name: 'bound-reader',
+      scopes: ['incidents:read'],
+      service: 'api',
     }).expect(422);
   });
 

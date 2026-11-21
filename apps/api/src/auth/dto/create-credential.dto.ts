@@ -8,17 +8,19 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
-  ValidateIf,
   Max,
   MaxLength,
   Min,
+  Validate,
 } from 'class-validator';
 
 import { ALL_SCOPES, type CredentialKind } from '../scopes';
+import { NoMcpServiceConstraint } from './no-mcp-service.constraint';
 
 export class CreateCredentialDto {
   @ApiProperty({ enum: ['mcp', 'plugin'] })
   @IsIn(['mcp', 'plugin'])
+  @Validate(NoMcpServiceConstraint)
   kind!: CredentialKind;
 
   @ApiProperty({ description: 'A display name chosen by the client.' })
@@ -35,11 +37,10 @@ export class CreateCredentialDto {
   scopes!: string[];
 
   @ApiPropertyOptional({
-    description: 'Required for plugin keys. The Grave or service bound to the key.',
+    description: 'Optional Grave or service binding. Plugin keys only.',
   })
-  @ValidateIf((body: CreateCredentialDto) => body.kind === 'plugin')
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @MaxLength(120)
   service?: string;
 

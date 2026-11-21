@@ -1888,7 +1888,7 @@
           },
           "service": {
             "type": "string",
-            "description": "Required for plugin keys. The Grave or service bound to the key."
+            "description": "Optional Grave or service binding. Plugin keys only."
           },
           "ttlSeconds": {
             "type": "number",

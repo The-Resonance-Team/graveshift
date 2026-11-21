@@ -40,6 +40,27 @@ describe('boot env config', () => {
     expect(result.success).toBe(false);
   });
 
+  test('rejects the example placeholder secret', () => {
+    const result = envSchema.safeParse({
+      ...base,
+      GRAVESHIFT_OAUTH_JWT_SECRET: 'replace-with-a-32-character-or-longer-secret',
+    });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(
+        result.error.issues.some(
+          (issue) =>
+            issue.message === 'GRAVESHIFT_OAUTH_JWT_SECRET is still the example placeholder',
+        ),
+      ).toBe(true);
+    }
+  });
+
+  test('rejects malformed client registry JSON', () => {
+    const result = envSchema.safeParse({ ...base, GRAVESHIFT_OAUTH_CLIENTS: '{not json' });
+    expect(result.success).toBe(false);
+  });
+
   test('accepts a strong secret', () => {
     const result = envSchema.safeParse({
       ...base,

@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Inject,
@@ -48,8 +49,8 @@ export class CredentialService {
           allowed.includes(scope) && !forbidden.includes(scope) && principal.scopes.includes(scope),
       );
     if (!accepted) throw new ForbiddenException('The requested scopes are not allowed');
-    if (dto.kind === 'plugin' && !dto.service) {
-      throw new ForbiddenException('A plugin key needs a service binding');
+    if (dto.kind === 'mcp' && dto.service) {
+      throw new BadRequestException('An MCP token cannot have a service binding');
     }
 
     // The count and the add must run as one operation, or parallel issues
