@@ -74,6 +74,22 @@ describe('CredentialService', () => {
     ).resolves.toBeDefined();
   });
 
+  test('caps parallel issues at ten active credentials', async () => {
+    const { service } = setup();
+    const results = await Promise.allSettled(
+      Array.from({ length: 20 }, (_, index) =>
+        service.issue(dto({ name: `key-${index}` }), principal),
+      ),
+    );
+    const ok = results.filter((result) => result.status === 'fulfilled');
+    const conflicts = results.filter(
+      (result) =>
+        result.status === 'rejected' && (result.reason as { status?: number }).status === 409,
+    );
+    expect(ok).toHaveLength(10);
+    expect(conflicts).toHaveLength(10);
+  });
+
   test('lists metadata and revokes only own credentials', async () => {
     const { service } = setup();
     const issued = await service.issue(dto(), principal);

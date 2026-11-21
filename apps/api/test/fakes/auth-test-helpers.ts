@@ -24,9 +24,12 @@ export interface AuthTestApp {
   publisher: InMemoryPublisher;
 }
 
-export async function buildAuthApp(overrides: Partial<AuthConfig> = {}): Promise<AuthTestApp> {
+export async function buildAuthApp(
+  overrides: Partial<AuthConfig> = {},
+  publisherOverride?: InMemoryPublisher,
+): Promise<AuthTestApp> {
   const repo = new FakeCredentialRepo();
-  const publisher = createInMemoryPublisher();
+  const publisher = publisherOverride ?? createInMemoryPublisher();
   const config = { ...TEST_CONFIG, ...overrides };
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(CREDENTIAL_CONFIG)

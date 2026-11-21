@@ -24,10 +24,14 @@ import { FORBIDDEN_SCOPES, type CredentialKind, scopesForKind } from '../scopes'
 
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
 const MAX_ACTIVE_CREDENTIALS = 10;
+const MAX_CLIENT_INDEX = 1000;
 
 /** The one issuer and verifier for MCP tokens and plugin API keys. */
 @Injectable()
 export class CredentialService {
+  private lock: Promise<unknown> = Promise.resolve();
+  private readonly clientIndex = new Map<string, string>();
+
   constructor(
     @Inject(CREDENTIAL_REPO) private readonly repo: CredentialRepo,
     @Inject(CREDENTIAL_CONFIG) private readonly config: AuthConfig,
@@ -48,39 +52,43 @@ export class CredentialService {
       throw new ForbiddenException('A plugin key needs a service binding');
     }
 
-    const active = (await this.repo.list()).filter(
-      (record) =>
-        record.clientId === principal.clientId &&
-        record.tenantId === principal.tenantId &&
-        this.isActive(record),
-    );
-    if (active.length >= MAX_ACTIVE_CREDENTIALS) {
-      throw new ConflictException('The active credential limit is reached');
-    }
+    // The count and the add must run as one operation, or parallel issues
+    // all see a free slot.
+    return this.withLock(async () => {
+      const active = (await this.repo.list()).filter(
+        (record) =>
+          record.clientId === principal.clientId &&
+          record.tenantId === principal.tenantId &&
+          this.isActive(record),
+      );
+      if (active.length >= MAX_ACTIVE_CREDENTIALS) {
+        throw new ConflictException('The active credential limit is reached');
+      }
 
-    const value = randomBytes(32).toString('base64url');
-    const now = new Date().toISOString();
-    const ttl = dto.ttlSeconds ?? this.config.defaultTtlSeconds;
-    const record: CredentialRecord = {
-      id: randomUUID(),
-      kind: dto.kind,
-      name: dto.name,
-      prefix: `${dto.kind}_${value.slice(0, 8)}`,
-      hash: digest(value),
-      clientId: principal.clientId,
-      tenantId: principal.tenantId,
-      scopes: [...dto.scopes],
-      service: dto.service ?? null,
-      createdAt: now,
-      expiresAt: new Date(
-        Date.now() + Math.min(ttl, this.config.maxTtlSeconds) * 1000,
-      ).toISOString(),
-      revokedAt: null,
-    };
-    await this.repo.add(record);
-
-    // The value is returned once. It is never stored, logged or listed again.
-    return { ...this.toMetadata(record), prefix: record.prefix, value };
+      const value = randomBytes(32).toString('base64url');
+      const now = new Date().toISOString();
+      const ttl = dto.ttlSeconds ?? this.config.defaultTtlSeconds;
+      const record: CredentialRecord = {
+        id: randomUUID(),
+        kind: dto.kind,
+        name: dto.name,
+        prefix: `${dto.kind}_${value.slice(0, 8)}`,
+        hash: digest(value),
+        clientId: principal.clientId,
+        tenantId: principal.tenantId,
+        scopes: [...dto.scopes],
+        service: dto.service ?? null,
+        createdAt: now,
+        expiresAt: new Date(
+          Date.now() + Math.min(ttl, this.config.maxTtlSeconds) * 1000,
+        ).toISOString(),
+        revokedAt: null,
+      };
+      this.remember(value, record);
+      await this.repo.add(record);
+      // The value is returned once. It is never stored, logged or listed again.
+      return { ...this.toMetadata(record), prefix: record.prefix, value };
+    });
   }
 
   async verify(value: string, expectedKind?: CredentialKind): Promise<VerifiedCredential> {
@@ -96,6 +104,7 @@ export class CredentialService {
     if (!record) throw new UnauthorizedException();
     if (!this.isActive(record)) throw new UnauthorizedException();
     if (expectedKind && record.kind !== expectedKind) throw new UnauthorizedException();
+    this.remember(value, record);
     return {
       id: record.id,
       clientId: record.clientId,
@@ -128,6 +137,28 @@ export class CredentialService {
     if (record.revokedAt === null) {
       await this.repo.replace({ ...record, revokedAt: new Date().toISOString() });
     }
+  }
+
+  /** Sync lookup for the throttler. Only hashes and client ids are kept. */
+  clientIdForKey(value: string): string | undefined {
+    return this.clientIndex.get(digest(value));
+  }
+
+  private remember(value: string, record: CredentialRecord): void {
+    if (this.clientIndex.size >= MAX_CLIENT_INDEX) {
+      const oldest = this.clientIndex.keys().next().value;
+      if (oldest) this.clientIndex.delete(oldest);
+    }
+    this.clientIndex.set(digest(value), `${record.tenantId}:${record.clientId}`);
+  }
+
+  private withLock<T>(task: () => Promise<T>): Promise<T> {
+    const result = this.lock.then(task, task);
+    this.lock = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
   }
 
   private isActive(record: CredentialRecord): boolean {

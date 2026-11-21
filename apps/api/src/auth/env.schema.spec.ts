@@ -1,8 +1,8 @@
-import type { ConfigService } from '@nestjs/config';
 import { describe, expect, test } from 'bun:test';
 
-import { createAuthConfig } from './auth.config.module';
 import { envSchema } from './env.schema';
+
+const SECRET_MESSAGE = 'GRAVESHIFT_OAUTH_JWT_SECRET must be set to at least 32 characters';
 
 const base = {
   NODE_ENV: 'development',
@@ -19,9 +19,20 @@ const base = {
 };
 
 describe('boot env config', () => {
+  test('fails in development when the JWT secret is unset', () => {
+    const result = envSchema.safeParse(base);
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.message === SECRET_MESSAGE)).toBe(true);
+    }
+  });
+
   test('fails in production when the JWT secret is unset', () => {
     const result = envSchema.safeParse({ ...base, NODE_ENV: 'production' });
     expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues.some((issue) => issue.message === SECRET_MESSAGE)).toBe(true);
+    }
   });
 
   test('fails for a short placeholder secret', () => {
@@ -35,20 +46,5 @@ describe('boot env config', () => {
       GRAVESHIFT_OAUTH_JWT_SECRET: 'a-strong-secret-of-32-chars-minimum',
     });
     expect(result.success).toBe(true);
-  });
-
-  test('the config factory uses getOrThrow for the secret', () => {
-    const parsed = envSchema.parse({
-      ...base,
-      GRAVESHIFT_OAUTH_JWT_SECRET: 'a-strong-secret-of-32-chars-minimum',
-    });
-    const config = {
-      getOrThrow: (key: string) => {
-        if (key === 'GRAVESHIFT_OAUTH_JWT_SECRET') throw new Error('missing secret');
-        return (parsed as Record<string, unknown>)[key];
-      },
-      get: (key: string) => (parsed as Record<string, unknown>)[key],
-    } as unknown as ConfigService;
-    expect(() => createAuthConfig(config)).toThrow('missing secret');
   });
 });

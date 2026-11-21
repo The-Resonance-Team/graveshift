@@ -580,6 +580,9 @@
           },
           "401": {
             "description": "The client id or secret is not valid."
+          },
+          "429": {
+            "description": "The client reached its request rate limit."
           }
         },
         "tags": [

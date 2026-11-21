@@ -1,6 +1,7 @@
-import type { INestApplication } from '@nestjs/common';
+import { ServiceUnavailableException, type INestApplication } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import request from 'supertest';
+import { createInMemoryPublisher } from '@graveshift/events/testing';
 
 import {
   accessToken,
@@ -155,8 +156,28 @@ describe('POST /api/events (e2e)', () => {
     await push(key, { blob: 'x'.repeat(4000) }).expect(413);
   });
 
+  test('returns 503 when the NATS publisher is unavailable', async () => {
+    const failing = createInMemoryPublisher();
+    failing.publish = async () => {
+      throw new ServiceUnavailableException('NATS is not configured');
+    };
+    const down = await buildAuthApp({}, failing);
+    const token = accessToken(down.jwt, ['tokens:manage', 'events:publish']);
+    const created = await request(down.app.getHttpServer())
+      .post('/api/credentials')
+      .set('authorization', `Bearer ${token}`)
+      .send({ kind: 'plugin', name: 'down', scopes: ['events:publish'], service: 'api' })
+      .expect(201);
+    await request(down.app.getHttpServer())
+      .post('/api/events')
+      .set('authorization', `Bearer ${created.body.value as string}`)
+      .send(validEnvelope())
+      .expect(503);
+    await down.app.close();
+  });
+
   test('bounds the request rate', async () => {
-    const limited = await buildAuthApp({ eventRateLimit: 2 });
+    const limited = await buildAuthApp({ eventRateLimit: 3 });
     const token = accessToken(limited.jwt, ['tokens:manage', 'events:publish']);
     const created = await request(limited.app.getHttpServer())
       .post('/api/credentials')

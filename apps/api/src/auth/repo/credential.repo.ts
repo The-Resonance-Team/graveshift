@@ -1,4 +1,4 @@
-import { randomUUID, timingSafeEqual } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { Inject, Injectable } from '@nestjs/common';
@@ -8,7 +8,6 @@ import { CREDENTIAL_CONFIG, type AuthConfig, type CredentialRecord } from '../au
 /** The storage seam. Tests supply an in-memory subclass. */
 export abstract class CredentialRepo {
   abstract list(): Promise<CredentialRecord[]>;
-  abstract findByHash(hash: string): Promise<CredentialRecord | undefined>;
   abstract findById(id: string): Promise<CredentialRecord | undefined>;
   abstract add(record: CredentialRecord): Promise<void>;
   abstract replace(record: CredentialRecord): Promise<void>;
@@ -19,24 +18,19 @@ function isRecord(value: unknown): value is CredentialRecord {
   const item = value as Record<string, unknown>;
   return (
     typeof item.id === 'string' &&
-    typeof item.kind === 'string' &&
+    (item.kind === 'mcp' || item.kind === 'plugin') &&
     typeof item.name === 'string' &&
     typeof item.prefix === 'string' &&
     typeof item.hash === 'string' &&
     typeof item.clientId === 'string' &&
     typeof item.tenantId === 'string' &&
     Array.isArray(item.scopes) &&
+    item.scopes.every((scope) => typeof scope === 'string') &&
     (item.service === null || typeof item.service === 'string') &&
     typeof item.createdAt === 'string' &&
     (item.expiresAt === null || typeof item.expiresAt === 'string') &&
     (item.revokedAt === null || typeof item.revokedAt === 'string')
   );
-}
-
-function hashEquals(left: string, right: string): boolean {
-  const a = Buffer.from(left, 'hex');
-  const b = Buffer.from(right, 'hex');
-  return a.length === b.length && a.length === 32 && timingSafeEqual(a, b);
 }
 
 /** One JSON file holds every record. The file is created with mode 0600. */
@@ -50,15 +44,6 @@ export class FileCredentialRepo extends CredentialRepo {
 
   async list(): Promise<CredentialRecord[]> {
     return this.read();
-  }
-
-  async findByHash(hash: string): Promise<CredentialRecord | undefined> {
-    const records = await this.read();
-    let found: CredentialRecord | undefined;
-    for (const record of records) {
-      if (hashEquals(record.hash, hash)) found = record;
-    }
-    return found;
   }
 
   async findById(id: string): Promise<CredentialRecord | undefined> {

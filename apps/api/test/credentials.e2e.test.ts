@@ -2,7 +2,7 @@ import type { INestApplication } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import request from 'supertest';
 
-import { accessToken, buildAuthApp, type AuthTestApp } from './fakes/auth-test-helpers';
+import { accessToken, buildAuthApp, rawToken, type AuthTestApp } from './fakes/auth-test-helpers';
 
 describe('credential routes (e2e)', () => {
   let ctx!: AuthTestApp;
@@ -168,15 +168,19 @@ describe('credential routes (e2e)', () => {
 
   test('credential routes are throttled by client id', async () => {
     const limited = await buildAuthApp({ eventRateLimit: 2 });
-    const token = accessToken(limited.jwt, ['tokens:manage', 'incidents:read']);
-    const call = () =>
+    // Two different JWTs for client-1 share one throttle bucket.
+    const tokens = [
+      rawToken(limited.jwt, { scope: ['tokens:manage', 'incidents:read'] }),
+      rawToken(limited.jwt, { scope: ['tokens:manage', 'incidents:read', 'logs:read'] }),
+    ];
+    const call = (token: string) =>
       request(limited.app.getHttpServer())
         .post('/api/credentials')
         .set('authorization', `Bearer ${token}`)
         .send({ kind: 'mcp', name: 'reader', scopes: ['incidents:read'] });
-    await call().expect(201);
-    await call().expect(201);
-    await call().expect(429);
+    await call(tokens[0] as string).expect(201);
+    await call(tokens[1] as string).expect(201);
+    await call(tokens[0] as string).expect(429);
     await limited.app.close();
   });
 

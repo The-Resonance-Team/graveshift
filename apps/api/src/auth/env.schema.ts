@@ -19,8 +19,15 @@ export const envSchema = z
       emptyToUndefined,
       z.string().default('.graveshift/credentials.json'),
     ),
-    // No hardcoded secret. Production boot fails when this key is absent.
-    GRAVESHIFT_OAUTH_JWT_SECRET: z.preprocess(emptyToUndefined, z.string().min(32).optional()),
+    // No hardcoded secret. Boot fails in every environment when this key is absent.
+    GRAVESHIFT_OAUTH_JWT_SECRET: z.preprocess(
+      emptyToUndefined,
+      z
+        .string({
+          error: 'GRAVESHIFT_OAUTH_JWT_SECRET must be set to at least 32 characters',
+        })
+        .min(32, 'GRAVESHIFT_OAUTH_JWT_SECRET must be set to at least 32 characters'),
+    ),
     GRAVESHIFT_OAUTH_ISSUER: z.preprocess(emptyToUndefined, z.string().default('graveshift-api')),
     GRAVESHIFT_OAUTH_AUDIENCE: z.preprocess(
       emptyToUndefined,
@@ -42,16 +49,7 @@ export const envSchema = z
     GRAVESHIFT_EVENT_RATE_TTL_MS: z.coerce.number().int().min(1000).default(60_000),
     GRAVESHIFT_NATS_URL: z.preprocess(emptyToUndefined, z.string().url().optional()),
   })
-  .loose()
-  .superRefine((env, ctx) => {
-    if (env.NODE_ENV === 'production' && !env.GRAVESHIFT_OAUTH_JWT_SECRET) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ['GRAVESHIFT_OAUTH_JWT_SECRET'],
-        message: 'GRAVESHIFT_OAUTH_JWT_SECRET is required in production',
-      });
-    }
-  });
+  .loose();
 
 export type Env = z.infer<typeof envSchema>;
 export type OAuthClientConfig = z.infer<typeof oauthClientSchema>;

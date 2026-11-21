@@ -57,6 +57,32 @@ describe('OAuth 2.1 client credentials (e2e)', () => {
     await useToken(rawToken(ctx.jwt, { noExp: true })).expect(401);
   });
 
+  test('throttles the token endpoint', async () => {
+    const limited = await buildAuthApp({ eventRateLimit: 2 });
+    const attempt = () =>
+      request(limited.app.getHttpServer())
+        .post('/api/oauth/token')
+        .send({ grant_type: 'client_credentials', client_id: 'client-1', client_secret: 'wrong' });
+    await attempt().expect(401);
+    await attempt().expect(401);
+    await attempt().expect(429);
+    await limited.app.close();
+  });
+
+  test('refuses a token with the wrong issuer', async () => {
+    await useToken(rawToken(ctx.jwt, { issuer: 'another-issuer' })).expect(401);
+  });
+
+  test('refuses a token claiming a scope outside the client registry', async () => {
+    await useToken(
+      rawToken(ctx.jwt, {
+        sub: 'client-2',
+        tenantId: 'tenant-2',
+        scope: ['tokens:manage', 'fix:propose'],
+      }),
+    ).expect(401);
+  });
+
   test('refuses a forged tenant claim', async () => {
     await useToken(rawToken(ctx.jwt, { tenantId: 'tenant-forged' })).expect(401);
   });

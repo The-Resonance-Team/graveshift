@@ -1,8 +1,9 @@
 import { Module } from '@nestjs/common';
+import { connectNatsPublisher } from '@graveshift/events/nats';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 
-import { EVENT_PUBLISHER } from './auth.types';
+import { EVENT_PUBLISHER, NATS_CONNECTOR } from './auth.types';
 import { CredentialCoreModule } from './credential-core.module';
 import { CredentialsController } from './controllers/credentials.controller';
 import { EventsController } from './controllers/events.controller';
@@ -21,6 +22,7 @@ import { OAuthTokenService } from './services/oauth-token.service';
     OAuthTokenService,
     PluginApiKeyGuard,
     OAuthClientCredentialsStrategy,
+    { provide: NATS_CONNECTOR, useValue: connectNatsPublisher },
     { provide: EVENT_PUBLISHER, useClass: NatsEventPublisher },
   ],
 })

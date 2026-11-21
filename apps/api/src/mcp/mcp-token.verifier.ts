@@ -34,12 +34,19 @@ export class McpBearerGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<{
       headers?: { authorization?: string };
       mcpPrincipal?: { scopes: string[] };
+      authInfo?: AuthInfo;
     }>();
     const header = request.headers?.authorization ?? '';
     const token = header.startsWith('Bearer ') ? header.slice('Bearer '.length) : '';
     try {
       const principal = await this.credentials.verify(token, 'mcp');
       request.mcpPrincipal = principal;
+      request.authInfo = {
+        token,
+        clientId: principal.clientId,
+        scopes: principal.scopes,
+        expiresAt: Math.floor(Date.now() / 1000) + 3600,
+      };
       return true;
     } catch {
       const response = context

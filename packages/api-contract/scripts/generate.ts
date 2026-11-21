@@ -4,13 +4,12 @@
 import { randomBytes } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import openapiTS, { type OpenAPI3 } from 'openapi-typescript';
-import { createApp } from '../../../apps/api/src/app.factory';
-import { createOpenApiDocument } from '../../../apps/api/src/openapi';
-
 const check = process.argv.includes('--check');
-// Document generation only boots the app; it never signs a token. Supply a
-// local placeholder so the boot config passes without a deployment secret.
+// Document generation only boots the app; it never signs a token. Set an
+// ephemeral value before the imports, because ConfigModule validates at import.
 process.env.GRAVESHIFT_OAUTH_JWT_SECRET ??= randomBytes(32).toString('hex');
+const { createApp } = await import('../../../apps/api/src/app.factory');
+const { createOpenApiDocument } = await import('../../../apps/api/src/openapi');
 const app = await createApp();
 const document = createOpenApiDocument(app);
 await app.close();

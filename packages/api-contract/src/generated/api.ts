@@ -299,6 +299,10 @@ export interface operations {
       401: {
         content: never;
       };
+      /** @description The client reached its request rate limit. */
+      429: {
+        content: never;
+      };
     };
   };
   WorkItemsController_list: {

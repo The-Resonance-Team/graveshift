@@ -35,6 +35,7 @@ const policy = parsePolicy({
 describe('POST /mcp bearer auth (e2e)', () => {
   let app!: INestApplication;
   let mcpToken!: string;
+  let metricsToken!: string;
   let pluginKey!: string;
 
   beforeAll(async () => {
@@ -71,6 +72,13 @@ describe('POST /mcp bearer auth (e2e)', () => {
     };
     mcpToken = await create('mcp', ['incidents:read']);
     pluginKey = await create('plugin', ['events:publish']);
+    const metricsJwt = accessToken(moduleRef.get(JwtService), ['tokens:manage', 'metrics:read']);
+    const metricsResponse = await request(app.getHttpServer())
+      .post('/api/credentials')
+      .set('authorization', `Bearer ${metricsJwt}`)
+      .send({ kind: 'mcp', name: 'metrics-key', scopes: ['metrics:read'] })
+      .expect(201);
+    metricsToken = metricsResponse.body.value as string;
   });
 
   afterAll(async () => {
@@ -103,6 +111,37 @@ describe('POST /mcp bearer auth (e2e)', () => {
   test('refuses a request without a bearer header', async () => {
     const response = await post().expect(401);
     expect(response.headers['www-authenticate']).toContain('Bearer');
+  });
+
+  const call = (token: string, method: string, params?: object) =>
+    request(app.getHttpServer())
+      .post('/mcp')
+      .set('accept', 'application/json, text/event-stream')
+      .set('authorization', `Bearer ${token}`)
+      .send({ jsonrpc: '2.0', id: 7, method, ...(params ? { params } : {}) });
+
+  test('allows an in-scope tools/call', async () => {
+    await call(mcpToken, 'tools/call', {
+      name: 'get_incident',
+      arguments: { id: 'inc-1' },
+    }).expect(200);
+  });
+
+  test('refuses a wrong-scope prompts/get with 403', async () => {
+    await call(metricsToken, 'prompts/get', {
+      name: 'triage-incident',
+      arguments: { incidentId: 'inc-1' },
+    }).expect(403);
+  });
+
+  test('refuses a wrong-scope resources/read with 403', async () => {
+    await call(metricsToken, 'resources/read', {
+      uri: 'graveshift://incidents/inc-1/postmortem',
+    }).expect(403);
+  });
+
+  test('denies by default when a method has no scope mapping', async () => {
+    await call(mcpToken, 'tools/unknown').expect(403);
   });
 
   test('refuses a primitive outside the token scopes with 403', async () => {
