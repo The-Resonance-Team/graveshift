@@ -10,4 +10,4 @@ Five canonical roles map to same-named labels (`needs-triage`, `needs-info`, `re
 
 ### Domain docs
 
-Single-context layout: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+Multi-context layout: `GLOSSARY-MAP.md` at the repo root indexes one `GLOSSARY.md` per `packages/<name>/` and `apps/<name>/` context. `GLOSSARY.md` and `docs/adr/` at the root cover system-wide terms and decisions. See `docs/agents/domain.md`.
