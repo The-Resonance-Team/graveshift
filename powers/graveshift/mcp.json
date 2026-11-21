@@ -2,7 +2,7 @@
   "mcpServers": {
     "graveshift": {
       "command": "bun",
-      "args": ["run", "--filter", "@graveshift/mcp-server", "start:stdio"]
+      "args": ["run", "--filter", "@graveshift/api", "start:stdio"]
     }
   }
 }

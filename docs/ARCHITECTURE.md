@@ -8,7 +8,7 @@ The v1 daemon is at `apps/_daemon`. It is reference only. The repository does no
 
 | Component | Path | Role |
 | --- | --- | --- |
-| API | `apps/api` | NestJS app. The only external surface. Serves `GET /healthz`, the OpenAPI document and the Swagger UI. |
+| API | `apps/api` | NestJS app. The only external surface. Serves `GET /healthz`, the OpenAPI document, the Swagger UI and the MCP endpoint at `/mcp`. |
 | API contract | `packages/api-contract` | Publishes generated TypeScript types and a version marker from the OpenAPI document. |
 | Daemon (v1) | `apps/_daemon` | Reference only. Wires Wraith, Medium, policy, optional fixer and the audit log. Not built and not started. |
 | Daemon (v2) | `apps/daemon` | New Effect v4 skeleton on Bun. Serves `GET /healthz` only. |
@@ -26,7 +26,7 @@ The v1 daemon is at `apps/_daemon`. It is reference only. The repository does no
 | LLM | `packages/llm` | `LlmGateway`: single AI SDK model, retry, timeout, daily budget, prompt redaction. The only place provider calls are made. |
 | Exorcist | `packages/fixer` | Patch guard, GitHub App auth, `graveshift/` branches, draft pull requests. No merge call exists. |
 | Actuator | `packages/actuator` | Separate service. Verifies and executes approved actions. |
-| MCP | `packages/mcp-server` | `graveshift-mcp` over stdio. HTTP transport exists as code only. |
+| MCP | `apps/api/src/mcp` | `graveshift-mcp` through the official `@nestjs/mcp` module: Streamable HTTP at `/mcp` with a bearer token, plus a stdio launcher. |
 | Banshee | `packages/notifier-discord` | **Not built.** Package exports only its name. The daemon uses a no-op `Notifier`. |
 
 ## Incident flow
@@ -70,12 +70,21 @@ The API in `apps/api` is the only external surface. A client calls this API, nev
 | `GET /docs-json` | The OpenAPI document. |
 | `GET /docs` | The Swagger UI. |
 | `POST /api/rules/validate` | Override ids, warning and acceptance for a rule set. Validation only. |
+| `POST /mcp` | Streamable HTTP MCP endpoint. Requires `Authorization: Bearer <GRAVESHIFT_MCP_TOKEN>`. |
 
-The API listens on 127.0.0.1 by default. Set `HOST` to change the bind address. Set `PORT` to change the port from 3000. Keep the localhost bind until authentication ships.
+The API listens on 127.0.0.1 by default. Set `HOST` to change the bind address. Set `PORT` to change the port from 3000. Keep the localhost bind unless the MCP bearer token is configured and the endpoint is exposed deliberately.
 
 Structured logging is deferred to the production ticket.
 
-The API uses Zod through Nest's standard-schema pipe. When a route takes input, the route attaches a Zod schema with `@Body({ schema })`, `@Query({ schema })` or `@Param({ schema })`. This ticket adds no business logic, authentication, rate limits, MCP or SSE. Later tickets add the routes for graves and hauntings here.
+The API uses Zod through Nest's standard-schema pipe. When a route takes input, the route attaches a Zod schema with `@Body({ schema })`, `@Query({ schema })` or `@Param({ schema })`. No business logic, rate limits or SSE were added to the HTTP routes here. MCP is served by the official module at `/mcp`; its bearer token is the only authentication on this surface. Later tickets add the routes for graves and hauntings here.
+
+## MCP endpoint
+
+The official `@nestjs/mcp` module serves `graveshift-mcp` at `/mcp` from the API. A guard checks one static bearer token from `GRAVESHIFT_MCP_TOKEN` (32 or more characters) on the HTTP route. No OAuth resource or authorization server is configured: static bearer auth is the only supported path today. The stdio launcher has no authentication by design.
+
+MCP loads the policy in a provider factory, so a bad `POLICY_PATH` stops the API at boot. The nine tools, two prompts and the postmortem resource are injectable providers in `apps/api/src/mcp/`. Every reply passes through the redactor. `propose_fix` returns a policy decision and never executes an action.
+
+The v2 daemon serves only `/healthz`, so backend reads return empty or unavailable results. No counters are available: the `propose_fix` reply states that rate and budget limits are not enforced. Tests inject a fake backend.
 
 `packages/api-contract` generates its types from the OpenAPI document. It exports the generated types and the `API_CONTRACT_VERSION` marker through `package.json#exports` only. It does not define an event envelope or any domain event type.
 

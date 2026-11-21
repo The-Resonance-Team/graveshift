@@ -20,7 +20,7 @@ Indie developers, teams of one to ten developers, students with deployed project
 4. **Exorcist** (`packages/fixer`) pushes to a `graveshift/` branch and opens a draft pull request. It has no merge call. The daemon does not yet generate patches, so no real draft pull request opens today.
 5. **Actuator** (`packages/actuator`) is a separate service that runs only approved, HMAC-signed, unexpired, single-use actions.
 6. **Banshee** (Discord) is a stub. Notifications go to a no-op notifier and blessings cannot be given yet.
-7. Everything is written to a hash-chained audit log (`packages/store`), and `graveshift-mcp` exposes read tools to Kiro.
+7. Everything is written to a hash-chained audit log (`packages/store`), and the API in `apps/api` exposes `graveshift-mcp` read tools to Kiro.
 
 These steps describe the v1 code at `apps/_daemon`. The new Effect v4 daemon does not run them yet.
 
@@ -83,9 +83,9 @@ The `.kiro` directory holds steering, specs, hooks and agents. See [KIRO_USAGE.m
 
 ```text
 .kiro/       steering, specs, hooks, agents and MCP settings
-apps/        _daemon (v1 reference only), daemon (new Effect v4 skeleton)
+apps/        _daemon (v1 reference only), api (NestJS API and MCP), daemon (new Effect v4 skeleton)
 packages/    core, store, policy, redactor, metrics, sources-docker, sources-k8s,
-             watcher, llm, diagnoser, fixer, actuator, mcp-server, notifier-discord (stub)
+             watcher, llm, diagnoser, fixer, actuator, notifier-discord (stub)
 deploy/      compose (working), k8s base and kind (scaffold), helm (scaffold)
 examples/    the haunted candy shop demo app
 powers/      the Graveshift Kiro Power scaffold
@@ -105,7 +105,11 @@ bun run verify
 
 ## MCP server
 
-`packages/mcp-server` is `graveshift-mcp`: read tools for services, incidents, diagnoses and the audit log, plus `propose_fix`, which only asks the policy engine and never executes. It also serves the `triage-incident` and `write-postmortem` prompts and an Autopsy resource at `graveshift://incidents/{id}/postmortem`. Run it over stdio with `DAEMON_URL=http://127.0.0.1:2602 POLICY_PATH=policy.example.yaml bun run --cwd packages/mcp-server start:stdio`. The HTTP transport (bearer `GRAVESHIFT_MCP_TOKEN`) exists as code and has not been deployed. The local `.kiro/settings/mcp.json` entry may still be disabled; enable it yourself.
+The API in `apps/api` serves `graveshift-mcp` through the official `@nestjs/mcp` module (v0.0.4). It exposes nine tools (`list_services`, `list_incidents`, `get_incident`, `get_diagnosis`, `get_audit_log`, `verify_audit_chain`, `propose_fix`, `tail_logs`, `query_metric`), two prompts (`triage-incident`, `write-postmortem`) and the Autopsy resource at `graveshift://incidents/{id}/postmortem`. Every reply passes through the redactor. `propose_fix` only asks the policy engine and never executes an action.
+
+The Streamable HTTP endpoint is `/mcp` on the API. It requires a static bearer token from `GRAVESHIFT_MCP_TOKEN` (at least 32 characters); no OAuth resource or authorization server is configured. The module keeps no sessions and serves 2025-era clients on the same endpoint. Kiro can also launch it over stdio from a standalone application context with `bun run --filter @graveshift/api start:stdio`; stdio has no authentication by design and trusts the local process.
+
+The v2 daemon serves only `/healthz`, so the read tools return empty results today. No daemon data is invented. Tool logic lives in injectable providers in `apps/api/src/mcp/`. A test connects an official in-memory MCP client with `era: 'legacy'` to prove a `2025-06-18` client can list tools and call one.
 
 ## Roadmap
 

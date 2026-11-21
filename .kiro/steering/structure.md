@@ -9,6 +9,7 @@ Monorepo layout:
 graveshift/
 ├── .kiro/                         # NEVER gitignore (except settings/mcp.json)
 ├── apps/
+│   ├── api/                       # NestJS API: /healthz, /api/rules/validate, MCP /mcp and stdio launcher
 │   ├── dashboard/                 # Next.js graveyard UI
 │   └── daemon/                    # main process: watcher→diagnoser→fixer→notifier, HTTP API (Fastify) + SSE
 ├── packages/
@@ -24,8 +25,7 @@ graveshift/
 │   ├── notifier-discord/          # Banshee: discord.js bot, embeds, buttons, slash commands
 │   ├── llm/                       # LlmGateway: provider abstraction + fallback + budget
 │   ├── store/                     # Drizzle ORM (SQLite default / Postgres), audit log
-│   ├── actuator/                  # separate deployable: executes approved signed actions only
-│   └── mcp-server/                # graveshift-mcp (stdio + Streamable HTTP)
+│   └── actuator/                  # separate deployable: executes approved signed actions only
 ├── examples/haunted-candy-shop/   # fault-injectable demo app (api + worker + postgres)
 ├── deploy/
 │   ├── compose/                   # graveshift.compose.yml, demo.compose.yml, prometheus.yml

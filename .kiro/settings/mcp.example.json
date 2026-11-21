@@ -17,7 +17,7 @@
     "kubernetes": { "command": "<VERIFY: a Kubernetes MCP server>", "args": [], "disabled": true },
     "graveshift": {
       "command": "bun",
-      "args": ["run", "--filter", "@graveshift/mcp-server", "start:stdio"],
+      "args": ["run", "--filter", "@graveshift/api", "start:stdio"],
       "disabled": false,
       "autoApprove": [
         "list_services",
