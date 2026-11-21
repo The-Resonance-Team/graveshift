@@ -4,38 +4,176 @@ on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
+
+permissions:
+  contents: read
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  verify:
+  changes:
+    if: github.event_name == 'push' || github.event.pull_request.draft != true
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      code: ${{ steps.filter.outputs.code }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: github.event_name == 'push'
+        with:
+          fetch-depth: 2
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          filters: |
+            code:
+              - 'apps/**'
+              - 'packages/**'
+              - 'examples/**'
+              - 'scripts/**'
+              - 'deploy/**'
+              - '.github/**'
+              - 'package.json'
+              - 'bun.lock'
+              - 'tsconfig*.json'
+              - '.oxlintrc.json'
+              - '.oxfmtrc.json'
 
+  format:
+    needs: changes
+    if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.code == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version-file: package.json
-
       - name: Install dependencies
         run: bun install --frozen-lockfile
-
       - name: Check formatting
         run: bun run format:check
 
+  lint:
+    needs: changes
+    if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.code == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: package.json
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
       - name: Lint
         run: bun run lint
 
+  typecheck:
+    needs: changes
+    if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.code == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: package.json
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
       - name: Typecheck
         run: bun run typecheck
 
       - name: Check generated API contract
         run: bun run generate:check
 
+  test-types:
+    needs: changes
+    if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.code == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: package.json
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
       - name: Type-check tests
         run: bun run test:check
 
+  test:
+    needs: changes
+    if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.code == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: package.json
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
       - name: Test
         run: bun run test
+
+  build:
+    needs: changes
+    if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.code == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: package.json
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+      - name: Build runtime entrypoints
+        run: bun run build
+
+  ci-structure:
+    needs: changes
+    if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.code == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: package.json
+      - name: Test workflow structure
+        run: bun test ./.github/tests/workflow-structure.test.ts
+
+  compose:
+    needs: changes
+    if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.code == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Validate Compose files
+        run: |
+          docker compose -f deploy/compose/graveshift.compose.yml config -q
+          docker compose -f deploy/compose/demo.compose.yml config -q
+      - name: Validate Dockerfiles
+        run: |
+          docker build --check -f deploy/compose/bun.Dockerfile .
+          docker build --check -f examples/haunted-candy-shop/Dockerfile examples/haunted-candy-shop
+
+  verify:
+    if: ${{ always() && (github.event_name == 'push' || github.event.pull_request.draft != true) }}
+    needs: [changes, format, lint, typecheck, test-types, test, build, ci-structure, compose]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fail when a check failed
+        if: ${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
+        run: exit 1
