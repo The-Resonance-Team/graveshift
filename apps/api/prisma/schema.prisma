@@ -97,6 +97,7 @@ model Credential {
   expirationAuditedAt DateTime?      @map("expiration_audited_at")
 
   @@unique([tenantId, hash])
+  @@unique([tenantId, projectId])
   @@index([hash])
   @@map("credentials")
 }

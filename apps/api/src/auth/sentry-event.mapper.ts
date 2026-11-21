@@ -1,4 +1,5 @@
 import type { EventEnvelope } from '@graveshift/core';
+import { redact } from '@graveshift/redactor';
 
 import type { VerifiedCredential } from './auth.types';
 import type { SentryEnvelopeHeader } from './sentry-envelope.parser';
@@ -20,8 +21,11 @@ function eventType(event: JsonObject): string {
   const values = Array.isArray(exception?.values) ? exception.values : [];
   const firstException = object(values[0]);
   const raw = text(firstException?.type) ?? text(event.type) ?? 'event';
-  const safe = raw.replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
-  return `sentry.${(safe || 'event').slice(0, 128)}`;
+  // The exception type is untrusted event data, so redact it before shaping the type token.
+  const cleaned = redact(raw)
+    .replace(/[^A-Za-z0-9_-]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+  return `sentry.${(cleaned || 'event').slice(0, 128)}`;
 }
 
 function severity(value: unknown): EventEnvelope['severity'] {
@@ -72,6 +76,7 @@ export function mapSentryEvent(
   header: SentryEnvelopeHeader,
   credential: VerifiedCredential,
   fallbackId: string,
+  fallbackTimestamp = new Date().toISOString(),
 ): EventEnvelope {
   const id = header.event_id ?? text(event.event_id) ?? fallbackId;
   if (!isSentryEventId(id)) throw new TypeError('Event id is invalid');
@@ -91,7 +96,7 @@ export function mapSentryEvent(
     service: credential.service ?? '',
     type,
     severity: severity(event.level),
-    observedAt: timestamp(event.timestamp),
+    observedAt: timestamp(event.timestamp ?? header.sent_at ?? fallbackTimestamp),
     traceId: traceId(event, id),
     fingerprint: fingerprint(event, type),
     payload,

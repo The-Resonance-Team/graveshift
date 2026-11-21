@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path';
 
 import { migrationOwnershipViolations, normalize } from './prisma-drift';
 
-// ponytail: DB-free comparison assumes additive migrations; upgrade when a second or destructive migration lands, after coordinator approval of a CI service container or external test database.
+// ponytail: DB-free comparison canonicalises additive migrations; upgrade when a destructive migration lands, after coordinator approval of a CI service container or external test database.
 const root = dirname(import.meta.dir);
 const migrationsPath = join(root, 'prisma/migrations');
 const migrationFiles = readdirSync(migrationsPath, { withFileTypes: true })
@@ -18,13 +18,35 @@ if (migrationFiles.length === 0) {
 
 const migrationSql = migrationFiles.map((file) => readFileSync(file, 'utf8')).join('\n');
 
-// Commit 20186f0 amended the init migration. Its recorded checksums and the local
-// database recreate note live in docs/DECISIONS.md. Keep one init migration.
+// Ownership of the audit trigger, function and credentials objects stays checked
+// after PR #97. Keep one init migration with its recorded checksum.
 const violations = migrationOwnershipViolations(migrationSql);
 if (violations.length > 0) {
   console.error('Prisma drift check failed: migration objects are on the wrong table.');
   for (const violation of violations) process.stderr.write(`  - ${violation}\n`);
   process.exit(1);
+}
+
+// Canonicalise both sides so an ALTER TABLE ADD COLUMN matches an inline column,
+// and an inline UNIQUE constraint matches a CREATE UNIQUE INDEX statement.
+function canonicalLines(sql: string): string[] {
+  return normalize(sql)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line !== '')
+    .map((line) => {
+      const addColumn = /^ALTER TABLE\s+"[^"]+"\s+ADD COLUMN\s+(.+);$/i.exec(line);
+      if (addColumn) return addColumn[1]!.replace(/,$/, '');
+
+      const inlineKey = /^CONSTRAINT\s+"([^"]+)"\s+UNIQUE\s+\((.+)\),?$/i.exec(line);
+      if (inlineKey) return `UNIQUE_KEY ${inlineKey[1]} (${inlineKey[2]})`;
+
+      const indexKey = /^CREATE UNIQUE INDEX\s+"([^"]+)"\s+ON\s+"[^"]+"\s*\((.+)\);$/i.exec(line);
+      if (indexKey) return `UNIQUE_KEY ${indexKey[1]} (${indexKey[2]})`;
+
+      return line.replace(/,$/, '');
+    })
+    .sort();
 }
 
 const generated = Bun.spawnSync(
@@ -38,10 +60,10 @@ if (generated.exitCode !== 0) {
   process.exit(generated.exitCode);
 }
 
-const expected = normalize(migrationSql);
-const actual = normalize(generated.stdout.toString());
+const expected = canonicalLines(migrationSql);
+const actual = canonicalLines(generated.stdout.toString());
 
-if (actual !== expected) {
+if (expected.length !== actual.length || expected.some((line, index) => line !== actual[index])) {
   console.error('Prisma drift check failed: generated schema SQL differs from migration SQL.');
   process.exit(1);
 }

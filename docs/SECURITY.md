@@ -58,7 +58,7 @@ The adapter accepts `event` items and skips `session`, `client_report`, `attachm
 | `fatal`, `error` | `severity` | `critical` |
 | `warning` | `severity` | `warning` |
 | `info`, `debug`, other | `severity` | `info` |
-| `timestamp` | `observedAt` | — |
+| `timestamp`, else envelope `sent_at`, else ingestion time | `observedAt` | — |
 | Trace id, then event id | `traceId` | — |
 | Sentry fingerprint, else type + culprit + message | `fingerprint` | — |
 | Exception, message and request | Redacted `payload` | — |

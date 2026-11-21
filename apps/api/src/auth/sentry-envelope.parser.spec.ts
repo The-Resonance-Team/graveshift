@@ -8,6 +8,7 @@ import {
 } from './sentry-envelope.parser';
 
 const fixture = new URL('../../test/fixtures/sentry-event.envelope', import.meta.url);
+const sessionFixture = new URL('../../test/fixtures/sentry-session.envelope', import.meta.url);
 
 describe('parseSentryEnvelope', () => {
   test('reads a Sentry event and skips other framed items', async () => {
@@ -23,6 +24,14 @@ describe('parseSentryEnvelope', () => {
     expect(envelope.items[0]).toEqual({ type: 'client_report' });
     expect(envelope.items[1]).toEqual({ type: 'attachment' });
     expect(envelope.items[2]?.payload).toMatchObject({ level: 'warning' });
+  });
+
+  test('reads a fixture with only skipped item types', async () => {
+    const envelope = parseSentryEnvelope(await readFile(sessionFixture));
+
+    expect(envelope.header.sent_at).toBe('2026-11-20T10:00:00.000Z');
+    expect(envelope.items.map((item) => item.type)).toEqual(['session', 'client_report']);
+    expect(envelope.items.every((item) => item.payload === undefined)).toBe(true);
   });
 
   test('reads length-prefixed UTF-8 payloads by byte length', () => {
@@ -50,6 +59,7 @@ describe('parseSentryEnvelope', () => {
     expect(() => parseSentryEnvelope(Buffer.from(' {}\n'))).toThrow(SentryEnvelopeParseError);
   });
 
+  // Oversized bodies are covered inline here and in the Sentry e2e suite with a 1 MiB + 1 byte buffer.
   test('bounds the complete envelope', () => {
     expect(() => parseSentryEnvelope(Buffer.alloc(1_048_577))).toThrow(SentryEnvelopeTooLargeError);
   });

@@ -4,6 +4,7 @@ const MAX_EVENT_ITEM_BYTES = 1_048_576;
 export interface SentryEnvelopeHeader {
   event_id?: string;
   dsn?: string;
+  sent_at?: string;
 }
 
 export interface SentryEnvelopeItem {
@@ -57,6 +58,7 @@ export function readSentryEnvelopeHeader(body: Buffer): SentryEnvelopeHeader {
   return {
     ...(typeof header.event_id === 'string' ? { event_id: header.event_id } : {}),
     ...(typeof header.dsn === 'string' ? { dsn: header.dsn } : {}),
+    ...(typeof header.sent_at === 'string' ? { sent_at: header.sent_at } : {}),
   };
 }
 
@@ -67,6 +69,7 @@ export function parseSentryEnvelope(body: Buffer): SentryEnvelope {
   const header: SentryEnvelopeHeader = {
     ...(typeof rawHeader.event_id === 'string' ? { event_id: rawHeader.event_id } : {}),
     ...(typeof rawHeader.dsn === 'string' ? { dsn: rawHeader.dsn } : {}),
+    ...(typeof rawHeader.sent_at === 'string' ? { sent_at: rawHeader.sent_at } : {}),
   };
   const items: SentryEnvelopeItem[] = [];
   let cursor = envelopeEnd === body.length ? body.length : envelopeEnd + 1;
