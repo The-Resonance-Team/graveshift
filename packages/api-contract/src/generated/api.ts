@@ -20,6 +20,9 @@ export interface paths {
   "/api/work-items/{id}/triage": {
     post: operations["WorkItemsController_triage"];
   };
+  "/api/work-items/{id}/fix-now": {
+    post: operations["WorkItemsController_fixNow"];
+  };
 }
 
 export type webhooks = Record<string, never>;
@@ -155,6 +158,14 @@ export interface operations {
                 service: string;
                 diagnosisRef: string;
                 autoFixAllowed: boolean;
+                fixPriority: number;
+                draftPr: {
+                  repo: string;
+                  number: number;
+                  url: string;
+                  branch: string;
+                  headSha: string;
+                } | null;
               })[];
             total: number;
             offset: number;
@@ -207,6 +218,14 @@ export interface operations {
             service: string;
             diagnosisRef: string;
             autoFixAllowed: boolean;
+            fixPriority: number;
+            draftPr: {
+              repo: string;
+              number: number;
+              url: string;
+              branch: string;
+              headSha: string;
+            } | null;
           };
         };
       };
@@ -230,46 +249,156 @@ export interface operations {
       };
     };
     responses: {
-      /** @description The triaged work item. */
+      /** @description The triaged work item and its auto-fix outcome. */
       200: {
         content: {
           "application/json": {
-            id: string;
-            title: string;
-            description: string;
-            successCriteria: string[];
-            subtasks: {
-              items: {
-                  id: string;
-                  title: string;
-                  done: boolean;
-                }[];
-              completed: number;
+            item: {
+              id: string;
+              title: string;
+              description: string;
+              successCriteria: string[];
+              subtasks: {
+                items: {
+                    id: string;
+                    title: string;
+                    done: boolean;
+                  }[];
+                completed: number;
+              };
+              /** @enum {string} */
+              status: "todo" | "in_progress" | "in_review" | "done";
+              /** @enum {string} */
+              priority: "low" | "medium" | "high" | "critical";
+              assignee: "needs_human" | `needs_agent_${string}`;
+              reporter: string;
+              /** Format: date */
+              startDate: string | null;
+              /** Format: date */
+              dueDate: string | null;
+              sprint: string | null;
+              parent: string | null;
+              labels: string[];
+              team: string;
+              watchers: string[];
+              /** @enum {string} */
+              severity: "info" | "warning" | "critical";
+              service: string;
+              diagnosisRef: string;
+              autoFixAllowed: boolean;
+              fixPriority: number;
+              draftPr: {
+                repo: string;
+                number: number;
+                url: string;
+                branch: string;
+                headSha: string;
+              } | null;
             };
-            /** @enum {string} */
-            status: "todo" | "in_progress" | "in_review" | "done";
-            /** @enum {string} */
-            priority: "low" | "medium" | "high" | "critical";
-            assignee: "needs_human" | `needs_agent_${string}`;
-            reporter: string;
-            /** Format: date */
-            startDate: string | null;
-            /** Format: date */
-            dueDate: string | null;
-            sprint: string | null;
-            parent: string | null;
-            labels: string[];
-            team: string;
-            watchers: string[];
-            /** @enum {string} */
-            severity: "info" | "warning" | "critical";
-            service: string;
-            diagnosisRef: string;
-            autoFixAllowed: boolean;
+            autoFix: ({
+              ok: boolean;
+              /** @enum {string} */
+              effect: "allow" | "deny" | "require_approval" | "dry_run";
+              reason: string | null;
+              /** @enum {string} */
+              failure: "none" | "auto_fix_disabled" | "context_unavailable" | "invalid_context" | "policy_denied" | "patch_rejected" | "pr_failed" | "fix_error" | "already_fixed";
+            }) | null;
           };
         };
       };
       /** @description The assignee is not valid. */
+      400: {
+        content: never;
+      };
+      /** @description No work item has this id. */
+      404: {
+        content: never;
+      };
+      /** @description The work item is in a terminal status. */
+      409: {
+        content: never;
+      };
+    };
+  };
+  WorkItemsController_fixNow: {
+    parameters: {
+      path: {
+        id: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          note?: string;
+        };
+      };
+    };
+    responses: {
+      /** @description The fix result with the work item, the policy effect and the draft PR ref. */
+      200: {
+        content: {
+          "application/json": {
+            item: {
+              id: string;
+              title: string;
+              description: string;
+              successCriteria: string[];
+              subtasks: {
+                items: {
+                    id: string;
+                    title: string;
+                    done: boolean;
+                  }[];
+                completed: number;
+              };
+              /** @enum {string} */
+              status: "todo" | "in_progress" | "in_review" | "done";
+              /** @enum {string} */
+              priority: "low" | "medium" | "high" | "critical";
+              assignee: "needs_human" | `needs_agent_${string}`;
+              reporter: string;
+              /** Format: date */
+              startDate: string | null;
+              /** Format: date */
+              dueDate: string | null;
+              sprint: string | null;
+              parent: string | null;
+              labels: string[];
+              team: string;
+              watchers: string[];
+              /** @enum {string} */
+              severity: "info" | "warning" | "critical";
+              service: string;
+              diagnosisRef: string;
+              autoFixAllowed: boolean;
+              fixPriority: number;
+              draftPr: {
+                repo: string;
+                number: number;
+                url: string;
+                branch: string;
+                headSha: string;
+              } | null;
+            };
+            /** @enum {string} */
+            trigger: "auto_fix" | "fix_now";
+            /** @enum {string} */
+            effect: "allow" | "deny" | "require_approval" | "dry_run";
+            ok: boolean;
+            pr: {
+              repo: string;
+              number: number;
+              url: string;
+              branch: string;
+              headSha: string;
+            } | null;
+            reason: string | null;
+            /** @enum {string} */
+            failure: "none" | "auto_fix_disabled" | "context_unavailable" | "invalid_context" | "policy_denied" | "patch_rejected" | "pr_failed" | "fix_error" | "already_fixed";
+          };
+        };
+      };
+      /** @description The request body is not valid. */
       400: {
         content: never;
       };

@@ -22,6 +22,18 @@ export const WORK_ITEM_SEVERITIES = ['info', 'warning', 'critical'] as const;
 export const WorkItemSeveritySchema = z.enum(WORK_ITEM_SEVERITIES);
 export type WorkItemSeverity = z.infer<typeof WorkItemSeveritySchema>;
 
+// A draft pull request is the terminal state of a fix. No merge ref exists here.
+export const PrRefSchema = z
+  .object({
+    repo: id,
+    number: z.number().int().min(1),
+    url: z.string().min(1),
+    branch: z.string().min(1),
+    headSha: z.string().min(1),
+  })
+  .strict();
+export type PrRef = z.infer<typeof PrRefSchema>;
+
 export const SubtaskSchema = z.object({
   id,
   title: z.string().min(1),
@@ -84,8 +96,23 @@ export const WorkItemSchema = z.object({
   service: id,
   diagnosisRef: id,
   autoFixAllowed: z.boolean(),
+  // Lower values sit nearer the front of the fix queue. Zero is the front.
+  fixPriority: z.number().int().min(0),
+  // Set when a fix opened a draft pull request. Null means no PR was opened yet.
+  draftPr: PrRefSchema.nullable(),
 });
 export type WorkItem = z.infer<typeof WorkItemSchema>;
+
+export const FIX_QUEUE_FRONT = 0;
+
+// Fix now moves a work item to the front of the fix queue. It changes no other field.
+export function promoteToFront(item: WorkItem): WorkItem {
+  return { ...item, fixPriority: FIX_QUEUE_FRONT };
+}
+
+export function withDraftPr(item: WorkItem, pr: PrRef): WorkItem {
+  return { ...item, draftPr: pr };
+}
 
 // Client config decides whether a work item may be fixed without a Fix now action.
 export const WorkItemClientConfigSchema = z

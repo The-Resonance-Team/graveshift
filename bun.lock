@@ -18,6 +18,8 @@
         "@graveshift/agents": "workspace:*",
         "@graveshift/api-contract": "workspace:*",
         "@graveshift/core": "workspace:*",
+        "@graveshift/fixer": "workspace:*",
+        "@graveshift/patch": "workspace:*",
         "@graveshift/policy": "workspace:*",
         "@graveshift/redactor": "workspace:*",
         "@modelcontextprotocol/server": "2.4.0",

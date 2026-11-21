@@ -7,6 +7,7 @@ import {
   createSubtasks,
   NEEDS_HUMAN,
   parseAssignee,
+  promoteToFront,
   triageToAgent,
   triageToHuman,
   WorkItemClientConfigSchema,
@@ -38,6 +39,8 @@ const workItem: WorkItem = {
   service: 'api',
   diagnosisRef: 'diag-1',
   autoFixAllowed: false,
+  fixPriority: 100,
+  draftPr: null,
 };
 
 const clientConfig = WorkItemClientConfigSchema.parse({ autoFixAllowed: true });
@@ -51,6 +54,14 @@ describe('work item schema', () => {
         subtasks: { ...workItem.subtasks, completed: 9 },
       }).success,
     ).toBe(false);
+  });
+
+  test('promoteToFront moves a work item to the front of the fix queue', () => {
+    const next = promoteToFront(workItem);
+    expect(next.fixPriority).toBe(0);
+    expect(workItem.fixPriority).toBe(100);
+    expect(next.id).toBe(workItem.id);
+    expect(WorkItemSchema.parse(next)).toEqual(next);
   });
 
   test('assignee accepts needs_human and needs_agent_<name> only', () => {
