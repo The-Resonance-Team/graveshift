@@ -1,1 +1,8 @@
-See `GLOSSARY-MAP.md` at the repo root for this area's context and glossary index.
+# Diagnoser
+
+Medium builds a Diagnosis from signals and evidence.
+
+## Language
+
+**Medium**:
+the ghost that builds a diagnosis.

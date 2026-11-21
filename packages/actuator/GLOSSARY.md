@@ -1,1 +1,11 @@
-See `GLOSSARY-MAP.md` at the repo root for this area's context and glossary index.
+# Actuator
+
+The actuator verifies and executes approved actions.
+
+## Language
+
+**Blessing**:
+a human approval of a proposed runtime action.
+
+**Banishment**:
+a human rejection of a proposed runtime action.
