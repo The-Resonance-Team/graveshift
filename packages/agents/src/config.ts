@@ -63,6 +63,7 @@ export const ProviderPackageSchema = z.enum(PROVIDER_PACKAGES);
 export type ProviderPackage = z.infer<typeof ProviderPackageSchema>;
 
 const UPPER_SNAKE = /^[A-Z][A-Z0-9_]*$/;
+const SLUG = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const PLACEHOLDER = /\{\{([A-Z][A-Z0-9_]*)\}\}/g;
 // A naming guard only. The gateway in ticket #26 enforces the credential allowlist.
 const API_KEY_ENV_NAME = /^(?:GRAVESHIFT_[A-Z0-9_]+|[A-Z][A-Z0-9_]*_API_KEY)$/;
@@ -95,6 +96,8 @@ export const ParamsSchema = z
 export const AgentConfigSchema = z
   .object({
     name: z.string().min(1),
+    // Stable machine reference; escalateTo points here, not at the display name.
+    slug: z.string().regex(SLUG, 'slug must use lower-case letters, digits and hyphens'),
     role: z.string().min(1),
     description: z.string().min(1),
     prompt: z.string().min(1),
@@ -108,7 +111,7 @@ export const AgentConfigSchema = z
       .describe('Name of the environment variable that holds the key; never a key value'),
     allowedTools: z.array(z.string().min(1)),
     dailyBudgetUsd: z.number().min(0),
-    escalateTo: z.string().min(1).optional(),
+    escalateTo: z.string().regex(SLUG, 'escalateTo must be an agent slug').optional(),
   })
   .strict()
   .superRefine((agent, ctx) => {
@@ -141,26 +144,35 @@ export const AgentsFileSchema = z
   .strict()
   .superRefine((file, ctx) => {
     for (const list of ['system', 'client'] as const) {
-      const seen = new Set<string>();
+      const names = new Set<string>();
+      const slugs = new Set<string>();
       file[list].forEach((agent, index) => {
-        if (seen.has(agent.name)) {
+        if (names.has(agent.name)) {
           ctx.addIssue({
             code: 'custom',
             path: [list, index, 'name'],
             message: `duplicate agent name: ${agent.name}`,
           });
         }
-        seen.add(agent.name);
+        if (slugs.has(agent.slug)) {
+          ctx.addIssue({
+            code: 'custom',
+            path: [list, index, 'slug'],
+            message: `duplicate agent slug: ${agent.slug}`,
+          });
+        }
+        names.add(agent.name);
+        slugs.add(agent.slug);
       });
     }
-    const names = new Set([...file.system, ...file.client].map((agent) => agent.name));
+    const slugs = new Set([...file.system, ...file.client].map((agent) => agent.slug));
     for (const list of ['system', 'client'] as const) {
       file[list].forEach((agent, index) => {
-        if (agent.escalateTo !== undefined && !names.has(agent.escalateTo)) {
+        if (agent.escalateTo !== undefined && !slugs.has(agent.escalateTo)) {
           ctx.addIssue({
             code: 'custom',
             path: [list, index, 'escalateTo'],
-            message: `escalateTo must name an existing agent: ${agent.escalateTo}`,
+            message: `escalateTo must reference an existing agent slug: ${agent.escalateTo}`,
           });
         }
       });

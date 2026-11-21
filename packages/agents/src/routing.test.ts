@@ -19,6 +19,7 @@ class FakeModel implements RoutingModel {
 
 const sreBot: AgentConfig = {
   name: 'SRE Bot',
+  slug: 'sre-bot',
   role: 'sre',
   description: 'Handles incidents, outages and OOM VPS restarts.',
   prompt: 'Resolve {{INCIDENT_DETAIL}} on version {{VERSION}}.',
@@ -33,6 +34,7 @@ const sreBot: AgentConfig = {
 
 const devopsBot: AgentConfig = {
   name: 'DevOps Bot',
+  slug: 'devops-bot',
   role: 'devops',
   description: 'Handles deployment, pipeline and infrastructure tasks.',
   prompt: 'Check deployment {{VERSION}} for {{SERVICE}}.',
@@ -73,11 +75,12 @@ describe('routing agent', () => {
     const first: AgentConfig = {
       ...sreBot,
       name: 'First Bot',
+      slug: 'first-bot',
       description: 'Handles incident and outage response.',
       prompt: 'Do the task.',
       params: [],
     };
-    const second: AgentConfig = { ...first, name: 'Second Bot' };
+    const second: AgentConfig = { ...first, name: 'Second Bot', slug: 'second-bot' };
     const routing = createRoutingAgent({ agents: [first, second], model: new FakeModel('x') });
 
     const result = await routing.route({ text: 'incident and outage' });

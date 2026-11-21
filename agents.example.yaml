@@ -1,8 +1,10 @@
 # System agent templates. Keys are never written here: apiKeyEnv names the
 # environment variable that holds the key. Params are key-value maps; their
-# names are the {{PARAM}} placeholders in the prompt.
+# names are the {{PARAM}} placeholders in the prompt. `name` is the display
+# label; `slug` is the stable reference used by `escalateTo`.
 system:
   - name: SRE Bot
+    slug: sre-bot
     role: sre
     description: 'Handles incidents, outages and OOM VPS restarts.'
     prompt: 'Resolve {{INCIDENT_DETAIL}} on version {{VERSION}}.'
@@ -17,9 +19,10 @@ system:
       - query_metric
       - tail_logs
     dailyBudgetUsd: 2.5
-    escalateTo: DevOps Bot
+    escalateTo: devops-bot
 
   - name: DevOps Bot
+    slug: devops-bot
     role: devops
     description: 'Handles deployment, pipeline and infrastructure tasks.'
     prompt: 'Check deployment {{VERSION}} for {{SERVICE}}.'
@@ -33,7 +36,7 @@ system:
     allowedTools:
       - propose_fix
     dailyBudgetUsd: 5
-    escalateTo: SRE Bot
+    escalateTo: sre-bot
 
 # A client entry replaces the whole system Agent block with the same name.
 # It is not a field merge: the client block must be a complete Agent config.

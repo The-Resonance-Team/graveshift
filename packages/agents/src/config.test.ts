@@ -15,6 +15,7 @@ import {
 
 const sreBot: AgentConfig = {
   name: 'SRE Bot',
+  slug: 'sre-bot',
   role: 'sre',
   description: 'Handles incidents, outages and OOM VPS restarts.',
   prompt: 'Resolve {{INCIDENT_DETAIL}} on version {{VERSION}}.',
@@ -25,11 +26,12 @@ const sreBot: AgentConfig = {
   apiKeyEnv: 'GOOGLE_GENERATIVE_AI_API_KEY',
   allowedTools: ['query_metric', 'tail_logs'],
   dailyBudgetUsd: 2.5,
-  escalateTo: 'DevOps Bot',
+  escalateTo: 'devops-bot',
 };
 
 const devopsBot: AgentConfig = {
   name: 'DevOps Bot',
+  slug: 'devops-bot',
   role: 'devops',
   description: 'Handles deployment, pipeline and infrastructure tasks.',
   prompt: 'Check deployment {{VERSION}} for {{SERVICE}}.',
@@ -40,7 +42,7 @@ const devopsBot: AgentConfig = {
   apiKeyEnv: 'ANTHROPIC_API_KEY',
   allowedTools: ['propose_fix'],
   dailyBudgetUsd: 5,
-  escalateTo: 'SRE Bot',
+  escalateTo: 'sre-bot',
 };
 
 describe('agent config validation', () => {
@@ -135,19 +137,29 @@ describe('agent lists', () => {
   });
 
   test('keeps new client agents and system order', () => {
-    const extra: AgentConfig = { ...sreBot, name: 'Extra Bot', role: 'extra' };
+    const extra: AgentConfig = { ...sreBot, name: 'Extra Bot', slug: 'extra-bot', role: 'extra' };
     const merged = mergeAgentTemplates([sreBot, devopsBot], [extra]);
     expect(merged.map((agent) => agent.name)).toEqual(['SRE Bot', 'DevOps Bot', 'Extra Bot']);
   });
 
-  test('rejects duplicate names in system and in client', () => {
+  test('rejects duplicate names and slugs in system and in client', () => {
     expect(() => AgentsFileSchema.parse({ system: [sreBot, sreBot] })).toThrow();
     expect(() => AgentsFileSchema.parse({ system: [], client: [devopsBot, devopsBot] })).toThrow();
+    const sameSlug: AgentConfig = { ...devopsBot, name: 'Other Bot' };
+    expect(() => AgentsFileSchema.parse({ system: [sreBot, devopsBot, sameSlug] })).toThrow();
   });
 
-  test('requires escalateTo to name an existing agent', () => {
+  test('rejects a non-slug slug', () => {
+    expect(() => AgentConfigSchema.parse({ ...sreBot, slug: 'SRE Bot' })).toThrow();
+    expect(AgentConfigSchema.parse({ ...sreBot, slug: 'sre-bot-2' })).toBeDefined();
+  });
+
+  test('requires escalateTo to reference an existing agent slug', () => {
     expect(() =>
-      AgentsFileSchema.parse({ system: [{ ...sreBot, escalateTo: 'Missing Bot' }] }),
+      AgentsFileSchema.parse({ system: [{ ...sreBot, escalateTo: 'missing-bot' }] }),
+    ).toThrow();
+    expect(() =>
+      AgentsFileSchema.parse({ system: [{ ...sreBot, escalateTo: 'DevOps Bot' }] }),
     ).toThrow();
     expect(AgentsFileSchema.parse({ system: [sreBot, devopsBot] }).system).toHaveLength(2);
   });
