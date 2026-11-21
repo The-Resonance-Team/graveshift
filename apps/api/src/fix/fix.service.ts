@@ -12,6 +12,7 @@ import { redact } from '@graveshift/redactor';
 import { decide, type Effect } from '@graveshift/policy';
 import { Inject, Injectable } from '@nestjs/common';
 
+import type { FixNowRequestDto } from '../work-items/dto/fix-now-request.dto';
 import {
   type FixContext,
   FixContextSchema,
@@ -92,8 +93,8 @@ export class FixService {
     return this.run(item, 'auto_fix', note);
   }
 
-  async fixNow(item: WorkItem, note?: string): Promise<FixResult> {
-    return this.run(item, 'fix_now', note);
+  async fixNow(item: WorkItem, request: FixNowRequestDto = {}): Promise<FixResult> {
+    return this.run(item, 'fix_now', request.note);
   }
 
   private async run(item: WorkItem, trigger: FixTrigger, note?: string): Promise<FixResult> {

@@ -72,7 +72,7 @@ describe('POST /api/rules/validate (e2e)', () => {
         systemRules: [{ ...systemRule, action: 'delete' }],
         clientRules: [],
       })
-      .expect(400);
+      .expect(422);
   });
 
   test('rejects duplicate ids in one layer', async () => {
@@ -82,14 +82,14 @@ describe('POST /api/rules/validate (e2e)', () => {
         systemRules: [systemRule],
         clientRules: [clientRule, { ...clientRule, action: 'suppress' }],
       })
-      .expect(400);
+      .expect(422);
     await request(app.getHttpServer())
       .post('/api/rules/validate')
       .send({
         systemRules: [systemRule, { ...systemRule, priority: 20 }],
         clientRules: [],
       })
-      .expect(400);
+      .expect(422);
   });
 
   test('rejects more than 200 rules in one layer', async () => {
@@ -100,6 +100,20 @@ describe('POST /api/rules/validate (e2e)', () => {
     await request(app.getHttpServer())
       .post('/api/rules/validate')
       .send({ systemRules: manyRules, clientRules: [] })
-      .expect(400);
+      .expect(422);
+  });
+
+  test('rejects a missing field', async () => {
+    await request(app.getHttpServer())
+      .post('/api/rules/validate')
+      .send({ clientRules: [] })
+      .expect(422);
+  });
+
+  test('rejects an undeclared field with 422', async () => {
+    await request(app.getHttpServer())
+      .post('/api/rules/validate')
+      .send({ systemRules: [], clientRules: [], unknown: true })
+      .expect(422);
   });
 });
