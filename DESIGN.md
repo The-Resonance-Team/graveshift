@@ -11,6 +11,17 @@ This file holds aesthetic tokens, accessibility rules and the user-facing copy c
 | Pumpkin | `#FF7A1A` | Warning |
 | Blood | `#E5484D` | Critical |
 
+Neutral tokens used by the dashboard (`globals.css`, `@theme inline`):
+
+| Token | Hex | Meaning |
+| --- | --- | --- |
+| Crypt | `#10151c` | Card and panel surface |
+| Mist | `#232d3a` | Borders and hover surface |
+| Bone | `#e6edf3` | Primary text |
+| Fog | `#a3adbb` | Secondary text |
+
+Contrast pairs checked by the dashboard test suite: Bone, Fog, Ectoplasm, Pumpkin and Blood text on Night and Crypt; Bone and Fog on Mist; Night text on Pumpkin and Ectoplasm buttons. Every pair is at least 4.5:1. Status colours (Ectoplasm, Pumpkin, Blood) never sit on Mist, because Blood on Mist is below 4.5:1; hover states on status cards darken to Night instead.
+
 ## Voice
 
 Playful and spooky, never cryptic. Use the pattern “themed phrase — plain meaning”. Every themed label has a plain tooltip.
@@ -46,8 +57,15 @@ notifier | Banshee | Ma khóc | The ghost that notifies people and collects appr
 
 ## Responsive rules
 
-To be specified when the dashboard is built. Breakpoints must be recorded here before component work starts.
+- Supported widths: 375 px (mobile), 768 px (tablet), 1024 to 1440 px (desktop). Layout uses CSS breakpoints only (`sm:` 640, `lg:` 1024, `xl:` 1280); no `window.innerWidth` state.
+- Graveyard grid: 1 column below 640 px, 2 from 640 px, 3 from 1024 px, 4 from 1280 px.
+- Home page: one column below 1024 px, with the controls (mode, Haunt panel, audit chain) stacked after the graves and incidents. From 1024 px the controls move to a right-hand column one third wide.
+- Incident timeline: the five phase cards form 2 columns below 640 px and one row of 5 from 640 px.
+- Content width caps at `max-w-7xl`. Long values (commands, branch names) scroll inside their block with `overflow-x-auto` instead of widening the page.
+- Every control stays reachable below 1024 px; the dashboard has no hidden navigation.
 
 ## Icon vocabulary
 
-To be specified when the dashboard is built. Use one concept-keyed registry; do not add per-component icon sets.
+- The dashboard ships no icons. Status is shown with a coloured dot (`aria-hidden`) next to a text label, so meaning never depends on colour or a glyph alone.
+- No Unicode glyphs or emoji as icons (`✓`, `→`, `☠`). Separators in UI text are commas.
+- When icons are needed, add one concept-keyed registry (`ICON.<concept>`, for example `ICON.incident`, `ICON.healthy`, `ICON.fixPr`) in a shared UI package, keyed by the internal terms of the Term table. Icons are `aria-hidden`, and icon-only buttons carry an `aria-label`. Do not add per-component icon sets.

@@ -1,0 +1,188 @@
+name: oneshot-reusable
+
+# One-shot jobs invoked by the Graveshift platform. No daemon runs here.
+on:
+  workflow_call:
+    inputs:
+      work_item_id:
+        description: Id of the work item that owns the patch.
+        required: true
+        type: string
+      incident_ref:
+        description: Diagnosis reference recorded on the work item.
+        required: true
+        type: string
+      branch_slug:
+        description: Graveshift branch slug that receives the patch.
+        required: true
+        type: string
+      patch_payload:
+        description: Guarded patch payload supplied by the platform.
+        required: true
+        type: string
+      policy_decision:
+        description: Recorded policy decision with context; re-evaluated before any write.
+        required: true
+        type: string
+      pr_title:
+        description: Title of the draft pull request.
+        required: true
+        type: string
+      base_ref:
+        description: Base branch for the draft pull request, including stacked PRs.
+        required: true
+        type: string
+    secrets:
+      pr_token:
+        description: Fine-grained, repo-scoped PAT used to push and open the draft PR.
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: oneshot-${{ inputs.work_item_id }}
+  cancel-in-progress: false
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    steps:
+      - name: Validate refs
+        id: refs
+        env:
+          BASE_REF: ${{ inputs.base_ref }}
+          BRANCH_SLUG: ${{ inputs.branch_slug }}
+          ALLOWED_BASE_REFS: ${{ vars.GRAVESHIFT_ALLOWED_BASE_REFS }}
+        run: |
+          if [ -z "$ALLOWED_BASE_REFS" ]; then
+            echo "no base_ref allowlist configured" >&2
+            exit 1
+          fi
+          case "$BASE_REF" in
+            ''|*[!A-Za-z0-9._/-]*|*/../*|../*|*/..|..) echo "unsafe base_ref" >&2; exit 1 ;;
+          esac
+          found=0
+          oldifs="$IFS"
+          IFS=','
+          for allowed in $ALLOWED_BASE_REFS; do
+            if [ "$allowed" = "$BASE_REF" ]; then found=1; fi
+          done
+          IFS="$oldifs"
+          if [ "$found" != 1 ]; then echo "base_ref is not in the allowlist" >&2; exit 1; fi
+          case "$BRANCH_SLUG" in
+            graveshift/*) ;;
+            *) echo "unsafe branch_slug" >&2; exit 1 ;;
+          esac
+          echo "base_ref=$BASE_REF" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout base
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          ref: ${{ steps.refs.outputs.base_ref }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: package.json
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Prepare patch
+        env:
+          BASE_REF: ${{ steps.refs.outputs.base_ref }}
+          BRANCH_SLUG: ${{ inputs.branch_slug }}
+          PATCH_PAYLOAD: ${{ inputs.patch_payload }}
+          POLICY_DECISION: ${{ inputs.policy_decision }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: bun run scripts/actions/prepare-patch.ts
+
+      - name: Upload patch
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: oneshot-patch
+          path: patch.json
+          retention-days: 1
+
+  open-pr:
+    needs: patch
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Validate refs
+        id: refs
+        env:
+          BASE_REF: ${{ inputs.base_ref }}
+          BRANCH_SLUG: ${{ inputs.branch_slug }}
+          ALLOWED_BASE_REFS: ${{ vars.GRAVESHIFT_ALLOWED_BASE_REFS }}
+        run: |
+          if [ -z "$ALLOWED_BASE_REFS" ]; then
+            echo "no base_ref allowlist configured" >&2
+            exit 1
+          fi
+          case "$BASE_REF" in
+            ''|*[!A-Za-z0-9._/-]*|*/../*|../*|*/..|..) echo "unsafe base_ref" >&2; exit 1 ;;
+          esac
+          found=0
+          oldifs="$IFS"
+          IFS=','
+          for allowed in $ALLOWED_BASE_REFS; do
+            if [ "$allowed" = "$BASE_REF" ]; then found=1; fi
+          done
+          IFS="$oldifs"
+          if [ "$found" != 1 ]; then echo "base_ref is not in the allowlist" >&2; exit 1; fi
+          case "$BRANCH_SLUG" in
+            graveshift/*) ;;
+            *) echo "unsafe branch_slug" >&2; exit 1 ;;
+          esac
+          echo "base_ref=$BASE_REF" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout base
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          ref: ${{ steps.refs.outputs.base_ref }}
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version-file: package.json
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Download patch
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: oneshot-patch
+
+      - name: Apply patch and push branch
+        env:
+          BASE_REF: ${{ steps.refs.outputs.base_ref }}
+          BRANCH_SLUG: ${{ inputs.branch_slug }}
+          POLICY_DECISION: ${{ inputs.policy_decision }}
+          PR_TOKEN: ${{ secrets.pr_token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        run: bun run scripts/actions/apply-patch.ts
+
+      - name: Open draft pull request
+        env:
+          GH_TOKEN: ${{ secrets.pr_token }}
+          PR_TITLE: ${{ inputs.pr_title }}
+          BRANCH_SLUG: ${{ inputs.branch_slug }}
+          WORK_ITEM_ID: ${{ inputs.work_item_id }}
+          BASE_REF: ${{ steps.refs.outputs.base_ref }}
+        run: |
+          gh pr create --draft \
+            --base "$BASE_REF" \
+            --head "$BRANCH_SLUG" \
+            --title "$PR_TITLE" \
+            --body "Draft fix for work item $WORK_ITEM_ID."

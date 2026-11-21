@@ -1,13 +1,15 @@
 {
   "name": "@graveshift/daemon",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
-  "exports": {
-    ".": "./src/index.ts"
-  },
   "scripts": {
     "typecheck": "bun check --no-script",
-    "test": "bun test"
+    "test": "bun test",
+    "start": "bun src/main.ts"
+  },
+  "dependencies": {
+    "@effect/platform-bun": "4.1.5",
+    "effect": "4.1.5"
   }
 }

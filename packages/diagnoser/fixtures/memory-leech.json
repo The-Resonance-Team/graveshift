@@ -1,0 +1,69 @@
+{
+  "name": "memory-leech",
+  "input": {
+    "incident": {
+      "id": "inc-1",
+      "service": "worker",
+      "state": "diagnosing",
+      "signalIds": [
+        "runtime.oom:worker:1795153634000",
+        "runtime.restart-loop:worker:1795153635000"
+      ],
+      "openedAt": "2026-11-20T10:00:00.000Z",
+      "updatedAt": "2026-11-20T10:00:05.000Z"
+    },
+    "detections": [
+      {
+        "id": "runtime.oom:worker:1795153634000",
+        "rule": "runtime.oom",
+        "service": "worker",
+        "severity": "critical",
+        "fingerprint": "worker:runtime.oom",
+        "message": "container gs-worker-1 oom",
+        "observedAt": "2026-11-20T10:00:00.000Z"
+      },
+      {
+        "id": "runtime.restart-loop:worker:1795153635000",
+        "rule": "runtime.restart-loop",
+        "service": "worker",
+        "severity": "critical",
+        "fingerprint": "worker:runtime.restart-loop",
+        "message": "3 restarts in 5 min",
+        "observedAt": "2026-11-20T10:00:00.000Z"
+      }
+    ],
+    "logs": ["worker started", "tick processed", "tick processed"],
+    "files": [
+      {
+        "path": "src/worker.ts",
+        "content": "tick() {\n  metrics.inc('jobs_processed_total');\n  if (haunt.current() === 'memory-leech') retained.push(Buffer.alloc(LEAK_BYTES, 1));\n}"
+      }
+    ],
+    "commits": [
+      {
+        "sha": "b2c3d4e",
+        "message": "feat: retain job buffers for debugging"
+      },
+      {
+        "sha": "c3d4e5f",
+        "message": "chore: bump bun"
+      }
+    ]
+  },
+  "llmResponse": {
+    "category": "resource_exhaustion",
+    "rootCause": "The worker retains an 8 MB buffer on every tick and is killed at its memory limit.",
+    "confidence": 0.8,
+    "evidence": [
+      {
+        "ref": "signal:runtime.oom:worker:1795153634000",
+        "excerpt": "container gs-worker-1 oom"
+      },
+      {
+        "ref": "file:src/worker.ts",
+        "excerpt": "retained.push(Buffer.alloc(LEAK_BYTES, 1))"
+      }
+    ]
+  },
+  "expectedCategory": "resource_exhaustion"
+}

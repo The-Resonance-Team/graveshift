@@ -9,5 +9,10 @@
   "scripts": {
     "typecheck": "bun check --no-script",
     "test": "bun test"
+  },
+  "dependencies": {
+    "@graveshift/core": "workspace:*",
+    "@kubernetes/client-node": "^2.0.2",
+    "zod": "^4.6.7"
   }
 }

@@ -1,11 +1,10 @@
-# SCAFFOLD ONLY - Prometheus scrape config skeleton.
 global:
   scrape_interval: 15s
 
 scrape_configs:
   - job_name: demo-api
     static_configs:
-      - targets: ['api:3000']
-  - job_name: graveshift
+      - targets: ['api:2600']
+  - job_name: demo-worker
     static_configs:
-      - targets: ['graveshift:3000']
+      - targets: ['worker:2601']
