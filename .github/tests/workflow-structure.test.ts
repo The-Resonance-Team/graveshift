@@ -120,4 +120,11 @@ describe('CI workflows', () => {
       .map((workflow) => workflow.name);
     expect(references).toEqual([]);
   });
+
+  test('root tests, policy and Bun config changes run the CI gates', () => {
+    const content = workflows.find((workflow) => workflow.name === 'ci.yml')?.content ?? '';
+    for (const input of ['tests/**', 'policy.example.yaml', 'bunfig.toml']) {
+      expect(content).toContain(`- '${input}'`);
+    }
+  });
 });

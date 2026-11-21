@@ -152,6 +152,21 @@ describe('credential routes (e2e)', () => {
     }).expect(422);
   });
 
+  test('POST rejects a blank or null service binding', async () => {
+    await post(manageToken, {
+      kind: 'plugin',
+      name: 'blank-service',
+      scopes: ['events:publish'],
+      service: '   ',
+    }).expect(422);
+    await post(manageToken, {
+      kind: 'plugin',
+      name: 'null-service',
+      scopes: ['events:publish'],
+      service: null,
+    }).expect(422);
+  });
+
   test('the 11th active credential fails and a revoke frees a slot', async () => {
     const fresh = await buildAuthApp();
     const token = accessToken(fresh.jwt, ['tokens:manage', 'incidents:read']);

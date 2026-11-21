@@ -16,12 +16,14 @@ export class McpTokenVerifierService implements McpTokenVerifier {
 
   async verifyAccessToken(token: string): Promise<AuthInfo> {
     const principal = await this.credentials.verify(token, 'mcp');
-    return {
+    const auth: AuthInfo & { tenantId: string } = {
       token,
       clientId: principal.clientId,
       scopes: principal.scopes,
       expiresAt: Math.floor(Date.now() / 1000) + 3600,
+      tenantId: principal.tenantId,
     };
+    return auth;
   }
 }
 
@@ -34,7 +36,7 @@ export class McpBearerGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<{
       headers?: { authorization?: string };
       mcpPrincipal?: { scopes: string[] };
-      authInfo?: AuthInfo;
+      authInfo?: AuthInfo & { tenantId?: string };
     }>();
     const header = request.headers?.authorization ?? '';
     const token = header.startsWith('Bearer ') ? header.slice('Bearer '.length) : '';
@@ -46,6 +48,7 @@ export class McpBearerGuard implements CanActivate {
         clientId: principal.clientId,
         scopes: principal.scopes,
         expiresAt: Math.floor(Date.now() / 1000) + 3600,
+        tenantId: principal.tenantId,
       };
       return true;
     } catch {

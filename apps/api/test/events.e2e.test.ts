@@ -211,6 +211,23 @@ describe('POST /api/events (e2e)', () => {
     await limited.app.close();
   });
 
+  test('event traffic does not consume the credential route throttle bucket', async () => {
+    const limited = await buildAuthApp({ eventRateLimit: 2 });
+    const call = (token: string) =>
+      request(limited.app.getHttpServer())
+        .post('/api/events')
+        .set('authorization', `Bearer ${token}`)
+        .send(validEnvelope());
+    await call('bad-event-1').expect(401);
+    await call('bad-event-2').expect(401);
+    await request(limited.app.getHttpServer())
+      .post('/api/credentials')
+      .set('authorization', 'Bearer invalid-management-token')
+      .send({ kind: 'mcp', name: 'reader', scopes: ['incidents:read'] })
+      .expect(401);
+    await limited.app.close();
+  });
+
   test('bounds the request rate', async () => {
     const limited = await buildAuthApp({ eventRateLimit: 3 });
     const token = accessToken(limited.jwt, ['tokens:manage', 'events:publish']);
@@ -226,7 +243,8 @@ describe('POST /api/events (e2e)', () => {
         .send(body);
     await pushLimited(validEnvelope({ id: 'r1' })).expect(202);
     await pushLimited(validEnvelope({ id: 'r2' })).expect(202);
-    await pushLimited(validEnvelope({ id: 'r3' })).expect(429);
+    await pushLimited(validEnvelope({ id: 'r3' })).expect(202);
+    await pushLimited(validEnvelope({ id: 'r4' })).expect(429);
     await limited.app.close();
   });
 });

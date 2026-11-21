@@ -20,7 +20,7 @@ Indie developers, teams of one to ten developers, students with deployed project
 4. **Exorcist** (`packages/fixer`) pushes to a `graveshift/` branch and opens a draft pull request. It has no merge call. The daemon does not yet generate patches, so no real draft pull request opens today.
 5. **Actuator** (`packages/actuator`) is a separate service that runs only approved, HMAC-signed, unexpired, single-use actions.
 6. **Banshee** (Discord) is a stub. Notifications and blessings are planned.
-7. `packages/store` provides the audit chain. The API in `apps/api` exposes `graveshift-mcp` read tools to Kiro.
+7. `apps/api/src/audit` stores credential audit events in PostgreSQL. The API in `apps/api` exposes `graveshift-mcp` read tools to Kiro.
 
 The packages implement these steps. The daemon still needs to connect them.
 
@@ -84,7 +84,7 @@ The `.kiro` directory holds steering, specs, hooks and agents. See [KIRO_USAGE.m
 apps/        api (NestJS API and MCP), daemon (Effect v4 skeleton)
 packages/    actuator, agents, api-contract, core, diagnoser, events, fixer, gateway,
              integrations, metrics, notifier-discord, patch, plugin-nestjs, policy,
-             redactor, sources-docker, sources-k8s, store, watcher
+             redactor, sources-docker, sources-k8s, watcher
 deploy/      compose (working), k8s base and kind (scaffold), helm (scaffold)
 examples/    the haunted candy shop demo app
 powers/      the Graveshift Kiro Power scaffold
@@ -110,7 +110,7 @@ CI checks schema drift without a database by comparing the generated schema SQL 
 
 ## MCP server
 
-The API in `apps/api` serves `graveshift-mcp` through the official `@nestjs/mcp` module (v0.0.4). It exposes nine tools (`list_services`, `list_incidents`, `get_incident`, `get_diagnosis`, `get_audit_log`, `verify_audit_chain`, `propose_fix`, `tail_logs`, `query_metric`), two prompts (`triage_incident`, `write_postmortem`) and the Autopsy resource at `graveshift://incidents/{id}/postmortem`. Every reply passes through the redactor. `propose_fix` only asks the policy engine and never executes an action.
+The API in `apps/api` serves `graveshift-mcp` through the official `@nestjs/mcp` module (v0.0.4). It exposes nine tools (`list_services`, `list_incidents`, `get_incident`, `get_diagnosis`, `get_audit_log`, `verify_audit_chain`, `propose_fix`, `tail_logs`, `query_metric`), two prompts (`triage_incident`, `write_postmortem`), the Autopsy resource at `graveshift://incidents/{id}/postmortem`, and the Beta Events poll extension. Every reply passes through the redactor. `propose_fix` only asks the policy engine and never executes an action.
 
 The Streamable HTTP endpoint is `/mcp` on the API. It requires an unexpired MCP token issued by `POST /api/credentials` with kind `mcp`. The shared credential component in `apps/api/src/auth` verifies the token; no static token is read. The module keeps no sessions and serves 2025-era clients on the same endpoint. Kiro can also launch it over stdio from a standalone application context with `bun run --filter @graveshift/api start:stdio`; stdio has no authentication by design and trusts the local process. The stdio launcher still builds the same `AppModule`, so `GRAVESHIFT_OAUTH_JWT_SECRET` (at least 32 characters) must be set at boot; `powers/graveshift/mcp.json` carries a placeholder to replace with a strong local value.
 
@@ -120,7 +120,9 @@ The v2 daemon serves only `/healthz`, so the read tools return empty results tod
 
 The API reads its boot config from the environment. `GRAVESHIFT_OAUTH_JWT_SECRET` has no default and must be at least 32 characters. `GRAVESHIFT_OAUTH_CLIENTS` is a JSON map of client id to `{ "secret", "tenantId", "scopes" }`; `POST /api/oauth/token` exchanges those values for a short-lived token. `GRAVESHIFT_OAUTH_ISSUER` and `GRAVESHIFT_OAUTH_AUDIENCE` set the token claims that the API checks.
 
-`GRAVESHIFT_CREDENTIALS_PATH` points to the one credential file, created with mode 0600. `GRAVESHIFT_CREDENTIAL_TTL_SECONDS` and `GRAVESHIFT_CREDENTIAL_MAX_TTL_SECONDS` bound issued credential lifetime. `GRAVESHIFT_EVENT_MAX_BYTES`, `GRAVESHIFT_EVENT_RATE_LIMIT` and `GRAVESHIFT_EVENT_RATE_TTL_MS` bound the event ingest route. `GRAVESHIFT_NATS_URL` enables NATS publish; without it, publish fails closed with 503. See `.env.example` for the full list.
+`GRAVESHIFT_CREDENTIAL_TTL_SECONDS` and `GRAVESHIFT_CREDENTIAL_MAX_TTL_SECONDS` bound issued credential lifetime. PostgreSQL stores credential hashes and the append-only, hash-chained audit log. Credential creation, revocation and expiry events share a transaction with the credential write. `GRAVESHIFT_EVENT_MAX_BYTES`, `GRAVESHIFT_EVENT_RATE_LIMIT` and `GRAVESHIFT_EVENT_RATE_TTL_MS` bound the event ingest route. `GRAVESHIFT_NATS_URL` enables NATS publish; without it, publish fails closed with 503. See `.env.example` for the full list.
+
+The public `@graveshift/core` and `@graveshift/events` packages contain the state and event contracts. Build both with `bun run build:contracts`; publish them from their package directories when a release is approved. This branch does not publish packages.
 
 ## Roadmap
 

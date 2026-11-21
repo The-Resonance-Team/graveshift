@@ -69,6 +69,7 @@ CREATE TABLE "credentials" (
     "created_at" TIMESTAMP(3) NOT NULL,
     "expires_at" TIMESTAMP(3),
     "revoked_at" TIMESTAMP(3),
+    "expiration_audited_at" TIMESTAMP(3),
 
     CONSTRAINT "credentials_pkey" PRIMARY KEY ("id")
 );
@@ -77,4 +78,23 @@ CREATE TABLE "credentials" (
 CREATE INDEX "work_items_tenant_id_idx" ON "work_items"("tenant_id");
 
 -- CreateIndex
+CREATE INDEX "credentials_hash_idx" ON "credentials"("hash");
 CREATE UNIQUE INDEX "credentials_tenant_id_hash_key" ON "credentials"("tenant_id", "hash");
+
+-- BEGIN unmanaged append-only audit enforcement (outside Prisma's schema model).
+CREATE FUNCTION prevent_audit_entry_mutation() RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RAISE EXCEPTION 'audit entries are append-only';
+END;
+$$;
+
+CREATE TRIGGER audit_entries_no_update
+BEFORE UPDATE ON "audit_entries"
+FOR EACH ROW EXECUTE FUNCTION prevent_audit_entry_mutation();
+
+CREATE TRIGGER audit_entries_no_delete
+BEFORE DELETE ON "audit_entries"
+FOR EACH ROW EXECUTE FUNCTION prevent_audit_entry_mutation();
+-- END unmanaged append-only audit enforcement.

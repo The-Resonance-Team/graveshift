@@ -1,19 +1,51 @@
 {
   "name": "@graveshift/events",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
+  "license": "Apache-2.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src/index.ts",
+    "src/http.ts",
+    "src/nats.ts",
+    "src/testing.ts"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/The-Resonance-Team/graveshift.git",
+    "directory": "packages/events"
+  },
   "exports": {
-    ".": "./src/index.ts",
-    "./nats": "./src/nats.ts",
-    "./testing": "./src/testing.ts"
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./nats": {
+      "bun": "./src/nats.ts",
+      "types": "./dist/nats.d.ts",
+      "import": "./dist/nats.js"
+    },
+    "./testing": {
+      "bun": "./src/testing.ts",
+      "types": "./dist/testing.d.ts",
+      "import": "./dist/testing.js"
+    }
   },
   "scripts": {
+    "build": "bun build src/index.ts --target=node --packages=external --outfile=dist/index.js && bun build src/nats.ts --target=node --packages=external --outfile=dist/nats.js && bun build src/testing.ts --target=node --packages=external --outfile=dist/testing.js && bunx tsc --project tsconfig.build.json --emitDeclarationOnly && bun ../../scripts/finalize-contract.ts",
+    "prepack": "bun run build",
     "typecheck": "bun check --no-script",
     "test": "bun test"
   },
   "dependencies": {
-    "@graveshift/core": "workspace:*",
+    "@graveshift/core": "^0.1.0",
     "@nats-io/jetstream": "3.5.0",
     "@nats-io/transport-node": "3.5.0"
   }

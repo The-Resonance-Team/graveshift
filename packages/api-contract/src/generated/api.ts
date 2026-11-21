@@ -54,7 +54,7 @@ export interface components {
       priority: number;
       match: components["schemas"]["RuleMatchDto"];
       /** @enum {string} */
-      action: "detect" | "suppress" | "escalate";
+      action: "detect" | "suppress" | "escalate" | "telemetry";
     };
     ValidateRulesDto: {
       systemRules: components["schemas"]["RuleDto"][];

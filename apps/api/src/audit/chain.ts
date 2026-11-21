@@ -1,8 +1,11 @@
-import type { AuditEntry } from '@graveshift/core';
+import { type AuditEntry, AuditEntrySchema } from '@graveshift/core';
 
 export const GENESIS_HASH = '0'.repeat(64);
 
 export type AuditDraft = Pick<AuditEntry, 'seq' | 'at' | 'actor' | 'type' | 'payload'> &
+  Pick<Partial<AuditEntry>, 'incidentId'>;
+
+export type AuditInput = Pick<AuditEntry, 'actor' | 'type' | 'payload'> &
   Pick<Partial<AuditEntry>, 'incidentId'>;
 
 export type VerifyResult =
@@ -13,7 +16,7 @@ function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
   if (value !== null && typeof value === 'object') {
     const entries = Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonical(v)}`).join(',')}}`;
+    return `{${entries.map(([key, item]) => `${JSON.stringify(key)}:${canonical(item)}`).join(',')}}`;
   }
   return JSON.stringify(value);
 }
@@ -31,7 +34,23 @@ export function hashEntry(draft: AuditDraft, prevHash: string): string {
   return new Bun.CryptoHasher('sha256').update(body).digest('hex');
 }
 
-// ponytail: truncating the tail is undetectable without an external anchor, upgrade if the head hash is published
+export function makeAuditEntry(
+  seq: number,
+  at: string,
+  input: AuditInput,
+  prevHash: string,
+): AuditEntry {
+  const draft: AuditDraft = {
+    seq,
+    at,
+    actor: input.actor,
+    type: input.type,
+    payload: AuditEntrySchema.shape.payload.parse(JSON.parse(JSON.stringify(input.payload))),
+    ...(input.incidentId === undefined ? {} : { incidentId: input.incidentId }),
+  };
+  return AuditEntrySchema.parse({ ...draft, prevHash, hash: hashEntry(draft, prevHash) });
+}
+
 export function verifyEntries(entries: readonly AuditEntry[]): VerifyResult {
   let prevHash = GENESIS_HASH;
   for (const [index, entry] of entries.entries()) {

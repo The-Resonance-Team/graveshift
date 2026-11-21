@@ -29,7 +29,6 @@ graveshift/
 │   ├── fixer/                     # Exorcist: GitHub App client and draft PRs
 │   ├── notifier-discord/          # Banshee stub
 │   ├── gateway/                   # Single model path for all Agents
-│   ├── store/                     # Drizzle ORM (SQLite default / Postgres), audit log
 │   └── actuator/                  # separate deployable: executes approved signed actions only
 ├── examples/haunted-candy-shop/   # fault-injectable demo app (api + worker + postgres)
 ├── deploy/

@@ -6,7 +6,6 @@ const SECRET_MESSAGE = 'GRAVESHIFT_OAUTH_JWT_SECRET must be set to at least 32 c
 
 const base = {
   NODE_ENV: 'development',
-  GRAVESHIFT_CREDENTIALS_PATH: '/tmp/graveshift-creds.json',
   GRAVESHIFT_OAUTH_ISSUER: 'graveshift-api',
   GRAVESHIFT_OAUTH_AUDIENCE: 'graveshift-credentials',
   GRAVESHIFT_CREDENTIAL_TTL_SECONDS: '3600',

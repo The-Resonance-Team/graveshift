@@ -81,19 +81,21 @@ model AuditEntry {
 }
 
 model Credential {
-  id        String         @id
-  tenantId  String         @map("tenant_id")
-  kind      CredentialKind
-  name      String
-  prefix    String
-  hash      String
-  clientId  String         @map("client_id")
-  scopes    String[]
-  service   String?
-  createdAt DateTime       @map("created_at")
-  expiresAt DateTime?      @map("expires_at")
-  revokedAt DateTime?      @map("revoked_at")
+  id                  String         @id
+  tenantId            String         @map("tenant_id")
+  kind                CredentialKind
+  name                String
+  prefix              String
+  hash                String
+  clientId            String         @map("client_id")
+  scopes              String[]
+  service             String?
+  createdAt           DateTime       @map("created_at")
+  expiresAt           DateTime?      @map("expires_at")
+  revokedAt           DateTime?      @map("revoked_at")
+  expirationAuditedAt DateTime?      @map("expiration_audited_at")
 
   @@unique([tenantId, hash])
+  @@index([hash])
   @@map("credentials")
 }

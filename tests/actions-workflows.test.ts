@@ -53,8 +53,10 @@ const INPUTS = [
   'branch_slug',
   'patch_payload',
   'policy_decision',
+  'policy_signature',
   'pr_title',
   'base_ref',
+  'base_sha',
 ] as const;
 
 const steps = (workflow: Workflow): Step[] =>
@@ -111,7 +113,7 @@ describe('one-shot Actions workflows', () => {
       expect(call?.inputs?.[name]?.type).toBe('string');
       expect(dispatch?.inputs?.[name]?.type).toBe('string');
     }
-    expect(Object.keys(call?.secrets ?? {})).toEqual(['pr_token']);
+    expect(Object.keys(call?.secrets ?? {}).sort()).toEqual(['policy_signing_key', 'pr_token']);
   });
 
   test('manual workflow forwards inputs and secrets to the reusable workflow', () => {
@@ -123,6 +125,7 @@ describe('one-shot Actions workflows', () => {
     expect(job?.with).not.toHaveProperty('github_token');
     expect(job?.secrets).toEqual({
       pr_token: '${{ secrets.GRAVESHIFT_PR_TOKEN }}',
+      policy_signing_key: '${{ secrets.GRAVESHIFT_POLICY_SIGNING_KEY }}',
     });
   });
 
@@ -137,8 +140,7 @@ describe('one-shot Actions workflows', () => {
     expect(reusable.permissions).toEqual({ contents: 'read' });
     expect(reusable.jobs?.patch?.permissions).toEqual({ contents: 'read' });
     expect(reusable.jobs?.['open-pr']?.permissions).toEqual({
-      contents: 'write',
-      'pull-requests': 'write',
+      contents: 'read',
     });
     expect(entry.permissions).toEqual({ contents: 'read' });
     for (const step of [...steps(reusable), ...steps(entry)]) {
@@ -146,6 +148,15 @@ describe('one-shot Actions workflows', () => {
         expect(step.with).toMatchObject({ 'persist-credentials': false });
       }
     }
+    expect(stepNamed(reusable, 'Checkout trusted workflow code').with?.ref).toBe(
+      '${{ steps.trusted.outputs.sha }}',
+    );
+    expect(stepNamed(reusable, 'Checkout target base as data').with?.ref).toBe(
+      '${{ steps.refs.outputs.base_ref }}',
+    );
+    expect(stepNamed(reusable, 'Resolve trusted workflow revision').env?.TRUSTED_WORKFLOW_SHA).toBe(
+      '${{ vars.GRAVESHIFT_TRUSTED_WORKFLOW_SHA }}',
+    );
   });
 
   test('third-party actions are pinned to full commit SHAs', () => {
@@ -186,11 +197,12 @@ describe('one-shot Actions workflows', () => {
     expect(pr.run).toContain('--head "$BRANCH_SLUG"');
     expect(pr.env?.BASE_REF).toBe('${{ steps.refs.outputs.base_ref }}');
     expect(pr.env?.GH_TOKEN).toBe('${{ secrets.pr_token }}');
-    for (const step of steps(reusable)) {
-      if (step.uses?.startsWith('actions/checkout@')) {
-        expect(step.with?.ref).toBe('${{ steps.refs.outputs.base_ref }}');
-      }
-    }
+    expect(stepNamed(reusable, 'Checkout trusted workflow code').with?.ref).toBe(
+      '${{ steps.trusted.outputs.sha }}',
+    );
+    expect(stepNamed(reusable, 'Checkout target base as data').with?.ref).toBe(
+      '${{ steps.refs.outputs.base_ref }}',
+    );
   });
 
   test('base ref is validated before checkout in both jobs', () => {
@@ -223,17 +235,28 @@ describe('one-shot Actions workflows', () => {
     const prepare = stepNamed(reusable, 'Prepare patch');
     expect(prepare.env).toMatchObject({
       BASE_REF: '${{ steps.refs.outputs.base_ref }}',
+      WORK_ITEM_ID: '${{ inputs.work_item_id }}',
+      INCIDENT_REF: '${{ inputs.incident_ref }}',
       BRANCH_SLUG: '${{ inputs.branch_slug }}',
       PATCH_PAYLOAD: '${{ inputs.patch_payload }}',
       POLICY_DECISION: '${{ inputs.policy_decision }}',
+      POLICY_SIGNATURE: '${{ inputs.policy_signature }}',
+      POLICY_SIGNING_KEY: '${{ secrets.policy_signing_key }}',
+      PR_TITLE: '${{ inputs.pr_title }}',
     });
     expect(prepare.run).toContain('scripts/actions/prepare-patch.ts');
 
     const apply = stepNamed(reusable, 'Apply patch and push branch');
     expect(apply.env).toMatchObject({
       BASE_REF: '${{ steps.refs.outputs.base_ref }}',
+      WORK_ITEM_ID: '${{ inputs.work_item_id }}',
+      INCIDENT_REF: '${{ inputs.incident_ref }}',
       BRANCH_SLUG: '${{ inputs.branch_slug }}',
       POLICY_DECISION: '${{ inputs.policy_decision }}',
+      POLICY_SIGNATURE: '${{ inputs.policy_signature }}',
+      POLICY_SIGNING_KEY: '${{ secrets.policy_signing_key }}',
+      PATCH_PAYLOAD: '${{ inputs.patch_payload }}',
+      PR_TITLE: '${{ inputs.pr_title }}',
       PR_TOKEN: '${{ secrets.pr_token }}',
     });
     expect(apply.run).toContain('scripts/actions/apply-patch.ts');

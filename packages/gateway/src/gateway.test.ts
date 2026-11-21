@@ -51,6 +51,7 @@ describe('budget', () => {
         binding(normal.adapter, { name: 'B', dailyBudgetUsd: 100 }),
       ],
       config: { ...config, globalDailyBudgetUsd: 1 },
+      onAudit: () => {},
     });
     expect((await gw.run(task({ agent: 'A' }))).status).toBe('ok');
     expect(await gw.run(task({ agent: 'B' }))).toMatchObject({
@@ -108,6 +109,25 @@ describe('audit', () => {
     expect(events[0]).toMatchObject({ tokensIn: 1000, costUsd: 1 });
     expect(events[2]).toMatchObject({ tokensIn: 0, tokensOut: 0, costUsd: 0 });
   });
+
+  test('a terminal result cannot be returned if audit writing fails', async () => {
+    const gw = make([binding(fakeAdapter().adapter)], {
+      onAudit: async () => {
+        throw new Error('audit storage unavailable');
+      },
+    });
+    await expect(gw.run(task())).rejects.toThrow('audit storage unavailable');
+  });
+
+  test('missing controls fail before any model call', async () => {
+    expect(() => createGateway({ agents: [], config } as never)).toThrow('audit sink is required');
+    const fake = fakeAdapter();
+    const gw = make([binding(fake.adapter)]);
+    await expect(gw.run({ ...task(), validate: undefined } as never)).rejects.toThrow(
+      'task validator is required',
+    );
+    expect(fake.calls()).toBe(0);
+  });
 });
 
 describe('retry and validation', () => {
@@ -118,6 +138,7 @@ describe('retry and validation', () => {
     const gw = createGateway({
       agents: [binding(flaky.adapter)],
       config: { ...config, maxRetries: 2 },
+      onAudit: () => {},
     });
     expect(await gw.run(task())).toMatchObject({ status: 'ok', value: { answer: 'recovered' } });
     expect(flaky.calls()).toBe(3);
@@ -126,6 +147,7 @@ describe('retry and validation', () => {
     const gw2 = createGateway({
       agents: [binding(broken.adapter)],
       config: { ...config, maxRetries: 2 },
+      onAudit: () => {},
     });
     expect(await gw2.run(task())).toMatchObject({ status: 'rules_only', reason: 'unavailable' });
     expect(broken.calls()).toBe(3);

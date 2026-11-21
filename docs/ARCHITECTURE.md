@@ -2,36 +2,34 @@
 
 This describes the code as it exists. Items that are not built are marked **not built**.
 
-The v1 daemon is at `apps/_daemon`. It is reference only. The repository does not build it and does not start it. The new daemon at `apps/daemon` is an Effect v4 skeleton on Bun. It has no use cases yet.
+The daemon at `apps/daemon` is an Effect v4 skeleton on Bun. ADR 0009 removed the reference daemon and the separate diagnosis gateway.
 
 ## Components
 
 | Component | Path | Role |
 | --- | --- | --- |
 | API | `apps/api` | NestJS app. The only external surface. Serves `GET /healthz`, the OpenAPI document, the Swagger UI, the credential routes, `POST /api/events` and the MCP endpoint at `/mcp`. |
-| Credentials | `apps/api/src/auth` | One component that issues, hashes, verifies, lists and revokes MCP tokens and plugin API keys. A file-backed store holds one-way hashes. |
+| Credentials | `apps/api/src/auth` | One component that issues, hashes, verifies, lists and revokes MCP credentials and Plugin credentials. PostgreSQL stores one-way hashes. |
 | API contract | `packages/api-contract` | Publishes generated TypeScript types and a version marker from the OpenAPI document. |
-| Daemon (v1) | `apps/_daemon` | Reference only. Wires Wraith, Medium, policy, optional fixer and the audit log. Not built and not started. |
-| Daemon (v2) | `apps/daemon` | New Effect v4 skeleton on Bun. Serves `GET /healthz` only. |
-| Core | `packages/core` | Zod schemas (source of truth), event envelope schema, incident state machine, circuit-breaker helper, config loader, `RuntimeSource` contract, pure rule engine. |
+| Daemon | `apps/daemon` | Effect v4 skeleton on Bun. Serves `GET /healthz` only. |
+| Core | `packages/core` | Zod schemas, event envelope, incident state machine, circuit-breaker helper, `RuntimeSource` contract and pure rule engine. |
 | Events | `packages/events` | `Publisher` interface, NATS JetStream publisher, an HTTP publisher that posts to the API, and an in-memory fake. No consumer is wired yet. |
 | Integrations | `packages/integrations` | Plugin and Collector contract: `Integration`, `Context` and a pure envelope builder. No NATS client import. |
 | NestJS plugin | `packages/plugin-nestjs` | In-process Plugin. Publishes one envelope per HTTP request and one for an unhandled error. |
-| Store | `packages/store` | Hash-chained, append-only audit log on `bun:sqlite` through Drizzle. |
+| Audit | `apps/api/src/audit` | Pure hash-chain functions and a PostgreSQL repository. Database triggers reject audit row updates and deletes. |
 | Policy | `packages/policy` | YAML loader and `decide()`. Pure and deterministic. |
 | Redactor | `packages/redactor` | Twelve ordered detectors, idempotent. |
 | Sources | `packages/sources-docker`, `packages/sources-k8s` | `RuntimeSource` implementations. Docker through the socket proxy; Kubernetes through `@kubernetes/client-node`, read-only. |
 | Metrics | `packages/metrics` | Prometheus instant-query client and the watcher queries. |
 | Wraith | `packages/watcher` | Rules, fingerprint dedupe, per-service incident, Salt-line silences, PromQL poller. |
 | Medium | `packages/diagnoser` | Context builder, untrusted wrapping, evidence validation, rules-only fallback. |
-| LLM | `packages/llm` | `LlmGateway`: the diagnosis-only model path from ADR 0002. It keeps the same controls but does not use the Agent gateway yet. Issue #40 will move it. |
 | Agents | `packages/agents` | Zod schemas for agent config, system template merge and the routing agent. Pure helpers only; no provider call. |
 | Gateway | `packages/gateway` | The single model call path for an Agent. Redaction, daily budgets, audit events, transport retry, one validation retry, evidence validation and rules-only fallback. One thin adapter per official provider package. |
 | Exorcist | `packages/fixer` | Patch guard, GitHub App auth, `graveshift/` branches, draft pull requests. No merge call exists. |
 | Patch | `packages/patch` | Patch schemas, `generatePatch` and `guardPatch`. The model proposes a Patch. The guard validates it. Policy decides later. |
 | Actuator | `packages/actuator` | Separate service. Verifies and executes approved actions. |
 | MCP | `apps/api/src/mcp` | `graveshift-mcp` through the official `@nestjs/mcp` module: Streamable HTTP at `/mcp` with a bearer token, plus a stdio launcher. |
-| Banshee | `packages/notifier-discord` | **Not built.** Package exports only its name. The daemon uses a no-op `Notifier`. |
+| Banshee | `packages/notifier-discord` | **Not built.** Package exports only its name. |
 
 ## Incident flow
 
@@ -39,7 +37,7 @@ The v1 daemon is at `apps/_daemon`. It is reference only. The repository does no
 runtime events / logs / Prometheus
         -> Wraith: detection (dedupe 10 min, one incident per service)
         -> incident `detected`
-        -> Medium: diagnosis (LLM through LlmGateway, else rules-only)
+        -> Medium: diagnosis (Agent through the gateway, else rules-only)
         -> policy decide(open_pr)
         -> Exorcist: draft PR (patch generator: built; daemon wiring: not built)
         -> Banshee: Discord blessing (not built)
@@ -89,7 +87,7 @@ The API listens on 127.0.0.1 by default. Set `HOST` to change the bind address. 
 
 Structured logging is deferred to the production ticket.
 
-Request bodies use `class-validator` DTO classes. The global `ValidationPipe` sets `whitelist`, `forbidNonWhitelisted`, `transform` and 422, so an unknown field fails at the pipe. Earlier routes still attach a Zod schema with `@Body({ schema })`, `@Query({ schema })` or `@Param({ schema })` and pass through the standard-schema pipe. Zod is also used for boot env config and OpenAPI response docs. No SSE was added to the HTTP routes here. Later tickets add the routes for graves and hauntings here.
+Every HTTP request boundary uses `class-validator` DTO classes. The global `ValidationPipe` sets `whitelist`, `forbidNonWhitelisted`, `transform` and 422, so an unknown field fails at the pipe. Zod is used for boot env config, domain schemas and OpenAPI response docs. Business conflicts remain 409 and unknown ids remain 404.
 
 ## Prisma migrations
 
@@ -131,7 +129,7 @@ MCP loads the policy in a provider factory, so a bad `POLICY_PATH` stops the API
 
 The v2 daemon serves only `/healthz`, so backend reads return empty or unavailable results. No counters are available: the `propose_fix` reply states that rate and budget limits are not enforced. Tests inject a fake backend.
 
-`packages/api-contract` generates its types from the OpenAPI document. It exports the generated types and the `API_CONTRACT_VERSION` marker through `package.json#exports` only. It does not define an event envelope or any domain event type.
+`packages/api-contract` generates its types from the OpenAPI document. It exports the generated types and the `API_CONTRACT_VERSION` marker through `package.json#exports` only. It does not define an event envelope or any domain event type. `@graveshift/core` and `@graveshift/events` are public npm packages for the state and event contracts. Their Node exports use built files under `dist/`; Bun workspace consumers use the source exports. Run `bun run build:contracts` before packing them. Do not publish as part of a code change.
 
 ## Credentials and event ingest
 
@@ -139,7 +137,7 @@ The v2 daemon serves only `/healthz`, so backend reads return empty or unavailab
 
 One scope catalog serves both surfaces. MCP scopes are `incidents:read`, `diagnoses:read`, `audit:read`, `logs:read`, `metrics:read` and `fix:propose`. The plugin scope is `events:publish`. `POST /api/credentials` takes `{ kind, name, scopes, service?, ttlSeconds? }`. `kind` selects the shape: an MCP read token or a plugin publish key. A client names the credential and chooses scopes from the ones its client-credentials token holds. A client cannot grant `admin` or `tokens:manage`, and cannot grant a scope it does not hold. A plugin key may bind to one Grave or service. A client holds at most ten active credentials; the count and the issue run in one serialized section, and revoking one frees a slot. The response shows the value once; `GET /api/credentials` returns metadata only.
 
-`POST /api/oauth/token` runs the OAuth 2.1 client-credentials grant against a boot client registry. It signs a JWT with `iss`, `aud`, `sub`, `scope`, `jti` and `exp` through `@nestjs/jwt`. A passport strategy validates those claims and the registry tenant. The JWT secret has no default and is required in every environment. Throttling covers the token, credential, event and MCP routes and keys by client id resolved from the bearer token. The NATS connection promise is shared, a failed connect clears the cache and publish fails closed with 503. The store writes one JSON file with mode 0600. It holds a SHA-256 hash, a short display prefix, kind, name, client id, tenant id, scopes, optional service binding and timestamps. It holds no value. Presented values are compared in constant time.
+`POST /api/oauth/token` runs the OAuth 2.1 client-credentials grant against a boot client registry. It signs a JWT with `iss`, `aud`, `sub`, `scope`, `jti` and `exp` through `@nestjs/jwt`. A passport strategy validates those claims and the registry tenant. The JWT secret has no default and is required in every environment. Throttling covers the token, credential, event and MCP routes and keys by client id resolved from the bearer token. The NATS connection promise is shared, a failed connect clears the cache and publish fails closed with 503. PostgreSQL stores a SHA-256 hash, a short display prefix, kind, name, client id, tenant id, scopes, optional service binding and timestamps. It holds no credential value. Presented values are compared in constant time.
 
 `POST /api/events` is the plugin ingest route. The `class-validator` DTO rejects unknown fields with 422, then `EventEnvelopeSchema` from `packages/core` checks the canonical envelope shape. The route checks `events:publish`, the tenant and the service binding, bounds payload bytes and request rate, checks the body size before the DTO pipe, redacts every string and publishes through the injected `Publisher`. It returns 202. The NATS publisher stays in the API for daemon use. Client apps use `createHttpPublisher` from `packages/events`, which posts to `/api/events` with a bearer plugin key. Client apps no longer hold NATS credentials.
 
@@ -176,11 +174,13 @@ A Collector example lives in the contract tests: a fake source that publishes on
 
 ## Rule engine
 
-One engine evaluates every **Event envelope**. The engine lives in `packages/core/src/rules.ts`. It is pure: no runtime, no I/O and no NATS import. `RuleSchema` defines an `id`, `enabled`, an explicit `priority`, a `match` object and an `action`. An action is `detect`, `suppress` or `escalate`. The match object filters by severities, services, event types and `tenantId`. Each filter is optional. `evaluateEnvelope` sorts rules by priority, then by id, and returns the action of the first matching enabled rule. Without a match it returns `detect`. The engine calls no model and writes no data.
+One engine evaluates every **Event envelope**. The engine lives in `packages/core/src/rules.ts`. `RuleSchema` defines an `id`, `enabled`, an explicit `priority`, a `match` object and an `action`: `detect`, `suppress`, `escalate` or `telemetry`. The match object filters by severities, services, event types and `tenantId`. Each filter is optional. `evaluateEnvelope` sorts rules by priority, then by id. The engine calls no model and writes no data.
 
 Two layers feed the one engine. System rules give defaults. Client rules override a system rule with the same `id`. This is a **Rule override**. `mergeRules` keeps system rules when the client has no entry for that id. `detectRuleOverrides` returns the ids that would be overridden and a ready-to-display warning. The config warns the user before save and needs explicit confirmation when a Rule override exists.
 
-`POST /api/rules/validate` validates system and client rule arrays with Zod. It returns the override ids and warning. It rejects a Rule override unless the body sets `confirmOverrides: true`. The route stores no rule and evaluates no event. Rule evaluation stays in the daemon. It never runs in a **Plugin** or a **Collector**.
+`POST /api/rules/validate` validates system and client rule arrays with `ValidateRulesDto`. It returns the override ids and warning. It rejects a Rule override unless the body sets `confirmOverrides: true`. The route stores no rule and evaluates no event. Rule evaluation stays in the daemon. It never runs in a **Plugin** or a **Collector**.
+
+When no rule matches, `info` returns `telemetry`; `warning` and `critical` return `detect`. A rule may suppress an info event, but an info event cannot enter detection through a `detect` or `escalate` action.
 
 The audit event for Rule override detection is deferred with the rest of the audit work.
 
@@ -204,14 +204,14 @@ Every call applies these controls:
 
 - Redaction of the system prompt, the prompt and any untrusted content before the model.
 - A daily budget in UTC, checked for the Agent and for Graveshift as a whole.
-- One audit event on every terminal path. It carries `agent`, `task`, `status`, token counts and cost.
+- A required evidence/output validator and one required audit callback on every terminal path. Audit events carry `agent`, `task`, `status`, token counts and cost. An audit callback failure fails the call rather than returning an unaudited result.
 - Transport retry from config. The gateway owns the retry; the SDK does not retry.
 - At most one validation retry. The validation reason is redacted before the model sees it again.
 - Evidence validation and a deterministic rules-only fallback. This fallback runs when the output is invalid, the provider is unavailable or the budget is used up.
 
 Model output cannot grant a permission. The gateway runs no tool and returns no permission grant. A Ghost gets its permission from policy.
 
-There are two model paths today. `packages/gateway` is the single path for an Agent. `packages/llm` is a separate, diagnosis-only gateway from ADR 0002. It predates Agent config and is not wired to `packages/gateway`. Issue #40 moves diagnosis into `packages/gateway` so that one gateway serves every model call. Do not add another provider path.
+Diagnosis and patch generation both use the selected Agent through `packages/gateway`.
 
 The budget check and the charge are two separate steps. Concurrent calls can spend more than the daily limit. A reservation taken before the model call is the upgrade path when the daemon runs calls in parallel.
 
@@ -221,13 +221,19 @@ The daemon keeps only health and a local command inbox (**not built**). It liste
 
 ## GitHub Actions
 
-Actions runs one-shot jobs only. The platform invokes the reusable `workflow_call` workflow with a work item id, a `graveshift/` branch slug, a base ref, a guarded patch payload, a recorded policy decision and a PR title. Both jobs validate `base_ref` against the repository variable `GRAVESHIFT_ALLOWED_BASE_REFS` before checkout, so a caller cannot make Actions check out and run a script from an arbitrary ref. Set that variable to a comma-separated allowlist such as `main,v2/29-fix-paths,graveshift/inc-123-fix`; an unset allowlist fails closed.
+Actions runs one-shot jobs only. The platform invokes the reusable `workflow_call` workflow with a work item id, a `graveshift/` branch slug, a base ref, a full base commit SHA, a guarded patch payload, a signed policy decision and a PR title. Both jobs validate `base_ref` against `GRAVESHIFT_ALLOWED_BASE_REFS` before checkout. The scripts and policy come from the exact repository variable `GRAVESHIFT_TRUSTED_WORKFLOW_SHA`, never from the target base ref. An unset allowlist or trusted SHA fails closed. Set that variable to a reviewed commit that contains the workflow scripts and policy.
 
-The `patch` job checks the payload size, parses it with `packages/patch` schemas and the repo rules, redacts file content and writes a sanitized `patch.json` artifact. It runs with `contents: read` only. The `policy_decision` input is caller-supplied data, not a grant: both jobs re-evaluate its context with `decide()` from `packages/policy` and the repo rules from the policy file, and require an `allow` for `open_pr`. `repoRules()` fails closed for a repository with no policy entry. The API remains the authority for permissions. No model key or model call exists in Actions; the model path stays in the API and the daemon.
+The `policy_decision` input is signed with HMAC-SHA256 by the platform. `GRAVESHIFT_POLICY_SIGNING_KEY` must be a 32-byte or longer secret set both for the platform caller and the repository. The signature covers the canonical sorted-key JSON decision, repository, work item id, incident ref, branch slug, base ref, full base commit SHA, PR title, SHA-256 of the raw patch payload, issue time and expiry. The window is at most five minutes. Both jobs verify the signature and re-evaluate the context with `decide()` from trusted policy. A missing, stale, altered or mis-bound signature fails closed. `repoRules()` fails closed for a repository with no policy entry. No model key or model call exists in Actions.
 
-The `open-pr` job downloads that artifact, validates it again, rejects paths that cross a symlink or leave the workspace, writes the files, commits them to the `graveshift/` branch with an explicit author identity, pushes that branch and opens one draft pull request. `--base` comes from the validated `base_ref`, so a stacked PR targets its parent branch, not the repository default. No daemon, no long-running server, no merge and no runtime action run in Actions. Self-host the daemon (`apps/daemon`) for the long-running work.
+The caller uses `signPolicyDecision` in `scripts/actions/policy-signature.ts` after `decide()` returns `allow`, then passes the returned `policyDecision` and `signature` as `policy_decision` and `policy_signature`. The `base_sha` input is the exact commit from which the patch was prepared. Both jobs have a read-only `GITHUB_TOKEN`; only the separate `pr_token` can push or open a PR. `GRAVESHIFT_TRUSTED_WORKFLOW_SHA` must be advanced only after the workflow code is reviewed.
 
-Only a person with write access to the repository may run the thin `workflow_dispatch` workflow by hand. It forwards the typed inputs and secrets unchanged; the platform records `policy_decision`, so a person does not type a permission grant. `pr_token` must be a fine-grained, repository-scoped PAT that can push to `graveshift/` branches and open draft PRs. The `permissions` block bounds only `GITHUB_TOKEN`: it does not bound a caller-supplied token, so keep the PAT narrowly scoped and rotate it. The encoded git auth is masked before git uses it.
+`bun run test:database` starts a separate Docker Postgres with test credentials, applies migrations, checks persistence, concurrent caps, rollback, expiry and audit triggers, then removes that test container and network. CI runs the unit/API tests and schema checks; it does not start a database. The initial migration is still part of the unmerged database foundation and is tested on a fresh database.
+
+The `patch` job checks the payload size, parses it with `packages/patch` schemas and trusted repo rules, redacts file content and writes a sanitized `patch.json` artifact. It runs with `contents: read` only.
+
+The `open-pr` job checks out the requested base into a separate data directory. Trusted code validates the artifact again, rejects paths that cross a symlink or leave that directory, writes the files, commits them to the `graveshift/` branch with an explicit author identity, pushes that branch and opens one draft pull request. A retry reuses the same remote branch only when its tree matches; it never force-pushes different content. If a draft PR already exists, the workflow reuses it. No daemon, no long-running server, no merge and no runtime action run in Actions.
+
+`workflow_dispatch` still needs a valid platform signature. The human cannot create a grant by typing their own policy context. `pr_token` must be a fine-grained, repository-scoped PAT that can push to `graveshift/` branches and open draft PRs. The `permissions` block bounds only `GITHUB_TOKEN`: it does not bound a caller-supplied token, so keep the PAT narrowly scoped and rotate it. The encoded git auth is masked before git uses it.
 
 ## Decisions
 
