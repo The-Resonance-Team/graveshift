@@ -102,6 +102,12 @@ bun run verify
 
 `bun run verify` runs the format check, lint, typecheck, type-checked tests, then tests. Formatting runs before linting because formatting expands compact source and can expose line-length findings.
 
+## Prisma migrations
+
+CI checks schema drift without a database by comparing the generated schema SQL with the committed migration SQL. This check supports additive migrations only. When a second or destructive migration is added, change to a shadow-database drift check and ask the coordinator to approve a CI Postgres service or an external test database.
+
+For the local shadow-database check, start Postgres with `docker compose -f deploy/compose/graveshift.compose.yml up -d postgres`. Set `DATABASE_URL` and `SHADOW_DATABASE_URL` using the local Postgres password. The shadow URL must name a separate, empty database; create it with `docker compose -f deploy/compose/graveshift.compose.yml exec postgres createdb -U graveshift graveshift_shadow`. Then run `bun run migrate:drift:local`.
+
 ## MCP server
 
 The API in `apps/api` serves `graveshift-mcp` through the official `@nestjs/mcp` module (v0.0.4). It exposes nine tools (`list_services`, `list_incidents`, `get_incident`, `get_diagnosis`, `get_audit_log`, `verify_audit_chain`, `propose_fix`, `tail_logs`, `query_metric`), two prompts (`triage_incident`, `write_postmortem`) and the Autopsy resource at `graveshift://incidents/{id}/postmortem`. Every reply passes through the redactor. `propose_fix` only asks the policy engine and never executes an action.
