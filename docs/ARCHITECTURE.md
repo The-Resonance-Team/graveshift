@@ -197,6 +197,16 @@ The budget check and the charge are two separate steps. Concurrent calls can spe
 
 The daemon keeps only health and a local command inbox (**not built**). It listens on port 2602 and binds to 127.0.0.1 by default. The `PORT` environment variable changes the port. No client calls the daemon directly. Keep the bind on localhost.
 
+## GitHub Actions
+
+Actions runs one-shot jobs only. The platform invokes the reusable `workflow_call` workflow with a work item id, a `graveshift/` branch slug, a base ref, a guarded patch payload, a recorded policy decision and a PR title. Both jobs validate `base_ref` against the repository variable `GRAVESHIFT_ALLOWED_BASE_REFS` before checkout, so a caller cannot make Actions check out and run a script from an arbitrary ref. Set that variable to a comma-separated allowlist such as `main,v2/29-fix-paths,graveshift/inc-123-fix`; an unset allowlist fails closed.
+
+The `patch` job checks the payload size, parses it with `packages/patch` schemas and the repo rules, redacts file content and writes a sanitized `patch.json` artifact. It runs with `contents: read` only. The `policy_decision` input is caller-supplied data, not a grant: both jobs re-evaluate its context with `decide()` from `packages/policy` and the repo rules from the policy file, and require an `allow` for `open_pr`. `repoRules()` fails closed for a repository with no policy entry. The API remains the authority for permissions. No model key or model call exists in Actions; the model path stays in the API and the daemon.
+
+The `open-pr` job downloads that artifact, validates it again, rejects paths that cross a symlink or leave the workspace, writes the files, commits them to the `graveshift/` branch with an explicit author identity, pushes that branch and opens one draft pull request. `--base` comes from the validated `base_ref`, so a stacked PR targets its parent branch, not the repository default. No daemon, no long-running server, no merge and no runtime action run in Actions. Self-host the daemon (`apps/daemon`) for the long-running work.
+
+Only a person with write access to the repository may run the thin `workflow_dispatch` workflow by hand. It forwards the typed inputs and secrets unchanged; the platform records `policy_decision`, so a person does not type a permission grant. `pr_token` must be a fine-grained, repository-scoped PAT that can push to `graveshift/` branches and open draft PRs. The `permissions` block bounds only `GITHUB_TOKEN`: it does not bound a caller-supplied token, so keep the PAT narrowly scoped and rotate it. The encoded git auth is masked before git uses it.
+
 ## Decisions
 
 See `docs/adr/0001-full-scope-for-kiroween.md`, `docs/adr/0002-single-ai-sdk-provider.md` (superseded by `docs/adr/0007-configurable-agents-and-providers.md`), `docs/adr/0003-platform-v2-starts-now.md`, `docs/adr/0004-effect-v4-daemon-on-bun.md`, `docs/adr/0005-event-backbone-nats.md`, `docs/adr/0006-nestjs-api-and-mcp.md` and `docs/adr/0007-configurable-agents-and-providers.md`.
