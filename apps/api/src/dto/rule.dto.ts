@@ -6,12 +6,13 @@ import {
   IsBoolean,
   IsIn,
   IsInt,
-  IsOptional,
+  IsObject,
   IsString,
   Matches,
   Max,
   Min,
   MinLength,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 
@@ -22,26 +23,26 @@ const SUBJECT_TYPE_PATTERN = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/;
 // The match filters mirror RuleMatchSchema in packages/core. Every filter is optional.
 export class RuleMatchDto {
   @ApiPropertyOptional({ type: String, isArray: true, enum: SEVERITIES })
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined)
   @IsArray()
   @IsIn(SEVERITIES, { each: true })
   severities?: WorkItemSeverity[];
 
   @ApiPropertyOptional({ type: String, isArray: true, minLength: 1 })
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined)
   @IsArray()
   @IsString({ each: true })
   @MinLength(1, { each: true })
   services?: string[];
 
   @ApiPropertyOptional({ type: String, isArray: true, pattern: SUBJECT_TYPE_PATTERN.source })
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined)
   @IsArray()
   @Matches(SUBJECT_TYPE_PATTERN, { each: true })
   types?: string[];
 
   @ApiPropertyOptional({ type: String, pattern: TOKEN_PATTERN.source })
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined)
   @IsString()
   @Matches(TOKEN_PATTERN)
   tenantId?: string;
@@ -65,6 +66,7 @@ export class RuleDto {
   priority!: number;
 
   @ApiProperty({ type: RuleMatchDto })
+  @IsObject()
   @ValidateNested()
   @Type(() => RuleMatchDto)
   match!: RuleMatchDto;

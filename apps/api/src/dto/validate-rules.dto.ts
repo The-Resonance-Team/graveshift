@@ -4,8 +4,8 @@ import {
   ArrayMaxSize,
   IsArray,
   IsBoolean,
-  IsOptional,
   Validate,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 
@@ -36,7 +36,7 @@ export class RulesLayerDto {
 
 export class ValidateRulesDto extends RulesLayerDto {
   @ApiPropertyOptional({ type: Boolean })
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined)
   @IsBoolean()
   confirmOverrides?: boolean;
 }

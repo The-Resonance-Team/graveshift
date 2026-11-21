@@ -1,10 +1,10 @@
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { IsOptional, IsString, MaxLength, MinLength } from 'class-validator';
+import { IsString, MaxLength, MinLength, ValidateIf } from 'class-validator';
 
 // A Fix now request may carry a short human note. It never grants permission.
 export class FixNowRequestDto {
   @ApiPropertyOptional({ type: String, minLength: 1, maxLength: 500 })
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined)
   @IsString()
   @MinLength(1)
   @MaxLength(500)

@@ -116,4 +116,66 @@ describe('POST /api/rules/validate (e2e)', () => {
       .send({ systemRules: [], clientRules: [], unknown: true })
       .expect(422);
   });
+
+  test('rejects null for an optional body field', async () => {
+    await request(app.getHttpServer())
+      .post('/api/rules/validate')
+      .send({ systemRules: [], clientRules: [], confirmOverrides: null })
+      .expect(422);
+  });
+
+  test('rejects null for a nested match field', async () => {
+    await request(app.getHttpServer())
+      .post('/api/rules/validate')
+      .send({
+        systemRules: [{ ...systemRule, match: { severities: null } }],
+        clientRules: [],
+      })
+      .expect(422);
+  });
+
+  test('rejects an invalid nested match', async () => {
+    await request(app.getHttpServer())
+      .post('/api/rules/validate')
+      .send({
+        systemRules: [{ ...systemRule, match: { severities: ['bogus'] } }],
+        clientRules: [],
+      })
+      .expect(422);
+    await request(app.getHttpServer())
+      .post('/api/rules/validate')
+      .send({ systemRules: [{ ...systemRule, match: [] }], clientRules: [] })
+      .expect(422);
+  });
+
+  test('rejects an unknown key inside a rule and inside a match', async () => {
+    await request(app.getHttpServer())
+      .post('/api/rules/validate')
+      .send({ systemRules: [{ ...systemRule, extra: true }], clientRules: [] })
+      .expect(422);
+    await request(app.getHttpServer())
+      .post('/api/rules/validate')
+      .send({
+        systemRules: [{ ...systemRule, match: { extra: true } }],
+        clientRules: [],
+      })
+      .expect(422);
+  });
+
+  test('accepts a complete valid request with every match filter', async () => {
+    const fullRule = {
+      ...systemRule,
+      match: {
+        severities: ['warning'],
+        services: ['api'],
+        types: ['graveshift.oom'],
+        tenantId: 'tenant_1',
+      },
+    };
+    const response = await request(app.getHttpServer())
+      .post('/api/rules/validate')
+      .send({ systemRules: [fullRule], clientRules: [], confirmOverrides: true })
+      .expect(200);
+    expect(response.body).toEqual({ accepted: true, overrideIds: [], warning: '' });
+  });
 });

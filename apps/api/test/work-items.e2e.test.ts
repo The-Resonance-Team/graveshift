@@ -258,11 +258,38 @@ describe('work items API (e2e)', () => {
     await request(app.getHttpServer()).get('/api/work-items?unknown=1').expect(422);
   });
 
-  test('POST fix-now rejects an empty note', async () => {
-    await request(app.getHttpServer())
-      .post('/api/work-items/wi-1/fix-now')
-      .send({ note: '' })
-      .expect(422);
+  test('POST fix-now rejects an empty or null note', async () => {
+    await Promise.all(
+      ['', null].map((note) =>
+        request(app.getHttpServer())
+          .post('/api/work-items/wi-1/fix-now')
+          .send({ note })
+          .expect(422),
+      ),
+    );
     expect(fixCalls()).toHaveLength(0);
+  });
+
+  test('POST triage rejects an undeclared field', async () => {
+    await request(app.getHttpServer())
+      .post('/api/work-items/wi-1/triage')
+      .send({ assignee: NEEDS_HUMAN, extra: true })
+      .expect(422);
+  });
+
+  test('POST triage rejects a missing or malformed assignee', async () => {
+    await Promise.all(
+      [{}, { assignee: 42 }, { assignee: 'needs_humanXYZ' }].map((body) =>
+        request(app.getHttpServer()).post('/api/work-items/wi-1/triage').send(body).expect(422),
+      ),
+    );
+  });
+
+  test('POST fix-now accepts a note at the length bound', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/work-items/wi-1/fix-now')
+      .send({ note: 'x'.repeat(500) })
+      .expect(200);
+    expect(response.body.ok).toBe(true);
   });
 });
