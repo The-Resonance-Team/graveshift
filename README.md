@@ -106,7 +106,7 @@ bun run verify
 
 CI checks schema drift without a database by comparing the generated schema SQL with the committed migration SQL. This check supports additive migrations only. When a second or destructive migration is added, change to a shadow-database drift check and ask the coordinator to approve a CI Postgres service or an external test database.
 
-For the local shadow-database check, start Postgres with `docker compose -f deploy/compose/graveshift.compose.yml up -d postgres`. Set `DATABASE_URL` and `SHADOW_DATABASE_URL` using the local Postgres password. The shadow URL must name a separate, empty database; create it with `docker compose -f deploy/compose/graveshift.compose.yml exec postgres createdb -U graveshift graveshift_shadow`. Then run `bun run migrate:drift:local`.
+`DATABASE_URL` in `.env.example` and the API default use the same local placeholder credentials as the Postgres service in Compose. Start Postgres with `docker compose -f deploy/compose/graveshift.compose.yml up -d postgres`. For the local shadow-database check, set `SHADOW_DATABASE_URL` to a separate, empty database using the same credentials; create it with `docker compose -f deploy/compose/graveshift.compose.yml exec postgres createdb -U graveshift graveshift_shadow`. Then run `bun run migrate:drift:local`.
 
 ## MCP server
 

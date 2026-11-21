@@ -43,4 +43,6 @@ if (actual !== expected) {
   process.exit(1);
 }
 
-process.stdout.write(`Prisma drift check passed (${migrationFiles.length} migration file).\n`);
+process.stdout.write(
+  `Prisma drift check passed (${migrationFiles.length} migration file${migrationFiles.length === 1 ? '' : 's'}).\n`,
+);
