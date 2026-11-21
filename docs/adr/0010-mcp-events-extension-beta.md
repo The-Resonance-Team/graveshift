@@ -1,13 +1,15 @@
-# Adopt the MCP Events extension at Beta
+# MCP Events at Beta on one endpoint
 
 Status: accepted
 
-On 2026-11-21 the owner chose to use the official MCP Events extension (`io.modelcontextprotocol/events`) in v2 while it is at Beta. SEP-3415 is Final and the extension is in Beta. It needs protocol revision `2026-07-28` or later.
+On 2026-11-21 the owner chose the official MCP Events extension for v2 while it was at Beta. The Events specification had reached Final. Final means the specification is stable. The extension was at Beta. Beta means the extension can still change. The design needed a newer protocol revision than the older client in ADR 0006.
 
-Graveshift exposes one subscription surface in `apps/api`. Crew agents and external client agents use that surface with a #63 credential and #47 scopes. NATS JetStream stays the only event backbone. The API maps each envelope to an Event occurrence, maps the stream position to a Cursor, and checks the scope that the Event type declares. Poll (`events/poll`) is the only delivery mode in v2. Push (`events/stream`) and webhook (`events/subscribe`) are v3 work in tickets #68, #69 and #70.
+The API exposed one subscription surface. Crew agents and external client agents used it. The API mapped each envelope to an Event occurrence, mapped the stream position to a Cursor, and checked the scope that the Event type declared. Poll was the only delivery mode in v2. The owner left push and webhook delivery for v3.
 
-`@nestjs/mcp` 0.0.4 serves protocol revision `2026-07-28` through `@modelcontextprotocol/server` 2.4.0, so extension negotiation works at the wire level. The module has no supported hook for custom JSON-RPC methods. Ticket #49 owns the local patch or adapter that registers the `events/*` methods on the single `/mcp` endpoint. No second MCP endpoint is allowed. No released SDK version implements Events; the `ServerExtension` API is on an unreleased branch only.
+This decision amends the note in ADR 0006 about runtime registration. ADR 0006 said that the MCP module had no runtime tool registration. The owner accepted a local addition for Events until upstream support existed. The rule of one endpoint from ADR 0006 stayed. The compatibility test in ADR 0006 for the older client stayed. That test and the newer protocol revision for Events did not conflict.
 
-Recheck trigger: when the extension reaches Stable, or when the negotiated protocol revision changes, review this decision. If the wire format breaks, keep the Event envelope model and migrate the subscription surface. Do not fork the MCP SDK. Keep upstream gaps in the local drafts of #49 and in the v3 wire ticket #68.
+Recheck trigger: The owner reviews this decision when the extension reaches Stable. The owner also reviews this decision when the protocol revision for Events changes. If the wire format changes, the owner keeps the Event envelope model and moves the subscription surface.
 
-Trade-off: we gain a standard subscription contract and cursor semantics now, but we carry a local bridge and a Beta wire format until upstream support is released.
+Rejected alternative: forking the MCP SDK.
+
+Trade-off: The team gained a standard subscription contract and cursor semantics at once. The team accepted a local addition and a wire format that could still change.
