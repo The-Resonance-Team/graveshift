@@ -123,11 +123,76 @@ describe('credential routes (e2e)', () => {
   });
 
   test('GET lists only the caller credentials', async () => {
-    const other = accessToken(ctx.jwt, ['tokens:manage'], { clientId: 'client-2' });
+    const other = accessToken(ctx.jwt, ['tokens:manage'], {
+      clientId: 'client-2',
+      tenantId: 'tenant-2',
+    });
     const response = await request(app.getHttpServer())
       .get('/api/credentials')
       .set('authorization', `Bearer ${other}`)
       .expect(200);
     expect(response.body.items).toEqual([]);
+  });
+
+  test('POST requires a service for a plugin key', async () => {
+    await post(manageToken, {
+      kind: 'plugin',
+      name: 'unbound',
+      scopes: ['events:publish'],
+    }).expect(422);
+  });
+
+  test('the 11th active credential fails and a revoke frees a slot', async () => {
+    const fresh = await buildAuthApp();
+    const token = accessToken(fresh.jwt, ['tokens:manage', 'incidents:read']);
+    const issue = () =>
+      request(fresh.app.getHttpServer())
+        .post('/api/credentials')
+        .set('authorization', `Bearer ${token}`)
+        .send({ kind: 'mcp', name: 'reader', scopes: ['incidents:read'] });
+    const ids: string[] = [];
+    // Issues run one by one so the cap counts committed records.
+    await Array.from({ length: 10 }).reduce(async (previous) => {
+      await previous;
+      const response = await issue().expect(201);
+      ids.push(response.body.id as string);
+    }, Promise.resolve());
+    await issue().expect(409);
+    await request(fresh.app.getHttpServer())
+      .delete(`/api/credentials/${ids[0]}`)
+      .set('authorization', `Bearer ${token}`)
+      .expect(204);
+    await issue().expect(201);
+    await fresh.app.close();
+  });
+
+  test('credential routes are throttled by client id', async () => {
+    const limited = await buildAuthApp({ eventRateLimit: 2 });
+    const token = accessToken(limited.jwt, ['tokens:manage', 'incidents:read']);
+    const call = () =>
+      request(limited.app.getHttpServer())
+        .post('/api/credentials')
+        .set('authorization', `Bearer ${token}`)
+        .send({ kind: 'mcp', name: 'reader', scopes: ['incidents:read'] });
+    await call().expect(201);
+    await call().expect(201);
+    await call().expect(429);
+    await limited.app.close();
+  });
+
+  test('a client in another tenant cannot revoke this credential', async () => {
+    const created = await post(manageToken, {
+      kind: 'mcp',
+      name: 'owned',
+      scopes: ['incidents:read'],
+    }).expect(201);
+    const otherTenant = accessToken(ctx.jwt, ['tokens:manage'], {
+      clientId: 'client-2',
+      tenantId: 'tenant-2',
+    });
+    await request(app.getHttpServer())
+      .delete(`/api/credentials/${created.body.id}`)
+      .set('authorization', `Bearer ${otherTenant}`)
+      .expect(404);
   });
 });

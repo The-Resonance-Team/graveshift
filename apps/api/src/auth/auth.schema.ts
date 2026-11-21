@@ -25,3 +25,9 @@ export const eventAcceptedSchema = z.object({
   accepted: z.literal(true),
   id: z.string(),
 });
+
+export const oauthTokenSchema = z.object({
+  access_token: z.string(),
+  token_type: z.literal('Bearer'),
+  expires_in: z.number().int(),
+});

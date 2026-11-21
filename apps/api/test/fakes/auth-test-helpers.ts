@@ -52,12 +52,43 @@ export function accessToken(
       sub: overrides.clientId ?? 'client-1',
       tenantId: overrides.tenantId ?? 'tenant-1',
       scope: scopes,
+      jti: 'test-jti',
     },
     {
       secret: TEST_CONFIG.jwtSecret,
       issuer: TEST_CONFIG.jwtIssuer,
       audience: TEST_CONFIG.jwtAudience,
       expiresIn: '5m',
+    },
+  );
+}
+
+export interface RawTokenOptions {
+  secret?: string;
+  issuer?: string;
+  audience?: string;
+  noExp?: boolean;
+  expired?: boolean;
+  tenantId?: string;
+  scope?: string[];
+  sub?: string;
+}
+
+/** Mints a token with explicit claims for negative OAuth tests. */
+export function rawToken(jwt: JwtService, options: RawTokenOptions = {}): string {
+  const now = Math.floor(Date.now() / 1000);
+  return jwt.sign(
+    {
+      sub: options.sub ?? 'client-1',
+      tenantId: options.tenantId ?? 'tenant-1',
+      scope: options.scope ?? ['tokens:manage'],
+      jti: 'raw-jti',
+      ...(options.noExp ? {} : { exp: options.expired ? now - 60 : now + 300 }),
+    },
+    {
+      secret: options.secret ?? TEST_CONFIG.jwtSecret,
+      issuer: options.issuer ?? TEST_CONFIG.jwtIssuer,
+      audience: options.audience ?? TEST_CONFIG.jwtAudience,
     },
   );
 }

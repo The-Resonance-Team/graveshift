@@ -1,12 +1,16 @@
 // Generation imports apps/api on purpose: the controllers own the OpenAPI document,
 // so the script boots the real app. openapi-typescript stays pinned to 6.7.6 because
 // v7 needs TypeScript 5 and this repo uses TypeScript 7.
+import { randomBytes } from 'node:crypto';
 import { mkdir } from 'node:fs/promises';
 import openapiTS, { type OpenAPI3 } from 'openapi-typescript';
 import { createApp } from '../../../apps/api/src/app.factory';
 import { createOpenApiDocument } from '../../../apps/api/src/openapi';
 
 const check = process.argv.includes('--check');
+// Document generation only boots the app; it never signs a token. Supply a
+// local placeholder so the boot config passes without a deployment secret.
+process.env.GRAVESHIFT_OAUTH_JWT_SECRET ??= randomBytes(32).toString('hex');
 const app = await createApp();
 const document = createOpenApiDocument(app);
 await app.close();

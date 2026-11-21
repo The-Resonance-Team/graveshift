@@ -30,13 +30,13 @@ Every tool input has a Zod schema with limits (`list_incidents` at most 50, `get
 
 ## Credentials and event ingest
 
-`apps/api/src/auth` is the only issuer and verifier for MCP tokens and plugin API keys. Credential management uses OAuth 2.1 client credentials: a passport strategy checks a bearer JWT signed with `@nestjs/jwt`. Boot config for the secret, issuer and audience uses a Zod env schema. Request bodies use `class-validator` DTOs with whitelist, `forbidNonWhitelisted`, transform and 422, so an unknown field fails at the pipe.
+`apps/api/src/auth` is the only issuer and verifier for MCP tokens and plugin API keys. Credential management uses OAuth 2.1 client credentials: a passport strategy checks a bearer JWT signed with `@nestjs/jwt`. `POST /api/oauth/token` signs a JWT with `iss`, `aud`, `sub`, `scope`, `jti` and `exp` from a boot client registry. The secret has no default; production boot fails when it is unset. A passport strategy requires `iss`, `aud` and `exp` and checks the tenant against the registry. Throttling covers the credential, event and MCP routes and keys by client id. A client holds at most ten active credentials. MCP primitives are scoped with deny by default; the HTTP route returns 403 for a primitive outside the token scopes. Request bodies use `class-validator` DTOs with whitelist, `forbidNonWhitelisted`, transform and 422, so an unknown field fails at the pipe.
 
 The store writes one JSON file with mode 0600 and an atomic replace. It keeps a SHA-256 hash, a short display prefix, kind, name, client id, tenant id, scopes, optional service binding and timestamps. It never keeps the value. The value appears once in the create response and is never logged. Presented values are compared in constant time. Expired, revoked, unknown or wrong-kind values deny the call.
 
 `tokens:manage` is required to manage credentials. The scope catalog is fixed. MCP kinds may carry the six read scopes; plugin kinds may carry `events:publish`. A client cannot grant `admin` or `tokens:manage`, and cannot grant a scope its own token does not hold. `GET /api/credentials` returns metadata only: no value and no hash.
 
-`POST /api/events` checks `events:publish`, the tenant binding and the optional service binding. It bounds payload bytes and request rate with the in-process throttler. `EventEnvelopeSchema` from `packages/core` checks the canonical shape, and the payload passes through `packages/redactor` before publish. The API publishes through the injected `Publisher`; client apps use the HTTP publisher with a bearer plugin key and hold no NATS credential. No test uses a real secret, NATS endpoint or network call.
+`POST /api/events` checks `events:publish`, the tenant binding and the required service binding. A plugin key without a service is refused at the DTO. The body size is bounded before validation, and the request rate is bounded with the in-process throttler. `EventEnvelopeSchema` from `packages/core` checks the canonical shape, and every string passes through `packages/redactor` before publish. The API publishes through the injected `Publisher`; client apps use the HTTP publisher with a bearer plugin key and hold no NATS credential. No test uses a real secret, NATS endpoint or network call.
 
 ## Known gaps
 
@@ -47,5 +47,5 @@ The store writes one JSON file with mode 0600 and an atomic replace. It keeps a 
 - Agent keys come from the environment variable named by `apiKeyEnv`. The key is never read from YAML, and an unset or placeholder value rejects the adapter. The Agent config schema requires an https `baseUrl` with no URL credentials. Diagnosis still uses the `OPENAI_COMPATIBLE_API_KEY` path in `packages/llm`; issue #40 will unify the two paths. The budget check and the charge are not atomic, so a burst of concurrent calls can spend more than the daily limit.
 - Kubernetes code is tested with fixtures only.
 - The credential store is one file for one API process. Concurrent writers need an exclusive-lock store.
-- A development JWT secret is the default for local use. Set `GRAVESHIFT_OAUTH_JWT_SECRET` to a secret of at least 32 characters in any shared environment.
+- `GRAVESHIFT_OAUTH_JWT_SECRET` has no default. Set it to a secret of at least 32 characters before boot.
 - Without `GRAVESHIFT_NATS_URL`, publish calls fail closed with 503. The API does not buffer envelopes on disk.

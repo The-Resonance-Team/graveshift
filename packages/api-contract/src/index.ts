@@ -27,6 +27,12 @@ export type FixNowResponse =
 
 export type Assignee = WorkItemResponse['assignee'];
 
+export type OAuthTokenRequest =
+  paths['/api/oauth/token']['post']['requestBody']['content']['application/json'];
+
+export type OAuthTokenResponse =
+  paths['/api/oauth/token']['post']['responses'][200]['content']['application/json'];
+
 export type CreateCredentialRequest =
   paths['/api/credentials']['post']['requestBody']['content']['application/json'];
 

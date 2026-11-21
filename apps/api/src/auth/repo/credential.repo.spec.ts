@@ -48,6 +48,15 @@ describe('FileCredentialRepo', () => {
     expect(info.mode & 0o777).toBe(0o600);
   });
 
+  test('serializes concurrent writes without losing records', async () => {
+    await Promise.all(
+      Array.from({ length: 8 }, (_, index) =>
+        repo.add({ ...record, id: `cred-${index}`, hash: `${index}`.repeat(64) }),
+      ),
+    );
+    expect(await repo.list()).toHaveLength(8);
+  });
+
   test('replaces a record in place', async () => {
     await repo.add(record);
     await repo.replace({ ...record, revokedAt: '2026-11-21T10:00:00.000Z' });

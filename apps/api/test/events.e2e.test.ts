@@ -30,10 +30,14 @@ describe('POST /api/events (e2e)', () => {
   });
 
   async function createKey(body: object): Promise<string> {
+    const payload =
+      (body as { kind?: string }).kind === 'plugin' && !('service' in body)
+        ? { ...body, service: 'api' }
+        : body;
     const response = await request(app.getHttpServer())
       .post('/api/credentials')
       .set('authorization', `Bearer ${manageToken}`)
-      .send(body)
+      .send(payload)
       .expect(201);
     return response.body.value as string;
   }
@@ -71,7 +75,7 @@ describe('POST /api/events (e2e)', () => {
       (item) => item.prefix.length > 0 && item.name === 'no-scope',
     );
     if (record) record.scopes = [];
-    await push(key, validEnvelope()).expect(401);
+    await push(key, validEnvelope()).expect(403);
   });
 
   test('rejects an unknown field with 422', async () => {
@@ -127,13 +131,37 @@ describe('POST /api/events (e2e)', () => {
     await push(key, validEnvelope()).expect(401);
   });
 
+  test('redacts every string field before publish', async () => {
+    const key = await createKey({ kind: 'plugin', name: 'redact-all', scopes: ['events:publish'] });
+    await push(
+      key,
+      validEnvelope({
+        id: 'evt-redact',
+        traceId: 'alice@example.com',
+        source: 'Bearer abcdefgh1234',
+      }),
+    ).expect(202);
+    const published = ctx.publisher.envelopes.find((item) => item.id === 'evt-redact');
+    expect(published?.traceId).not.toContain('alice@example.com');
+    expect(published?.source).not.toContain('abcdefgh1234');
+  });
+
+  test('an oversized invalid body returns 413 before validation', async () => {
+    const key = await createKey({
+      kind: 'plugin',
+      name: 'big-invalid',
+      scopes: ['events:publish'],
+    });
+    await push(key, { blob: 'x'.repeat(4000) }).expect(413);
+  });
+
   test('bounds the request rate', async () => {
     const limited = await buildAuthApp({ eventRateLimit: 2 });
     const token = accessToken(limited.jwt, ['tokens:manage', 'events:publish']);
     const created = await request(limited.app.getHttpServer())
       .post('/api/credentials')
       .set('authorization', `Bearer ${token}`)
-      .send({ kind: 'plugin', name: 'limited', scopes: ['events:publish'] })
+      .send({ kind: 'plugin', name: 'limited', scopes: ['events:publish'], service: 'api' })
       .expect(201);
     const pushLimited = (body: object) =>
       request(limited.app.getHttpServer())

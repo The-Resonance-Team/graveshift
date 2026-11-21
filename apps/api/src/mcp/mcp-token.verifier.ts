@@ -31,11 +31,15 @@ export class McpBearerGuard implements CanActivate {
   constructor(private readonly credentials: CredentialService) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    const request = context.switchToHttp().getRequest<{ headers?: { authorization?: string } }>();
+    const request = context.switchToHttp().getRequest<{
+      headers?: { authorization?: string };
+      mcpPrincipal?: { scopes: string[] };
+    }>();
     const header = request.headers?.authorization ?? '';
     const token = header.startsWith('Bearer ') ? header.slice('Bearer '.length) : '';
     try {
-      await this.credentials.verify(token, 'mcp');
+      const principal = await this.credentials.verify(token, 'mcp');
+      request.mcpPrincipal = principal;
       return true;
     } catch {
       const response = context

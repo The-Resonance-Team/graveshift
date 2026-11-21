@@ -21,6 +21,9 @@ export interface paths {
   "/api/events": {
     post: operations["EventsController_ingest"];
   };
+  "/api/oauth/token": {
+    post: operations["OAuthController_token"];
+  };
   "/api/work-items": {
     get: operations["WorkItemsController_list"];
   };
@@ -45,7 +48,7 @@ export interface components {
       /** @description A display name chosen by the client. */
       name: string;
       scopes: ("incidents:read" | "diagnoses:read" | "audit:read" | "logs:read" | "metrics:read" | "fix:propose" | "events:publish")[];
-      /** @description The Grave or service bound to a plugin key. */
+      /** @description Required for plugin keys. The Grave or service bound to the key. */
       service?: string;
       /** @description Lifetime in seconds. The config default applies when absent. */
       ttlSeconds?: number;
@@ -67,6 +70,12 @@ export interface components {
       payload: {
         [key: string]: unknown;
       };
+    };
+    OAuthTokenDto: {
+      /** @enum {string} */
+      grant_type: "client_credentials";
+      client_id: string;
+      client_secret: string;
     };
   };
   responses: never;
@@ -264,6 +273,30 @@ export interface operations {
       };
       /** @description The key reached its request rate limit. */
       429: {
+        content: never;
+      };
+    };
+  };
+  OAuthController_token: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["OAuthTokenDto"];
+      };
+    };
+    responses: {
+      /** @description A short-lived client-credentials token. */
+      200: {
+        content: {
+          "application/json": {
+            access_token: string;
+            /** @enum {string} */
+            token_type: "Bearer";
+            expires_in: number;
+          };
+        };
+      };
+      /** @description The client id or secret is not valid. */
+      401: {
         content: never;
       };
     };

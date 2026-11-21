@@ -1,12 +1,14 @@
 import { Module, UseGuards } from '@nestjs/common';
 import { McpModule } from '@nestjs/mcp';
 import { ApiExcludeController } from '@nestjs/swagger';
+import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { loadPolicy, parsePolicy, type Policy } from '@graveshift/policy';
 
 import { AuthModule } from '../auth/auth.module';
 import { UnavailableMcpBackend } from './mcp.backend';
 import { McpPrompts } from './mcp.prompts';
 import { McpResources } from './mcp.resources';
+import { McpHttpScopeGuard } from './mcp-http-scope.guard';
 import { McpBearerGuard, McpTokenVerifierService } from './mcp-token.verifier';
 import { MCP_BACKEND, MCP_ENV_MODE, MCP_POLICY } from './mcp.types';
 import { McpTools } from './mcp.tools';
@@ -29,7 +31,7 @@ const DEFAULT_POLICY: Policy = parsePolicy({
 
 /** The MCP primitives. Kept separate so tests can override the backend and policy. */
 @Module({
-  imports: [AuthModule],
+  imports: [AuthModule, ThrottlerModule],
   providers: [
     McpTools,
     McpPrompts,
@@ -59,7 +61,10 @@ export class McpFeatureModule {}
       instructions:
         'Read incidents, diagnoses and the audit log before proposing a fix. propose_fix never executes an action.',
       include: [McpFeatureModule],
-      decorators: [ApiExcludeController(), UseGuards(McpBearerGuard)],
+      decorators: [
+        ApiExcludeController(),
+        UseGuards(ThrottlerGuard, McpBearerGuard, McpHttpScopeGuard),
+      ],
     }),
   ],
 })

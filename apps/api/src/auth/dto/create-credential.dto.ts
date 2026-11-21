@@ -8,6 +8,7 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  ValidateIf,
   Max,
   MaxLength,
   Min,
@@ -33,8 +34,10 @@ export class CreateCredentialDto {
   @IsIn(ALL_SCOPES, { each: true })
   scopes!: string[];
 
-  @ApiPropertyOptional({ description: 'The Grave or service bound to a plugin key.' })
-  @IsOptional()
+  @ApiPropertyOptional({
+    description: 'Required for plugin keys. The Grave or service bound to the key.',
+  })
+  @ValidateIf((body: CreateCredentialDto) => body.kind === 'plugin')
   @IsString()
   @IsNotEmpty()
   @MaxLength(120)

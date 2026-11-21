@@ -1,3 +1,4 @@
+import type { OAuthClientConfig } from './env.schema';
 import type { CredentialKind } from './scopes';
 
 export const CREDENTIAL_CONFIG = Symbol('CREDENTIAL_CONFIG');
@@ -14,6 +15,7 @@ export interface AuthConfig {
   maxEventBytes: number;
   eventRateLimit: number;
   eventRateTtlMs: number;
+  oauthClients: Record<string, OAuthClientConfig>;
   natsUrl?: string | undefined;
 }
 

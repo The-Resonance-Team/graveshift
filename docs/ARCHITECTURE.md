@@ -78,6 +78,7 @@ The API in `apps/api` is the only external surface. A client calls this API, nev
 | `GET /api/work-items/:id` | One work item for the detail sheet. |
 | `POST /api/work-items/:id/triage` | The triaged work item. Updates the in-memory store. |
 | `POST /api/work-items/:id/fix-now` | The work item after **Fix now** moved it to the front of the fix queue. |
+| `POST /api/oauth/token` | Exchanges client id and secret for a short-lived access token. |
 | `POST /api/credentials` | One issued credential. The `kind` selects an MCP read token or a plugin publish key. The value is shown once. |
 | `GET /api/credentials` | Metadata for the caller credentials. No value or hash. |
 | `DELETE /api/credentials/:id` | Revokes one credential. Returns 204. |
@@ -120,7 +121,7 @@ In production wiring there is no diagnosis context provider and no model gateway
 
 ## MCP endpoint
 
-The official `@nestjs/mcp` module serves `graveshift-mcp` at `/mcp` from the API. The HTTP route guard and the MCP token verifier both call `CredentialService.verify(token, 'mcp')` from `apps/api/src/auth`. An MCP token is issued with `POST /api/credentials` and kind `mcp`; the old static `GRAVESHIFT_MCP_TOKEN` is no longer read. No OAuth resource or authorization server is advertised on this route. The stdio launcher has no authentication by design.
+The official `@nestjs/mcp` module serves `graveshift-mcp` at `/mcp` from the API. The HTTP route guard and the MCP token verifier both call `CredentialService.verify(token, 'mcp')` from `apps/api/src/auth`. An MCP token is issued with `POST /api/credentials` and kind `mcp`; the old static `GRAVESHIFT_MCP_TOKEN` is no longer read. No OAuth resource or authorization server is advertised on this route. A scope floor denies any MCP primitive outside the token scopes; `incidents:read` maps to the incident reads, `fix:propose` to `propose_fix`, and the other scopes to their tools. The stdio launcher has no authentication by design.
 
 MCP loads the policy in a provider factory, so a bad `POLICY_PATH` stops the API at boot. The nine tools, two prompts and the postmortem resource are injectable providers in `apps/api/src/mcp/`. Every reply passes through the redactor. `propose_fix` returns a policy decision and never executes an action.
 
@@ -132,11 +133,11 @@ The v2 daemon serves only `/healthz`, so backend reads return empty or unavailab
 
 `apps/api/src/auth` owns one credential component. It issues, hashes, verifies, lists and revokes both MCP read tokens and plugin API keys. The MCP module and the plugin ingest route call this component; neither builds a second issuer or verifier.
 
-One scope catalog serves both surfaces. MCP scopes are `incidents:read`, `diagnoses:read`, `audit:read`, `logs:read`, `metrics:read` and `fix:propose`. The plugin scope is `events:publish`. `POST /api/credentials` takes `{ kind, name, scopes, service?, ttlSeconds? }`. `kind` selects the shape: an MCP read token or a plugin publish key. A client names the credential and chooses scopes from the ones its client-credentials token holds. A client cannot grant `admin` or `tokens:manage`, and cannot grant a scope it does not hold. A plugin key may bind to one Grave or service. The response shows the value once; `GET /api/credentials` returns metadata only.
+One scope catalog serves both surfaces. MCP scopes are `incidents:read`, `diagnoses:read`, `audit:read`, `logs:read`, `metrics:read` and `fix:propose`. The plugin scope is `events:publish`. `POST /api/credentials` takes `{ kind, name, scopes, service?, ttlSeconds? }`. `kind` selects the shape: an MCP read token or a plugin publish key. A client names the credential and chooses scopes from the ones its client-credentials token holds. A client cannot grant `admin` or `tokens:manage`, and cannot grant a scope it does not hold. A plugin key must bind to one Grave or service. A client holds at most ten active credentials; revoking one frees a slot. The response shows the value once; `GET /api/credentials` returns metadata only.
 
-Credential management uses OAuth 2.1 client credentials. A passport strategy validates a bearer JWT with `@nestjs/jwt`. The JWT secret, issuer and audience come from a Zod boot config. The store writes one JSON file with mode 0600. It holds a SHA-256 hash, a short display prefix, kind, name, client id, tenant id, scopes, optional service binding and timestamps. It holds no value. Presented values are compared in constant time.
+`POST /api/oauth/token` runs the OAuth 2.1 client-credentials grant against a boot client registry. It signs a JWT with `iss`, `aud`, `sub`, `scope`, `jti` and `exp` through `@nestjs/jwt`. A passport strategy validates those claims and the registry tenant. The JWT secret has no default and is required in production. Throttling covers the credential, event and MCP routes and keys by client id. The store writes one JSON file with mode 0600. It holds a SHA-256 hash, a short display prefix, kind, name, client id, tenant id, scopes, optional service binding and timestamps. It holds no value. Presented values are compared in constant time.
 
-`POST /api/events` is the plugin ingest route. The `class-validator` DTO rejects unknown fields with 422, then `EventEnvelopeSchema` from `packages/core` checks the canonical envelope shape. The route checks `events:publish`, the tenant and the service binding, bounds payload bytes and request rate, redacts the payload and publishes through the injected `Publisher`. It returns 202. The NATS publisher stays in the API for daemon use. Client apps use `createHttpPublisher` from `packages/events`, which posts to `/api/events` with a bearer plugin key. Client apps no longer hold NATS credentials.
+`POST /api/events` is the plugin ingest route. The `class-validator` DTO rejects unknown fields with 422, then `EventEnvelopeSchema` from `packages/core` checks the canonical envelope shape. The route checks `events:publish`, the tenant and the service binding, bounds payload bytes and request rate, checks the body size before the DTO pipe, redacts every string and publishes through the injected `Publisher`. It returns 202. The NATS publisher stays in the API for daemon use. Client apps use `createHttpPublisher` from `packages/events`, which posts to `/api/events` with a bearer plugin key. Client apps no longer hold NATS credentials.
 
 ## Event backbone
 

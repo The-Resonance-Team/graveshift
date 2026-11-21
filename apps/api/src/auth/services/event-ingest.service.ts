@@ -2,19 +2,13 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
-  PayloadTooLargeException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { EventEnvelopeSchema } from '@graveshift/core';
-import type { Publisher } from '@graveshift/events';
+import { EventEnvelopeSchema, type EventEnvelope } from '@graveshift/core';
 import { redact } from '@graveshift/redactor';
+import type { Publisher } from '@graveshift/events';
 
-import {
-  CREDENTIAL_CONFIG,
-  EVENT_PUBLISHER,
-  type AuthConfig,
-  type VerifiedCredential,
-} from '../auth.types';
+import { EVENT_PUBLISHER, type VerifiedCredential } from '../auth.types';
 import type { PublishEventDto } from '../dto/publish-event.dto';
 import { EVENTS_PUBLISH_SCOPE } from '../scopes';
 
@@ -27,13 +21,10 @@ function redactValue(value: unknown): unknown {
   return value;
 }
 
-/** Validates, bounds, redacts and publishes plugin events. */
+/** Validates, redacts and publishes plugin events. */
 @Injectable()
 export class EventIngestService {
-  constructor(
-    @Inject(EVENT_PUBLISHER) private readonly publisher: Publisher,
-    @Inject(CREDENTIAL_CONFIG) private readonly config: AuthConfig,
-  ) {}
+  constructor(@Inject(EVENT_PUBLISHER) private readonly publisher: Publisher) {}
 
   async ingest(
     body: PublishEventDto,
@@ -44,18 +35,13 @@ export class EventIngestService {
     if (principal.service !== null && principal.service !== body.service) {
       throw new ForbiddenException('Service binding failed');
     }
-    if (Buffer.byteLength(JSON.stringify(body), 'utf8') > this.config.maxEventBytes) {
-      throw new PayloadTooLargeException();
-    }
 
     // The core schema is the source of truth for the envelope shape.
     const parsed = EventEnvelopeSchema.safeParse(body);
     if (!parsed.success) throw new UnprocessableEntityException('Malformed event envelope');
 
-    const envelope = {
-      ...parsed.data,
-      payload: redactValue(parsed.data.payload) as Record<string, unknown>,
-    };
+    // Every string is redacted, including ids, type, source and the payload.
+    const envelope = redactValue(parsed.data) as EventEnvelope;
     await this.publisher.publish(envelope);
     return { accepted: true, id: envelope.id };
   }

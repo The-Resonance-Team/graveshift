@@ -1,5 +1,5 @@
-import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { randomUUID, timingSafeEqual } from 'node:crypto';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { Inject, Injectable } from '@nestjs/common';
 
@@ -14,9 +14,36 @@ export abstract class CredentialRepo {
   abstract replace(record: CredentialRecord): Promise<void>;
 }
 
+function isRecord(value: unknown): value is CredentialRecord {
+  if (value === null || typeof value !== 'object') return false;
+  const item = value as Record<string, unknown>;
+  return (
+    typeof item.id === 'string' &&
+    typeof item.kind === 'string' &&
+    typeof item.name === 'string' &&
+    typeof item.prefix === 'string' &&
+    typeof item.hash === 'string' &&
+    typeof item.clientId === 'string' &&
+    typeof item.tenantId === 'string' &&
+    Array.isArray(item.scopes) &&
+    (item.service === null || typeof item.service === 'string') &&
+    typeof item.createdAt === 'string' &&
+    (item.expiresAt === null || typeof item.expiresAt === 'string') &&
+    (item.revokedAt === null || typeof item.revokedAt === 'string')
+  );
+}
+
+function hashEquals(left: string, right: string): boolean {
+  const a = Buffer.from(left, 'hex');
+  const b = Buffer.from(right, 'hex');
+  return a.length === b.length && a.length === 32 && timingSafeEqual(a, b);
+}
+
 /** One JSON file holds every record. The file is created with mode 0600. */
 @Injectable()
 export class FileCredentialRepo extends CredentialRepo {
+  private queue: Promise<unknown> = Promise.resolve();
+
   constructor(@Inject(CREDENTIAL_CONFIG) private readonly config: AuthConfig) {
     super();
   }
@@ -26,7 +53,12 @@ export class FileCredentialRepo extends CredentialRepo {
   }
 
   async findByHash(hash: string): Promise<CredentialRecord | undefined> {
-    return (await this.read()).find((record) => record.hash === hash);
+    const records = await this.read();
+    let found: CredentialRecord | undefined;
+    for (const record of records) {
+      if (hashEquals(record.hash, hash)) found = record;
+    }
+    return found;
   }
 
   async findById(id: string): Promise<CredentialRecord | undefined> {
@@ -34,22 +66,39 @@ export class FileCredentialRepo extends CredentialRepo {
   }
 
   async add(record: CredentialRecord): Promise<void> {
-    const records = await this.read();
-    records.push(record);
-    await this.write(records);
+    await this.serialize(async () => {
+      const records = await this.read();
+      records.push(record);
+      await this.write(records);
+    });
   }
 
   async replace(record: CredentialRecord): Promise<void> {
-    const records = await this.read();
-    const index = records.findIndex((item) => item.id === record.id);
-    if (index >= 0) records[index] = record;
-    await this.write(records);
+    await this.serialize(async () => {
+      const records = await this.read();
+      const index = records.findIndex((item) => item.id === record.id);
+      if (index >= 0) records[index] = record;
+      await this.write(records);
+    });
+  }
+
+  private serialize<T>(task: () => Promise<T>): Promise<T> {
+    const result = this.queue.then(task, task);
+    this.queue = result.then(
+      () => undefined,
+      () => undefined,
+    );
+    return result;
   }
 
   private async read(): Promise<CredentialRecord[]> {
     try {
       const text = await readFile(this.config.credentialsPath, 'utf8');
-      return JSON.parse(text) as CredentialRecord[];
+      const parsed: unknown = JSON.parse(text);
+      if (!Array.isArray(parsed) || !parsed.every(isRecord)) {
+        throw new Error('Credential store has an invalid shape');
+      }
+      return parsed;
     } catch (error) {
       if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return [];
       throw error;
@@ -58,11 +107,16 @@ export class FileCredentialRepo extends CredentialRepo {
 
   private async write(records: CredentialRecord[]): Promise<void> {
     const path = this.config.credentialsPath;
-    await mkdir(dirname(path), { recursive: true });
+    await mkdir(dirname(path), { recursive: true, mode: 0o700 });
     const temp = `${path}.${randomUUID()}.tmp`;
-    await writeFile(temp, JSON.stringify(records, null, 2), { mode: 0o600 });
-    await rename(temp, path);
+    try {
+      await writeFile(temp, JSON.stringify(records, null, 2), { mode: 0o600 });
+      await rename(temp, path);
+    } catch (error) {
+      await rm(temp, { force: true });
+      throw error;
+    }
   }
 }
 
-// ponytail: one process owns the file; add an exclusive-lock repo if the API runs in more than one process.
+// ponytail: the queue serializes writes in one process only; use a locked store before the API runs in more than one process or pod.

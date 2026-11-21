@@ -13,7 +13,7 @@
 
 ## R4 Transports
 - R4.1 The server SHALL support stdio for Kiro and Streamable HTTP for remote/Crew use.
-- R4.2 WHEN HTTP is used THE SYSTEM SHALL require a bearer token (`GRAVESHIFT_MCP_TOKEN`).
+- R4.2 WHEN HTTP is used THE SYSTEM SHALL require an MCP bearer token issued by `POST /api/credentials` and verified by the shared credential component.
 
 ## R5 Resources and prompts
 - R5.1 The server SHALL expose `graveshift://incidents/{id}/postmortem` and the `triage-incident` / `write-postmortem` prompts.

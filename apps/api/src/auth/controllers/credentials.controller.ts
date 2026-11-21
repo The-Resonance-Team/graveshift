@@ -11,6 +11,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import {
   ApiCreatedResponse,
   ApiNoContentResponse,
@@ -27,7 +28,7 @@ import { CredentialParamsDto } from '../dto/credential-params.dto';
 import { CredentialService } from '../services/credential.service';
 
 @ApiTags('credentials')
-@UseGuards(AuthGuard('oauth-client-credentials'))
+@UseGuards(ThrottlerGuard, AuthGuard('oauth-client-credentials'))
 @Controller('api/credentials')
 export class CredentialsController {
   constructor(private readonly credentials: CredentialService) {}
@@ -51,7 +52,7 @@ export class CredentialsController {
     standardSchema: credentialListSchema,
   })
   list(@Req() request: PrincipalRequest): Promise<{ items: CredentialMetadata[] }> {
-    return this.credentials.list(request.user.clientId).then((items) => ({ items }));
+    return this.credentials.list(request.user).then((items) => ({ items }));
   }
 
   @Delete(':id')
@@ -62,6 +63,6 @@ export class CredentialsController {
     @Param() params: CredentialParamsDto,
     @Req() request: PrincipalRequest,
   ): Promise<void> {
-    await this.credentials.revoke(params.id, request.user.clientId);
+    await this.credentials.revoke(params.id, request.user);
   }
 }

@@ -531,6 +531,62 @@
         ]
       }
     },
+    "/api/oauth/token": {
+      "post": {
+        "operationId": "OAuthController_token",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OAuthTokenDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A short-lived client-credentials token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "access_token": {
+                      "type": "string"
+                    },
+                    "token_type": {
+                      "type": "string",
+                      "enum": [
+                        "Bearer"
+                      ]
+                    },
+                    "expires_in": {
+                      "type": "integer",
+                      "minimum": -9007199254740991,
+                      "maximum": 9007199254740991
+                    }
+                  },
+                  "required": [
+                    "access_token",
+                    "token_type",
+                    "expires_in"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "The client id or secret is not valid."
+          }
+        },
+        "tags": [
+          "oauth"
+        ]
+      }
+    },
     "/api/work-items": {
       "get": {
         "operationId": "WorkItemsController_list",
@@ -1829,7 +1885,7 @@
           },
           "service": {
             "type": "string",
-            "description": "The Grave or service bound to a plugin key."
+            "description": "Required for plugin keys. The Grave or service bound to the key."
           },
           "ttlSeconds": {
             "type": "number",
@@ -1896,6 +1952,28 @@
           "traceId",
           "fingerprint",
           "payload"
+        ]
+      },
+      "OAuthTokenDto": {
+        "type": "object",
+        "properties": {
+          "grant_type": {
+            "type": "string",
+            "enum": [
+              "client_credentials"
+            ]
+          },
+          "client_id": {
+            "type": "string"
+          },
+          "client_secret": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "grant_type",
+          "client_id",
+          "client_secret"
         ]
       }
     }

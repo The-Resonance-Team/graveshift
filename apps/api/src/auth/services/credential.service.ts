@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import {
+  ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
@@ -22,6 +23,7 @@ import { CredentialRepo } from '../repo/credential.repo';
 import { FORBIDDEN_SCOPES, type CredentialKind, scopesForKind } from '../scopes';
 
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+const MAX_ACTIVE_CREDENTIALS = 10;
 
 /** The one issuer and verifier for MCP tokens and plugin API keys. */
 @Injectable()
@@ -42,6 +44,19 @@ export class CredentialService {
           allowed.includes(scope) && !forbidden.includes(scope) && principal.scopes.includes(scope),
       );
     if (!accepted) throw new ForbiddenException('The requested scopes are not allowed');
+    if (dto.kind === 'plugin' && !dto.service) {
+      throw new ForbiddenException('A plugin key needs a service binding');
+    }
+
+    const active = (await this.repo.list()).filter(
+      (record) =>
+        record.clientId === principal.clientId &&
+        record.tenantId === principal.tenantId &&
+        this.isActive(record),
+    );
+    if (active.length >= MAX_ACTIVE_CREDENTIALS) {
+      throw new ConflictException('The active credential limit is reached');
+    }
 
     const value = randomBytes(32).toString('base64url');
     const now = new Date().toISOString();
@@ -70,20 +85,17 @@ export class CredentialService {
 
   async verify(value: string, expectedKind?: CredentialKind): Promise<VerifiedCredential> {
     if (!value || value.length < 32) throw new UnauthorizedException();
+    // SHA-256 over a 256-bit random token has no brute-force risk. We still compare
+    // every candidate hash in constant time and never stop at the first match.
     const hash = digest(value);
-    const record = await this.repo.findByHash(hash);
+    const records = await this.repo.list();
+    let record: CredentialRecord | undefined;
+    for (const candidate of records) {
+      if (this.hashEquals(candidate.hash, hash)) record = candidate;
+    }
     if (!record) throw new UnauthorizedException();
-    if (record.revokedAt !== null) throw new UnauthorizedException();
-    if (record.expiresAt !== null && Date.parse(record.expiresAt) <= Date.now()) {
-      throw new UnauthorizedException();
-    }
+    if (!this.isActive(record)) throw new UnauthorizedException();
     if (expectedKind && record.kind !== expectedKind) throw new UnauthorizedException();
-
-    const actual = Buffer.from(hash, 'hex');
-    const expected = Buffer.from(record.hash, 'hex');
-    if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) {
-      throw new UnauthorizedException();
-    }
     return {
       id: record.id,
       clientId: record.clientId,
@@ -94,19 +106,41 @@ export class CredentialService {
     };
   }
 
-  async list(clientId: string): Promise<CredentialMetadata[]> {
+  async list(principal: Principal): Promise<CredentialMetadata[]> {
     const records = await this.repo.list();
     return records
-      .filter((record) => record.clientId === clientId)
+      .filter(
+        (record) =>
+          record.clientId === principal.clientId && record.tenantId === principal.tenantId,
+      )
       .map((record) => this.toMetadata(record));
   }
 
-  async revoke(id: string, clientId: string): Promise<void> {
+  async revoke(id: string, principal: Principal): Promise<void> {
     const record = await this.repo.findById(id);
-    if (!record || record.clientId !== clientId) throw new NotFoundException();
+    if (
+      !record ||
+      record.clientId !== principal.clientId ||
+      record.tenantId !== principal.tenantId
+    ) {
+      throw new NotFoundException();
+    }
     if (record.revokedAt === null) {
       await this.repo.replace({ ...record, revokedAt: new Date().toISOString() });
     }
+  }
+
+  private isActive(record: CredentialRecord): boolean {
+    return (
+      record.revokedAt === null &&
+      (record.expiresAt === null || Date.parse(record.expiresAt) > Date.now())
+    );
+  }
+
+  private hashEquals(left: string, right: string): boolean {
+    const a = Buffer.from(left, 'hex');
+    const b = Buffer.from(right, 'hex');
+    return a.length === b.length && a.length === 32 && timingSafeEqual(a, b);
   }
 
   private toMetadata(record: CredentialRecord): CredentialMetadata {

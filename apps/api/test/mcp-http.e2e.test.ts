@@ -61,7 +61,11 @@ describe('POST /mcp bearer auth (e2e)', () => {
       const response = await request(app.getHttpServer())
         .post('/api/credentials')
         .set('authorization', `Bearer ${token}`)
-        .send({ kind, name: `${kind}-key`, scopes })
+        .send(
+          kind === 'plugin'
+            ? { kind, name: `${kind}-key`, scopes, service: 'api' }
+            : { kind, name: `${kind}-key`, scopes },
+        )
         .expect(201);
       return response.body.value as string;
     };
@@ -99,5 +103,19 @@ describe('POST /mcp bearer auth (e2e)', () => {
   test('refuses a request without a bearer header', async () => {
     const response = await post().expect(401);
     expect(response.headers['www-authenticate']).toContain('Bearer');
+  });
+
+  test('refuses a primitive outside the token scopes with 403', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/mcp')
+      .set('accept', 'application/json, text/event-stream')
+      .set('authorization', `Bearer ${mcpToken}`)
+      .send({
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/call',
+        params: { name: 'propose_fix', arguments: { incidentId: 'inc-1', action: 'open_pr' } },
+      });
+    expect(response.status).toBe(403);
   });
 });

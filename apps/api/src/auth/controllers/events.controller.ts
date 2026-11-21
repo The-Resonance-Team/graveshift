@@ -7,6 +7,7 @@ import {
   Req,
   UnauthorizedException,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import {
@@ -22,7 +23,8 @@ import {
 import { eventAcceptedSchema } from '../auth.schema';
 import type { PrincipalRequest } from '../auth.types';
 import { PublishEventDto } from '../dto/publish-event.dto';
-import { PluginApiKeyGuard } from '../guards/plugin-api-key.guard';
+import { PayloadSizeInterceptor } from '../payload-size.interceptor';
+import { PluginApiKeyGuard } from '../plugin-api-key.guard';
 import { EventIngestService } from '../services/event-ingest.service';
 
 @ApiTags('events')
@@ -31,7 +33,8 @@ export class EventsController {
   constructor(private readonly service: EventIngestService) {}
 
   @Post()
-  @UseGuards(PluginApiKeyGuard, ThrottlerGuard)
+  @UseInterceptors(PayloadSizeInterceptor)
+  @UseGuards(ThrottlerGuard, PluginApiKeyGuard)
   @HttpCode(HttpStatus.ACCEPTED)
   @ApiAcceptedResponse({
     description: 'The envelope is accepted for publish.',
