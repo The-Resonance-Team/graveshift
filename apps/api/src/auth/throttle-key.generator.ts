@@ -2,10 +2,13 @@ import { type ExecutionContext, Inject, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 
 import { CREDENTIAL_CONFIG, type AuthConfig } from './auth.types';
+import { sentryKeyCandidates } from './sentry-auth';
 import { CredentialService } from './services/credential.service';
 
 interface ThrottleRequest {
   headers?: { authorization?: string };
+  query?: { sentry_key?: string | string[] };
+  body?: unknown;
   ip?: string;
   method?: string;
   baseUrl?: string;
@@ -27,21 +30,25 @@ export class ThrottleKeyGenerator {
     const route = `${request.method ?? 'UNKNOWN'}:${request.baseUrl ?? ''}${request.route?.path ?? request.url?.split('?')[0] ?? '/'}`;
     const header = request.headers?.authorization ?? '';
     const token = header.startsWith('Bearer ') ? header.slice('Bearer '.length) : '';
-    if (!token) return `${request.ip ?? 'anonymous'}:${route}`;
+    const sentryKeys = sentryKeyCandidates(request).keys;
+    const presentedKey = sentryKeys[0] || token;
+    if (!presentedKey) return `${request.ip ?? 'anonymous'}:${route}`;
 
-    try {
-      const payload = this.jwt.verify<{ sub?: string; tenantId?: string }>(token, {
-        secret: this.config.jwtSecret,
-        issuer: this.config.jwtIssuer,
-        audience: this.config.jwtAudience,
-        algorithms: ['HS256'],
-      });
-      if (payload.sub && payload.tenantId) return `${payload.tenantId}:${payload.sub}:${route}`;
-    } catch {
-      // A plugin key is not a management JWT. Try the issued-key index below.
+    if (token) {
+      try {
+        const payload = this.jwt.verify<{ sub?: string; tenantId?: string }>(token, {
+          secret: this.config.jwtSecret,
+          issuer: this.config.jwtIssuer,
+          audience: this.config.jwtAudience,
+          algorithms: ['HS256'],
+        });
+        if (payload.sub && payload.tenantId) return `${payload.tenantId}:${payload.sub}:${route}`;
+      } catch {
+        // An issued credential is not a management JWT. Check its hash index below.
+      }
     }
 
-    const known = this.credentials.clientIdForKey(token);
+    const known = this.credentials.clientIdForKey(presentedKey);
     // Unknown tokens share the caller's bucket. Rotating garbage must not
     // create unbounded buckets and cannot skip the request rate limit.
     return `${known ?? request.ip ?? 'anonymous'}:${route}`;

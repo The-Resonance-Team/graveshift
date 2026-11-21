@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { type INestApplication, HttpStatus, ValidationPipe } from '@nestjs/common';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { NestFactory } from '@nestjs/core';
 import { SwaggerModule } from '@nestjs/swagger';
 
@@ -8,6 +9,11 @@ import { createOpenApiDocument } from './openapi';
 
 // Shared by bootstrap and tests that build the app through Test.createTestingModule().
 export function configureApp<T extends INestApplication>(app: T): T {
+  // Adapter boundary: the API uses Express to parse Sentry's raw envelope body.
+  (app as unknown as NestExpressApplication).useBodyParser('raw', {
+    type: 'application/x-sentry-envelope',
+    limit: '1mb',
+  });
   // Request DTO classes own validation at the boundary. Undeclared fields are 422s.
   app.useGlobalPipes(
     new ValidationPipe({

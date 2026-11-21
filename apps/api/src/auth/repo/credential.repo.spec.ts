@@ -20,6 +20,7 @@ const record = (id: string, hash: string): CredentialRecord => ({
   tenantId: principal.tenantId,
   scopes: ['events:publish'],
   service: null,
+  projectId: null,
   createdAt: new Date().toISOString(),
   expiresAt: null,
   revokedAt: null,

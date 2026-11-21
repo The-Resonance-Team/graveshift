@@ -8,7 +8,7 @@ import { PublishEventDto } from './publish-event.dto';
 const envelope: EventEnvelope = {
   id: 'evt-1',
   tenantId: 'tenant-1',
-  source: 'plugin.nestjs',
+  source: 'native',
   service: 'api',
   type: 'signal.oom',
   severity: 'info',

@@ -34,6 +34,7 @@ function toRecord(row: Credential): CredentialRecord {
     tenantId: row.tenantId,
     scopes: row.scopes,
     service: row.service,
+    projectId: row.projectId,
     createdAt: row.createdAt.toISOString(),
     expiresAt: row.expiresAt?.toISOString() ?? null,
     revokedAt: row.revokedAt?.toISOString() ?? null,
