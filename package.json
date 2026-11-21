@@ -17,6 +17,7 @@
     "test:check": "bun test --check --tsconfig-override apps/api/tsconfig.json --path-ignore-patterns='apps/_daemon/**'",
     "test": "bun test --tsconfig-override apps/api/tsconfig.json --path-ignore-patterns='apps/_daemon/**'",
     "generate:check": "bun run --filter @graveshift/api-contract generate:check",
+    "build": "bun build apps/daemon/src/main.ts --target=bun --outdir=node_modules/.cache/graveshift-build/daemon && bun build packages/actuator/src/main.ts --target=bun --outdir=node_modules/.cache/graveshift-build/actuator",
     "verify": "bun run format:check && bun run lint && bun run typecheck && bun run test:check && bun run test"
   },
   "devDependencies": {
