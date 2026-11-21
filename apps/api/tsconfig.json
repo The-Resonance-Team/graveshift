@@ -3,7 +3,10 @@
   "compilerOptions": {
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
-    "erasableSyntaxOnly": false
+    "erasableSyntaxOnly": false,
+    "paths": {
+      "@prisma/client": ["./src/generated/prisma/client.ts"]
+    }
   },
   "include": ["src/**/*.ts", "test/**/*.ts"]
 }

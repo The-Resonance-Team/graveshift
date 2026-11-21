@@ -15,3 +15,6 @@ build/
 # Only the local MCP settings file is kept out of the repository.
 .kiro/settings/mcp.json
 .kiro/settings/mcp.local.json
+
+# Prisma 7 generated client (source-tree output)
+/apps/api/src/generated/

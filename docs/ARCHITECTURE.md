@@ -89,11 +89,11 @@ The API listens on 127.0.0.1 by default. Set `HOST` to change the bind address. 
 
 Structured logging is deferred to the production ticket.
 
+Request bodies use `class-validator` DTO classes. The global `ValidationPipe` sets `whitelist`, `forbidNonWhitelisted`, `transform` and 422, so an unknown field fails at the pipe. Earlier routes still attach a Zod schema with `@Body({ schema })`, `@Query({ schema })` or `@Param({ schema })` and pass through the standard-schema pipe. Zod is also used for boot env config and OpenAPI response docs. No SSE was added to the HTTP routes here. Later tickets add the routes for graves and hauntings here.
+
 ## Prisma migrations
 
-CI compares the SQL generated from `prisma/schema.prisma` with the committed migration SQL using `bun run migrate:drift:check`. This is a DB-free alternative to the ticket's literal `prisma migrate diff --from-migrations ... --to-schema ... --exit-code` command. It works only while migrations are additive. When a second or destructive migration lands, move to a shadow-database drift check and ask the coordinator to approve a CI Postgres service or an external test database. The local shadow-database command is `bun run migrate:drift:local`; it needs `DATABASE_URL`, `SHADOW_DATABASE_URL` and Docker Postgres.
-
-Request bodies use `class-validator` DTO classes. The global `ValidationPipe` sets `whitelist`, `forbidNonWhitelisted`, `transform` and 422, so an unknown field fails at the pipe. Earlier routes still attach a Zod schema with `@Body({ schema })`, `@Query({ schema })` or `@Param({ schema })` and pass through the standard-schema pipe. Zod is also used for boot env config and OpenAPI response docs. No SSE was added to the HTTP routes here. Later tickets add the routes for graves and hauntings here.
+CI compares the SQL generated from `apps/api/prisma/schema.prisma` with the committed migration SQL using `bun run migrate:drift:check`. This is a DB-free alternative to the ticket's literal `prisma migrate diff --from-migrations ... --to-schema ... --exit-code` command. It works only while migrations are additive. When a second or destructive migration lands, move to a shadow-database drift check and ask the coordinator to approve a CI Postgres service or an external test database. The local shadow-database command is `bun run migrate:drift:local`; it needs `DATABASE_URL`, `SHADOW_DATABASE_URL` and Docker Postgres.
 
 ## Work items
 

@@ -1,0 +1,99 @@
+// Prisma 7 contract for the durable store. No domain data moves yet.
+// Field sets come from the Zod shapes in packages/core and apps/api/src/auth.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum WorkItemStatus {
+  todo
+  in_progress
+  in_review
+  done
+}
+
+enum WorkItemPriority {
+  low
+  medium
+  high
+  critical
+}
+
+enum WorkItemSeverity {
+  info
+  warning
+  critical
+}
+
+enum CredentialKind {
+  mcp
+  plugin
+}
+
+model WorkItem {
+  id              String           @id
+  tenantId        String           @map("tenant_id")
+  title           String
+  description     String
+  successCriteria String[]         @map("success_criteria")
+  subtasks        Json
+  status          WorkItemStatus
+  priority        WorkItemPriority
+  assignee        String
+  reporter        String
+  startDate       DateTime?        @map("start_date") @db.Date
+  dueDate         DateTime?        @map("due_date") @db.Date
+  sprint          String?
+  parent          String?
+  labels          String[]
+  team            String
+  watchers        String[]
+  severity        WorkItemSeverity
+  service         String
+  diagnosisRef    String           @map("diagnosis_ref")
+  autoFixAllowed  Boolean          @map("auto_fix_allowed")
+  fixPriority     Int              @map("fix_priority")
+  draftPr         Json?            @map("draft_pr")
+  version         Int              @default(0)
+
+  @@index([tenantId])
+  @@map("work_items")
+}
+
+model AuditEntry {
+  tenantId   String   @map("tenant_id")
+  seq        Int
+  at         DateTime
+  actor      String
+  type       String
+  incidentId String?  @map("incident_id")
+  payload    Json
+  prevHash   String   @map("prev_hash")
+  hash       String
+
+  @@id([tenantId, seq])
+  @@map("audit_entries")
+}
+
+model Credential {
+  id        String         @id
+  tenantId  String         @map("tenant_id")
+  kind      CredentialKind
+  name      String
+  prefix    String
+  hash      String
+  clientId  String         @map("client_id")
+  scopes    String[]
+  service   String?
+  createdAt DateTime       @map("created_at")
+  expiresAt DateTime?      @map("expires_at")
+  revokedAt DateTime?      @map("revoked_at")
+
+  @@unique([tenantId, hash])
+  @@map("credentials")
+}
