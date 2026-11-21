@@ -8,9 +8,11 @@ import {
   IsNotEmpty,
   IsOptional,
   IsString,
+  Matches,
   Max,
   MaxLength,
   Min,
+  ValidateIf,
   Validate,
 } from 'class-validator';
 
@@ -39,9 +41,11 @@ export class CreateCredentialDto {
   @ApiPropertyOptional({
     description: 'Optional Grave or service binding. Plugin keys only.',
   })
-  @IsOptional()
+  @ValidateIf((_, value) => value !== undefined)
   @IsString()
+  @IsNotEmpty()
   @MaxLength(120)
+  @Matches(/\S/, { message: 'service must not be blank' })
   service?: string;
 
   @ApiPropertyOptional({

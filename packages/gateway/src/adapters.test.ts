@@ -175,6 +175,7 @@ describe('real generateObject wrapper with a fake fetch (no network)', () => {
       system: 'sys',
       prompt: 'prompt',
       schema: Out,
+      validate: () => undefined,
       rulesOnly: () => ({ category: 'unknown', confidence: 0.1 }),
     });
     expect(result.status).toBe('rules_only');

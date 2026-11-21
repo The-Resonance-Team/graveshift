@@ -59,6 +59,14 @@ export async function generatePatch(options: GeneratePatchOptions): Promise<Gene
       system: PATCH_SYSTEM,
       prompt,
       schema: PatchSchema,
+      validate: (candidate) => {
+        try {
+          guardPatch(candidate, rules);
+          return undefined;
+        } catch (error) {
+          return error instanceof Error ? error.message : 'patch rejected';
+        }
+      },
     });
   } catch (error) {
     const cause = error instanceof Error ? error.message : 'unknown failure';

@@ -6,7 +6,9 @@ export default defineConfig({
   schema: 'prisma',
   datasource: {
     url: process.env.DATABASE_URL ?? '',
-    shadowDatabaseUrl: process.env.SHADOW_DATABASE_URL ?? '',
+    ...(process.env.SHADOW_DATABASE_URL
+      ? { shadowDatabaseUrl: process.env.SHADOW_DATABASE_URL }
+      : {}),
   },
   migrations: {
     path: 'prisma/migrations',

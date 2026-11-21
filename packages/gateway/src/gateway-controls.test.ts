@@ -32,6 +32,7 @@ describe('budget recheck and totals', () => {
     const gw = createGateway({
       agents: [binding(global.adapter)],
       config: { ...config, globalDailyBudgetUsd: 1 },
+      onAudit: () => {},
     });
     expect(await gw.run(task())).toMatchObject({ status: 'rules_only', reason: 'budget' });
     expect(global.calls()).toBe(1);
@@ -150,6 +151,7 @@ describe('redaction of terminal results and failing callbacks', () => {
     const result = await createGateway({
       agents: [binding(hung)],
       config: { ...config, timeoutMs: 10, maxRetries: 0 },
+      onAudit: () => {},
     }).run(task());
     expect(result.status).toBe('rules_only');
     expect(aborted).toBe(true);
@@ -168,6 +170,7 @@ describe('redaction of terminal results and failing callbacks', () => {
       system: 'system',
       prompt: 'prompt',
       schema: Loose,
+      validate: () => undefined,
     };
     const result = await make([binding(fake.adapter)], {
       onAudit: (event) => events.push(event),

@@ -12,13 +12,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, test } from 'bun:test';
 
-import {
-  assertPolicyAllow,
-  evaluatePolicyAllow,
-  loadOneShotPolicy,
-  parsePolicyContext,
-  repoRules,
-} from '../scripts/actions/one-shot';
+import { repoRules } from '../scripts/actions/one-shot';
+import { signPolicyDecision } from '../scripts/actions/policy-signature';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const applyScript = join(root, 'scripts', 'actions', 'apply-patch.ts');
@@ -64,16 +59,16 @@ const sandbox = async (): Promise<Sandbox> => {
     GIT_COMMITTER_NAME: 'Test',
     GIT_COMMITTER_EMAIL: 'test@example.test',
   };
-  await git(['init', '--bare', '-q', remote], dir, setupEnv);
-  await git(['init', '-q'], work, setupEnv);
+  await git(['init', '--initial-branch=main', '--bare', '-q', remote], dir, setupEnv);
+  await git(['init', '--initial-branch=main', '-q'], work, setupEnv);
   mkdirSync(join(work, 'src'));
   writeFileSync(join(work, 'src', 'hello.txt'), 'hello\n');
+  copyFileSync(policyFile, join(work, 'policy.example.yaml'));
   await git(['add', '-A'], work, setupEnv);
   await git(['commit', '-qm', 'base'], work, setupEnv);
   await git(['remote', 'add', 'origin', remote], work, setupEnv);
   await git(['push', '-q', '-u', 'origin', 'HEAD'], work, setupEnv);
 
-  copyFileSync(policyFile, join(work, 'policy.example.yaml'));
   writeFileSync(
     join(work, 'patch.json'),
     JSON.stringify({
@@ -83,6 +78,7 @@ const sandbox = async (): Promise<Sandbox> => {
 
   const decision = {
     effect: 'allow',
+    action: 'open_pr',
     reason: 'rule:pr-for-code-bugs',
     matchedRule: 'pr-for-code-bugs',
     context: {
@@ -98,6 +94,24 @@ const sandbox = async (): Promise<Sandbox> => {
       },
     },
   };
+  const patchPayload = JSON.stringify({
+    files: [{ path: 'src/hello.txt', content: 'hello patched\n', linesChanged: 1 }],
+  });
+  const binding = {
+    repository: 'xiro/haunted-candy-shop',
+    workItemId: 'wi-123',
+    incidentRef: 'diag-123',
+    branchSlug: 'graveshift/inc-abc123-fix',
+    baseRef: 'main',
+    baseSha: await git(['rev-parse', 'HEAD'], work, setupEnv),
+    prTitle: 'Fix the API issue',
+    patchPayload,
+  };
+  const signed = signPolicyDecision(
+    JSON.stringify(decision),
+    binding,
+    'test-policy-signing-key-with-at-least-32-chars',
+  );
   return {
     dir,
     work,
@@ -105,8 +119,15 @@ const sandbox = async (): Promise<Sandbox> => {
     env: {
       ...cleanEnv(home),
       BASE_REF: 'main',
+      BASE_SHA: binding.baseSha,
+      WORK_ITEM_ID: binding.workItemId,
+      INCIDENT_REF: binding.incidentRef,
       BRANCH_SLUG: 'graveshift/inc-abc123-fix',
-      POLICY_DECISION: JSON.stringify(decision),
+      PATCH_PAYLOAD: patchPayload,
+      POLICY_DECISION: signed.policyDecision,
+      POLICY_SIGNATURE: signed.signature,
+      POLICY_SIGNING_KEY: 'test-policy-signing-key-with-at-least-32-chars',
+      PR_TITLE: binding.prTitle,
       PR_TOKEN: 'dummy-token',
       GITHUB_REPOSITORY: 'xiro/haunted-candy-shop',
       POLICY_PATH: 'policy.example.yaml',
@@ -158,21 +179,83 @@ describe('one-shot scripts', () => {
     });
   });
 
-  test('apply-patch rejects a patch path through a symlink', async () => {
+  test('retry reuses the original commit even after the base advances', async () => {
     await withRepo(async (box) => {
-      const outside = join(box.dir, 'outside');
-      mkdirSync(outside);
-      symlinkSync(outside, join(box.work, 'src', 'link'));
+      const first = await runApply(box);
+      expect(first.code, first.error).toBe(0);
+      const shaBefore = await git(
+        ['--git-dir', box.remote, 'rev-parse', 'refs/heads/graveshift/inc-abc123-fix'],
+        box.dir,
+        box.env,
+      );
+      await git(['checkout', 'main'], box.work, box.env);
+      writeFileSync(join(box.work, 'unrelated.txt'), 'new main content\n');
+      await git(['add', 'unrelated.txt'], box.work, box.env);
+      await git(
+        [
+          '-c',
+          'user.name=Test',
+          '-c',
+          'user.email=test@example.test',
+          'commit',
+          '-m',
+          'advance main',
+        ],
+        box.work,
+        box.env,
+      );
+      await git(['push', 'origin', 'main'], box.work, box.env);
       writeFileSync(
         join(box.work, 'patch.json'),
         JSON.stringify({
-          files: [{ path: 'src/link/escaped.txt', content: 'x\n', linesChanged: 1 }],
+          files: [{ path: 'src/hello.txt', content: 'hello patched\n', linesChanged: 1 }],
         }),
       );
-      const result = await runApply(box);
-      expect(result.code).not.toBe(0);
-      expect(existsSync(join(outside, 'escaped.txt'))).toBe(false);
+      const retry = await runApply(box);
+      expect(retry.code, retry.error).toBe(0);
+      const shaAfter = await git(
+        ['--git-dir', box.remote, 'rev-parse', 'refs/heads/graveshift/inc-abc123-fix'],
+        box.dir,
+        box.env,
+      );
+      expect(shaAfter).toBe(shaBefore);
     });
+  });
+
+  test('matching signed patches reject existing and dangling symlinks', async () => {
+    await Promise.all(
+      [false, true].map((dangling) =>
+        withRepo(async (box) => {
+          const outside = join(box.dir, 'outside');
+          if (!dangling) mkdirSync(outside);
+          symlinkSync(outside, join(box.work, 'src', 'link'));
+          const payload = JSON.stringify({
+            files: [
+              {
+                path: dangling ? 'src/link' : 'src/link/escaped.txt',
+                content: 'x\n',
+                linesChanged: 1,
+              },
+            ],
+          });
+          writeFileSync(join(box.work, 'patch.json'), payload);
+          const original = box.env.POLICY_DECISION ?? '';
+          const signed = signPolicyDecision(
+            original,
+            { ...JSON.parse(original).signed, patchPayload: payload },
+            box.env.POLICY_SIGNING_KEY ?? '',
+          );
+          const result = await runApply(box, {
+            PATCH_PAYLOAD: payload,
+            POLICY_DECISION: signed.policyDecision,
+            POLICY_SIGNATURE: signed.signature,
+          });
+          expect(result.code).not.toBe(0);
+          expect(result.error).toContain('crosses a symlink');
+          expect(existsSync(dangling ? outside : join(outside, 'escaped.txt'))).toBe(false);
+        }),
+      ),
+    );
   });
 
   test('unsafe slug and base ref fail before the patch is consumed', async () => {
@@ -186,45 +269,20 @@ describe('one-shot scripts', () => {
     });
   });
 
+  test('signature binds the work item, branch, base, title, repository and patch bytes', async () => {
+    await withRepo(async (box) => {
+      const result = await runApply(box, { PATCH_PAYLOAD: `${box.env.PATCH_PAYLOAD} ` });
+      expect(result.code).not.toBe(0);
+      expect(result.error).toContain('signed decision does not match this job');
+      expect(existsSync(join(box.work, 'patch.json'))).toBe(true);
+    });
+  });
+
   test('repo rules fail closed for an unknown repository', async () => {
     const original = process.env.GITHUB_REPOSITORY;
     process.env.GITHUB_REPOSITORY = 'evil/repo';
     try {
       await expect(repoRules()).rejects.toMatchObject({ code: 'REPO_RULES_UNKNOWN' });
-    } finally {
-      if (original === undefined) delete process.env.GITHUB_REPOSITORY;
-      else process.env.GITHUB_REPOSITORY = original;
-    }
-  });
-
-  test('a recorded allow is re-evaluated with the policy engine', async () => {
-    const original = process.env.GITHUB_REPOSITORY;
-    process.env.GITHUB_REPOSITORY = 'xiro/haunted-candy-shop';
-    try {
-      const { policy } = await loadOneShotPolicy();
-      const context = {
-        service: 'api',
-        category: 'code_bug',
-        signals: [],
-        confidence: 0.9,
-        counters: {
-          openPrsLastHour: 0,
-          actionsLast10Min: 0,
-          diagnosisLoops: 0,
-          llmSpentTodayUsd: 0,
-        },
-      };
-      const allow = JSON.stringify({ effect: 'allow', context });
-      expect(evaluatePolicyAllow(allow, policy).effect).toBe('allow');
-      const lowConfidence = JSON.stringify({
-        effect: 'allow',
-        context: { ...context, confidence: 0.1 },
-      });
-      expect(() => evaluatePolicyAllow(lowConfidence, policy)).toThrow(/did not allow/);
-      const forged = JSON.stringify({ effect: 'allow', matchedRule: 'forged', context });
-      expect(() => evaluatePolicyAllow(forged, policy)).toThrow(/does not match/);
-      expect(() => parsePolicyContext({ service: 'api' })).toThrow();
-      expect(() => assertPolicyAllow('{"effect":"allow"}')).toThrow();
     } finally {
       if (original === undefined) delete process.env.GITHUB_REPOSITORY;
       else process.env.GITHUB_REPOSITORY = original;

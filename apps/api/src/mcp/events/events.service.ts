@@ -120,10 +120,14 @@ export class EventPollService {
     };
   }
 
-  async poll(params: PollParams, scopes: readonly string[]): Promise<EventPollResult> {
+  async poll(
+    params: PollParams,
+    scopes: readonly string[],
+    tenantId: string,
+  ): Promise<EventPollResult> {
     const descriptor = findEventType(params.name);
     if (!descriptor) throw new ProtocolError(NOT_FOUND, 'NotFound', { kind: 'event' });
-    if (!scopes.includes(descriptor.scope)) {
+    if (!tenantId || !scopes.includes(descriptor.scope)) {
       throw new ProtocolError(FORBIDDEN, 'Forbidden', { reason: 'scope', scope: descriptor.scope });
     }
 
@@ -151,7 +155,7 @@ export class EventPollService {
     };
     // A wider raw window limits recursion when many entries do not match.
     const window = this.windowSize ?? Math.max(maxEvents + 1, 100);
-    await this.scan(state, descriptor, args, floor, maxEvents, window);
+    await this.scan(state, descriptor, args, floor, maxEvents, window, tenantId);
 
     const hasMore = state.found.length > maxEvents || !state.reachedHead;
     const page = state.found.slice(0, maxEvents);
@@ -180,6 +184,7 @@ export class EventPollService {
     floor: number | undefined,
     maxEvents: number,
     window: number,
+    tenantId: string,
   ): Promise<void> {
     const read = await this.source.read(state.scanCursor, window);
     state.last = read;
@@ -188,7 +193,7 @@ export class EventPollService {
     state.scannedTotal += Math.max(progress, 0);
 
     for (const stored of read.events) {
-      if (!this.matches(stored, descriptor, args)) continue;
+      if (!this.matches(stored, descriptor, args, tenantId)) continue;
       if (floor !== undefined && Date.parse(stored.envelope.observedAt) < floor) {
         state.truncated = true;
         continue;
@@ -205,14 +210,16 @@ export class EventPollService {
     }
     if (state.scanCursor !== null && read.scannedThroughSeq <= state.scanCursor) return;
     state.scanCursor = read.scannedThroughSeq;
-    return this.scan(state, descriptor, args, floor, maxEvents, window);
+    return this.scan(state, descriptor, args, floor, maxEvents, window, tenantId);
   }
 
   private matches(
     stored: StoredEvent,
     descriptor: EventTypeDescriptor,
     args: Record<string, unknown>,
+    tenantId: string,
   ): boolean {
+    if (stored.envelope.tenantId !== tenantId) return false;
     if (eventTypeFor(stored.envelope) !== descriptor.name) return false;
     if (typeof args.service === 'string' && args.service !== stored.envelope.service) return false;
     if (typeof args.severity === 'string' && args.severity !== stored.envelope.severity) {

@@ -16,7 +16,7 @@ import {
 export interface GatewayOptions {
   agents: readonly AgentBinding[];
   config: GatewayConfig;
-  onAudit?: (event: AuditEvent) => void;
+  onAudit: (event: AuditEvent) => unknown;
   now?: () => Date;
 }
 
@@ -30,6 +30,8 @@ const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : 'unknown failure';
 
 export function createGateway(options: GatewayOptions) {
+  if (typeof options.onAudit !== 'function')
+    throw new GatewayConfigError('an audit sink is required');
   const config = GatewayConfigSchema.parse(options.config);
   const names = new Set<string>();
   for (const { agent } of options.agents) {
@@ -53,6 +55,8 @@ export function createGateway(options: GatewayOptions) {
 
   // The result is only redacted, schema-validated data. No tool runs and no permission is granted.
   async function run<T>(task: GatewayTask<T>): Promise<GatewayResult<T>> {
+    if (typeof task.validate !== 'function')
+      throw new GatewayConfigError('a task validator is required');
     const system = redact(task.system);
     const prompt = redact(task.prompt);
     const binding: AgentBinding | undefined = options.agents.find(
@@ -66,8 +70,8 @@ export function createGateway(options: GatewayOptions) {
 
     const totals = () => ({ usage: { ...total }, costUsd: cost });
 
-    const finish = (result: GatewayResult<T>, reason?: string): GatewayResult<T> => {
-      options.onAudit?.({
+    const finish = async (result: GatewayResult<T>, reason?: string): Promise<GatewayResult<T>> => {
+      await options.onAudit({
         agent: task.agent,
         task: task.task,
         status: result.status,
@@ -81,28 +85,29 @@ export function createGateway(options: GatewayOptions) {
     };
 
     // A failing fallback still ends in a typed result and one audit event.
-    const fallback = (reason: FallbackReason, auditReason: string): GatewayResult<T> => {
+    const fallback = (reason: FallbackReason, auditReason: string): Promise<GatewayResult<T>> => {
       if (task.rulesOnly === undefined) return finish({ status: 'unavailable' }, auditReason);
+      let value: T;
       try {
-        return finish({ status: 'rules_only', value: task.rulesOnly(), reason }, auditReason);
+        value = task.rulesOnly();
       } catch {
         return finish({ status: 'unavailable' }, `${auditReason}; rules-only fallback failed`);
       }
+      return finish({ status: 'rules_only', value, reason }, auditReason);
     };
 
-    const invalid = (reason: string): GatewayResult<T> => {
+    const invalid = (reason: string): Promise<GatewayResult<T>> => {
       const redacted = redact(reason);
       if (task.rulesOnly === undefined) {
         return finish({ status: 'invalid', reason: redacted, ...totals() }, redacted);
       }
+      let value: T;
       try {
-        return finish(
-          { status: 'rules_only', value: task.rulesOnly(), reason: 'invalid' },
-          redacted,
-        );
+        value = task.rulesOnly();
       } catch {
         return finish({ status: 'unavailable' }, 'rules-only fallback failed');
       }
+      return finish({ status: 'rules_only', value, reason: 'invalid' }, redacted);
     };
 
     if (binding === undefined || budget === undefined) {
@@ -155,7 +160,7 @@ export function createGateway(options: GatewayOptions) {
       let problem: string | undefined;
       if (parsed.success) {
         try {
-          problem = task.validate?.(parsed.data);
+          problem = task.validate(parsed.data);
         } catch (error) {
           problem = messageOf(error);
         }

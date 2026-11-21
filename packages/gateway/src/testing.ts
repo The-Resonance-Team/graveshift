@@ -31,6 +31,7 @@ export const task = (over: Partial<GatewayTask<Out>> = {}): GatewayTask<Out> => 
   system: 'system',
   prompt: 'prompt',
   schema: Out,
+  validate: () => undefined,
   rulesOnly: () => ({ answer: 'rules' }),
   ...over,
 });
@@ -78,4 +79,4 @@ export const binding = (adapter: ModelAdapter, over: Partial<AgentConfig> = {}):
 });
 
 export const make = (agents: AgentBinding[], over: Partial<GatewayOptions> = {}) =>
-  createGateway({ agents, config, ...over });
+  createGateway({ agents, config, onAudit: () => {}, ...over });

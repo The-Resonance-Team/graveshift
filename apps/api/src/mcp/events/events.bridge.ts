@@ -8,6 +8,7 @@ import { CredentialService } from '../../auth/services/credential.service';
 import { EventPollService } from './events.service';
 
 const UNSUPPORTED = -32026;
+const FORBIDDEN = -32024;
 const EXTENSION = 'io.modelcontextprotocol/events';
 
 /** Thrown at boot when the SDK no longer exposes the factory field we wrap. */
@@ -36,8 +37,13 @@ const unimplementedResult = z.object({ resultType: z.literal('complete') });
 interface ServingLike {
   era: 'legacy' | 'modern';
   transport: 'http' | 'stdio';
-  authInfo?: { scopes?: readonly string[] } | undefined;
+  authInfo?: { scopes?: readonly string[]; tenantId?: string } | undefined;
   request?: unknown;
+}
+
+interface EventCaller {
+  scopes: readonly string[];
+  tenantId?: string;
 }
 
 interface FactoryLike {
@@ -45,19 +51,25 @@ interface FactoryLike {
 }
 
 /** Read the scopes from the SDK auth info or the bearer header on this request. */
-async function resolveScopes(
+async function resolveCaller(
   serving: ServingLike,
   credentials: CredentialService,
-): Promise<readonly string[]> {
-  if (serving.authInfo?.scopes) return serving.authInfo.scopes;
+): Promise<EventCaller> {
+  if (serving.authInfo?.tenantId) {
+    return {
+      scopes: serving.authInfo.scopes ?? [],
+      tenantId: serving.authInfo.tenantId,
+    };
+  }
   const request = serving.request as { headers?: Record<string, string> } | undefined;
   const header = request?.headers?.authorization ?? '';
   const token = header.startsWith('Bearer ') ? header.slice('Bearer '.length) : '';
-  if (!token) return [];
+  if (!token) return { scopes: [] };
   try {
-    return (await credentials.verify(token, 'mcp')).scopes;
+    const credential = await credentials.verify(token, 'mcp');
+    return { scopes: credential.scopes, tenantId: credential.tenantId };
   } catch {
-    return [];
+    return { scopes: [] };
   }
 }
 
@@ -65,16 +77,27 @@ async function resolveScopes(
 export function registerEvents(
   server: McpServer,
   service: EventPollService,
-  getScopes: () => Promise<readonly string[]>,
+  getCaller: () => Promise<EventCaller>,
 ): void {
   const low = server.server;
   low.registerCapabilities({ extensions: { [EXTENSION]: { listChanged: false } } });
 
-  low.setRequestHandler('events/list', { params: listParams, result: listResult }, () =>
-    service.list(),
-  );
-  low.setRequestHandler('events/poll', { params: pollParams, result: pollResult }, async (params) =>
-    service.poll(params, await getScopes()),
+  low.setRequestHandler('events/list', { params: listParams, result: listResult }, async () => {
+    if (!(await getCaller()).tenantId) {
+      throw new ProtocolError(FORBIDDEN, 'Forbidden', { reason: 'authentication' });
+    }
+    return service.list();
+  });
+  low.setRequestHandler(
+    'events/poll',
+    { params: pollParams, result: pollResult },
+    async (params) => {
+      const caller = await getCaller();
+      if (!caller.tenantId) {
+        throw new ProtocolError(FORBIDDEN, 'Forbidden', { reason: 'authentication' });
+      }
+      return service.poll(params, caller.scopes, caller.tenantId);
+    },
   );
 
   const unsupported = (feature: string) => () => {
@@ -127,7 +150,7 @@ export class EventsBridge implements OnModuleInit {
     factory.create = (serving: ServingLike): McpServer => {
       const server = original(serving as Parameters<FactoryLike['create']>[0]);
       if (serving.era === 'modern') {
-        registerEvents(server, this.service, () => resolveScopes(serving, this.credentials));
+        registerEvents(server, this.service, () => resolveCaller(serving, this.credentials));
       }
       return server;
     };

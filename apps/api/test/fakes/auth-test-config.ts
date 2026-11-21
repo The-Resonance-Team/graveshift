@@ -27,7 +27,6 @@ export const TEST_OAUTH_CLIENTS: Record<string, OAuthClientConfig> = {
 };
 
 export const TEST_CONFIG: AuthConfig = {
-  credentialsPath: '/nonexistent/credentials.json',
   jwtSecret: TEST_JWT_SECRET,
   jwtIssuer: 'graveshift-api',
   jwtAudience: 'graveshift-credentials',

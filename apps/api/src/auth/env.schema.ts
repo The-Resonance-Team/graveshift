@@ -20,10 +20,6 @@ export const envSchema = z
       emptyToUndefined,
       z.string().url().default('postgresql://graveshift:graveshift@localhost:5436/graveshift'),
     ),
-    GRAVESHIFT_CREDENTIALS_PATH: z.preprocess(
-      emptyToUndefined,
-      z.string().default('.graveshift/credentials.json'),
-    ),
     // No hardcoded secret. Boot fails in every environment when this key is absent.
     GRAVESHIFT_OAUTH_JWT_SECRET: z.preprocess(
       emptyToUndefined,

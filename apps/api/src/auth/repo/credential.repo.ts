@@ -1,107 +1,170 @@
-import { randomUUID } from 'node:crypto';
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
-import { Inject, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
+import { CredentialKind, type Credential, Prisma } from '@prisma/client';
 
-import { CREDENTIAL_CONFIG, type AuthConfig, type CredentialRecord } from '../auth.types';
+import { AuditRepo } from '../../audit/repo/audit.repo';
+import { PrismaService } from '../../infra/prisma.service';
+import type { CredentialRecord, Principal } from '../auth.types';
 
-/** The storage seam. Tests supply an in-memory subclass. */
+export const MAX_ACTIVE_CREDENTIALS = 10;
+
+export class CredentialLimitError extends Error {
+  constructor() {
+    super('The active credential limit is reached');
+    this.name = 'CredentialLimitError';
+  }
+}
+
+/** Domain verbs for the PostgreSQL credential table. */
 export abstract class CredentialRepo {
-  abstract list(): Promise<CredentialRecord[]>;
-  abstract findById(id: string): Promise<CredentialRecord | undefined>;
+  abstract list(principal: Principal): Promise<CredentialRecord[]>;
+  abstract findByHash(hash: string): Promise<CredentialRecord | undefined>;
   abstract add(record: CredentialRecord): Promise<void>;
-  abstract replace(record: CredentialRecord): Promise<void>;
+  abstract revoke(id: string, principal: Principal, at: string): Promise<boolean>;
+  abstract recordExpiry(id: string, at: string): Promise<void>;
 }
 
-function isRecord(value: unknown): value is CredentialRecord {
-  if (value === null || typeof value !== 'object') return false;
-  const item = value as Record<string, unknown>;
-  return (
-    typeof item.id === 'string' &&
-    (item.kind === 'mcp' || item.kind === 'plugin') &&
-    typeof item.name === 'string' &&
-    typeof item.prefix === 'string' &&
-    typeof item.hash === 'string' &&
-    typeof item.clientId === 'string' &&
-    typeof item.tenantId === 'string' &&
-    Array.isArray(item.scopes) &&
-    item.scopes.every((scope) => typeof scope === 'string') &&
-    (item.service === null || typeof item.service === 'string') &&
-    typeof item.createdAt === 'string' &&
-    (item.expiresAt === null || typeof item.expiresAt === 'string') &&
-    (item.revokedAt === null || typeof item.revokedAt === 'string')
-  );
+function toRecord(row: Credential): CredentialRecord {
+  return {
+    id: row.id,
+    kind: row.kind,
+    name: row.name,
+    prefix: row.prefix,
+    hash: row.hash,
+    clientId: row.clientId,
+    tenantId: row.tenantId,
+    scopes: row.scopes,
+    service: row.service,
+    createdAt: row.createdAt.toISOString(),
+    expiresAt: row.expiresAt?.toISOString() ?? null,
+    revokedAt: row.revokedAt?.toISOString() ?? null,
+    expirationAuditedAt: row.expirationAuditedAt?.toISOString() ?? null,
+  };
 }
 
-/** One JSON file holds every record. The file is created with mode 0600. */
+function credentialData(record: CredentialRecord): Prisma.CredentialUncheckedCreateInput {
+  return {
+    ...record,
+    kind: record.kind as CredentialKind,
+    createdAt: new Date(record.createdAt),
+    expiresAt: record.expiresAt === null ? null : new Date(record.expiresAt),
+    revokedAt: record.revokedAt === null ? null : new Date(record.revokedAt),
+    expirationAuditedAt:
+      record.expirationAuditedAt === null ? null : new Date(record.expirationAuditedAt),
+  };
+}
+
+async function lockCredentialWrites(
+  tx: Prisma.TransactionClient,
+  tenantId: string,
+  clientId: string,
+): Promise<void> {
+  const key = `credential:${tenantId}:${clientId}`;
+  await tx.$queryRaw(Prisma.sql`SELECT 1 FROM pg_advisory_xact_lock(hashtextextended(${key}, 0))`);
+}
+
 @Injectable()
-export class FileCredentialRepo extends CredentialRepo {
-  private queue: Promise<unknown> = Promise.resolve();
-
-  constructor(@Inject(CREDENTIAL_CONFIG) private readonly config: AuthConfig) {
+export class PrismaCredentialRepo extends CredentialRepo {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditRepo,
+  ) {
     super();
   }
 
-  async list(): Promise<CredentialRecord[]> {
-    return this.read();
+  async list(principal: Principal): Promise<CredentialRecord[]> {
+    const rows = await this.prisma.credential.findMany({
+      where: { clientId: principal.clientId, tenantId: principal.tenantId },
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map(toRecord);
   }
 
-  async findById(id: string): Promise<CredentialRecord | undefined> {
-    return (await this.read()).find((record) => record.id === id);
+  async findByHash(hash: string): Promise<CredentialRecord | undefined> {
+    const row = await this.prisma.credential.findFirst({ where: { hash } });
+    return row === null ? undefined : toRecord(row);
   }
 
   async add(record: CredentialRecord): Promise<void> {
-    await this.serialize(async () => {
-      const records = await this.read();
-      records.push(record);
-      await this.write(records);
+    await this.audit.transaction(async (tx) => {
+      await lockCredentialWrites(tx, record.tenantId, record.clientId);
+      const now = new Date(record.createdAt);
+      const active = await tx.credential.count({
+        where: {
+          clientId: record.clientId,
+          tenantId: record.tenantId,
+          revokedAt: null,
+          OR: [{ expiresAt: null }, { expiresAt: { gt: now } }],
+        },
+      });
+      if (active >= MAX_ACTIVE_CREDENTIALS) throw new CredentialLimitError();
+
+      await tx.credential.create({ data: credentialData(record) });
+      await this.audit.appendInTransaction(tx, record.tenantId, {
+        actor: record.clientId,
+        type: 'credential.created',
+        payload: {
+          credentialId: record.id,
+          kind: record.kind,
+          name: record.name,
+          scopes: record.scopes,
+          service: record.service,
+          expiresAt: record.expiresAt,
+        },
+      });
     });
   }
 
-  async replace(record: CredentialRecord): Promise<void> {
-    await this.serialize(async () => {
-      const records = await this.read();
-      const index = records.findIndex((item) => item.id === record.id);
-      if (index >= 0) records[index] = record;
-      await this.write(records);
+  async revoke(id: string, principal: Principal, at: string): Promise<boolean> {
+    return this.audit.transaction(async (tx) => {
+      await lockCredentialWrites(tx, principal.tenantId, principal.clientId);
+      const record = await tx.credential.findFirst({
+        where: { id, clientId: principal.clientId, tenantId: principal.tenantId },
+      });
+      if (record === null) return false;
+      if (record.revokedAt !== null) return true;
+
+      const changed = await tx.credential.updateMany({
+        where: { id, clientId: principal.clientId, tenantId: principal.tenantId, revokedAt: null },
+        data: { revokedAt: new Date(at) },
+      });
+      if (changed.count === 0) return true;
+      await this.audit.appendInTransaction(tx, record.tenantId, {
+        actor: principal.clientId,
+        type: 'credential.revoked',
+        payload: { credentialId: record.id, kind: record.kind, name: record.name },
+      });
+      return true;
     });
   }
 
-  private serialize<T>(task: () => Promise<T>): Promise<T> {
-    const result = this.queue.then(task, task);
-    this.queue = result.then(
-      () => undefined,
-      () => undefined,
-    );
-    return result;
-  }
-
-  private async read(): Promise<CredentialRecord[]> {
-    try {
-      const text = await readFile(this.config.credentialsPath, 'utf8');
-      const parsed: unknown = JSON.parse(text);
-      if (!Array.isArray(parsed) || !parsed.every(isRecord)) {
-        throw new Error('Credential store has an invalid shape');
+  async recordExpiry(id: string, at: string): Promise<void> {
+    await this.audit.transaction(async (tx) => {
+      const record = await tx.credential.findUnique({ where: { id } });
+      if (
+        record === null ||
+        record.revokedAt !== null ||
+        record.expirationAuditedAt !== null ||
+        record.expiresAt === null ||
+        record.expiresAt.getTime() > Date.parse(at)
+      ) {
+        return;
       }
-      return parsed;
-    } catch (error) {
-      if (error instanceof Error && 'code' in error && error.code === 'ENOENT') return [];
-      throw error;
-    }
-  }
 
-  private async write(records: CredentialRecord[]): Promise<void> {
-    const path = this.config.credentialsPath;
-    await mkdir(dirname(path), { recursive: true, mode: 0o700 });
-    const temp = `${path}.${randomUUID()}.tmp`;
-    try {
-      await writeFile(temp, JSON.stringify(records, null, 2), { mode: 0o600 });
-      await rename(temp, path);
-    } catch (error) {
-      await rm(temp, { force: true });
-      throw error;
-    }
+      const changed = await tx.credential.updateMany({
+        where: {
+          id,
+          revokedAt: null,
+          expirationAuditedAt: null,
+          expiresAt: { lte: new Date(at) },
+        },
+        data: { expirationAuditedAt: new Date(at) },
+      });
+      if (changed.count === 0) return;
+      await this.audit.appendInTransaction(tx, record.tenantId, {
+        actor: 'system',
+        type: 'credential.expired',
+        payload: { credentialId: record.id, kind: record.kind, name: record.name },
+      });
+    });
   }
 }
-
-// Note: the queue serializes writes in one process only. Use a locked store before the API runs in more than one process.
