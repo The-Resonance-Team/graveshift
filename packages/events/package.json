@@ -1,0 +1,20 @@
+{
+  "name": "@graveshift/events",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./nats": "./src/nats.ts",
+    "./testing": "./src/testing.ts"
+  },
+  "scripts": {
+    "typecheck": "bun check --no-script",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@graveshift/core": "workspace:*",
+    "@nats-io/jetstream": "3.5.0",
+    "@nats-io/transport-node": "3.5.0"
+  }
+}
