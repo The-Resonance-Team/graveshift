@@ -45,6 +45,8 @@ jobs:
               - 'tsconfig*.json'
               - '.oxlintrc.json'
               - '.oxfmtrc.json'
+              - 'prisma/**'
+              - 'prisma.config.ts'
 
   format:
     needs: changes
@@ -67,6 +69,19 @@ jobs:
       - uses: ./.github/actions/setup-bun
       - name: Lint
         run: bun run lint
+
+  db:
+    needs: changes
+    if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.ci-affected == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: ./.github/actions/setup-bun
+      - name: Validate Prisma schema
+        run: bun x prisma validate
+      - name: Check migration drift
+        run: bun run migrate:drift:check
 
   typecheck:
     needs: changes
@@ -144,7 +159,7 @@ jobs:
 
   verify:
     if: ${{ always() && (github.event_name == 'push' || github.event.pull_request.draft != true) }}
-    needs: [changes, format, lint, typecheck, test-types, test, build, ci-structure, compose]
+    needs: [changes, format, lint, db, typecheck, test-types, test, build, ci-structure, compose]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

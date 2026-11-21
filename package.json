@@ -17,15 +17,20 @@
     "test:check": "bun test --check --tsconfig-override apps/api/tsconfig.json",
     "test": "bun test --tsconfig-override apps/api/tsconfig.json",
     "generate:check": "bun run --filter @graveshift/api-contract generate:check",
+    "migrate:drift:check": "bun scripts/check-prisma-drift.ts",
+    "migrate:drift:local": "bun x prisma migrate diff --from-migrations prisma/migrations --to-schema prisma --exit-code",
     "build": "bun build apps/daemon/src/main.ts --target=bun --outdir=node_modules/.cache/graveshift-build/daemon && bun build packages/actuator/src/main.ts --target=bun --outdir=node_modules/.cache/graveshift-build/actuator",
-    "verify": "bun run format:check && bun run lint && bun run typecheck && bun run test:check && bun run test"
+    "verify": "bun run format:check && bun run lint && bun run typecheck && bun run test:check && bun run test",
+    "postinstall": "prisma generate"
   },
   "devDependencies": {
     "@graveshift/patch": "workspace:*",
     "@graveshift/policy": "workspace:*",
     "@graveshift/redactor": "workspace:*",
     "@types/bun": "1.4.4",
+    "dotenv": "18.0.10",
     "fast-check": "4.10.2",
+    "prisma": "7.10.1",
     "typescript": "7.0.2"
   }
 }
