@@ -59,8 +59,22 @@ describe('parseSentryEnvelope', () => {
     expect(() => parseSentryEnvelope(Buffer.from(' {}\n'))).toThrow(SentryEnvelopeParseError);
   });
 
-  // Oversized bodies are covered inline here and in the Sentry e2e suite with a 1 MiB + 1 byte buffer.
   test('bounds the complete envelope', () => {
     expect(() => parseSentryEnvelope(Buffer.alloc(1_048_577))).toThrow(SentryEnvelopeTooLargeError);
+  });
+
+  test('bounds a single event item below the whole-body limit', () => {
+    const payload = Buffer.from(JSON.stringify({ event_id: 'item-1', timestamp: 1 }));
+    const body = Buffer.concat([
+      Buffer.from('{}\n{"type":"event","length":' + payload.length + '}\n'),
+      payload,
+      Buffer.from('\n'),
+    ]);
+    const limits = { maxEnvelopeBytes: 1_048_576, maxEventItemBytes: payload.length - 1 };
+
+    expect(() => parseSentryEnvelope(body, limits)).toThrow(SentryEnvelopeTooLargeError);
+    expect(
+      parseSentryEnvelope(body, { maxEventItemBytes: payload.length }).items[0]?.payload,
+    ).toEqual({ event_id: 'item-1', timestamp: 1 });
   });
 });
