@@ -1,8 +1,13 @@
 import type { AgentConfig, ProviderPackage } from '@graveshift/agents';
-import { type LanguageModel, generateObject } from 'ai';
+import {
+  generateObject,
+  type LanguageModel,
+  type LanguageModelUsage,
+  NoObjectGeneratedError,
+} from 'ai';
 
 import { PROVIDER_FACTORIES, type ProviderFactory } from './providers';
-import { GatewayConfigError, type ModelAdapter, type ModelRequest } from './types';
+import { GatewayConfigError, type ModelAdapter, type ModelRequest, type Usage } from './types';
 
 export interface AdapterOptions {
   env?: Record<string, string | undefined>;
@@ -37,6 +42,11 @@ function languageModelFor(provider: unknown, model: string): LanguageModel {
   throw new GatewayConfigError('provider does not expose a language model');
 }
 
+const tokenUsage = (usage: LanguageModelUsage | undefined): Usage => ({
+  in: usage?.inputTokens ?? 0,
+  out: usage?.outputTokens ?? 0,
+});
+
 function adapterFor(
   provider: ProviderPackage,
   model: string,
@@ -48,20 +58,22 @@ function adapterFor(
     // The key was checked when the adapter was built; availability needs no I/O.
     available: () => true,
     async generateObject(request: ModelRequest) {
-      const result = await generateObject({
-        model: resolveModel(),
-        schema: request.schema,
-        system: request.system,
-        prompt: request.prompt,
-        temperature: 0,
-        maxRetries: 0,
-        abortSignal: request.signal,
-      });
-      return {
-        object: result.object,
-        model,
-        usage: { in: result.usage.inputTokens ?? 0, out: result.usage.outputTokens ?? 0 },
-      };
+      try {
+        const result = await generateObject({
+          model: resolveModel(),
+          schema: request.schema,
+          system: request.system,
+          prompt: request.prompt,
+          temperature: 0,
+          maxRetries: 0,
+          abortSignal: request.signal,
+        });
+        return { object: result.object, model, usage: tokenUsage(result.usage) };
+      } catch (error) {
+        if (!NoObjectGeneratedError.isInstance(error)) throw error;
+        // Return billed usage so the gateway can charge for this response before a validation retry.
+        return { validationError: error.message, model, usage: tokenUsage(error.usage) };
+      }
     },
   };
 }

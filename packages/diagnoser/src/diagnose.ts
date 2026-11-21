@@ -1,5 +1,5 @@
 import { type Diagnosis, DiagnosisSchema } from '@graveshift/core';
-import type { LlmGateway } from '@graveshift/llm';
+import type { Gateway } from '@graveshift/gateway';
 
 import { buildContext, SYSTEM_PROMPT } from './context';
 import { rulesOnlyDiagnosis } from './rules-only';
@@ -16,7 +16,8 @@ export type DiagnoseResult =
   | { status: 'needs_human'; reason: string };
 
 export interface DiagnoseDeps {
-  gateway: LlmGateway;
+  gateway: Pick<Gateway, 'run'>;
+  agent: string;
   now?: () => Date;
   newId?: () => string;
 }
@@ -31,12 +32,13 @@ export function validateEvidence(output: LlmDiagnosis, bundle: ContextBundle): s
 }
 
 export async function diagnose(
-  { gateway, now = () => new Date(), newId = () => crypto.randomUUID() }: DiagnoseDeps,
+  { gateway, agent, now = () => new Date(), newId = () => crypto.randomUUID() }: DiagnoseDeps,
   input: DiagnoseInput,
 ): Promise<DiagnoseResult> {
   const bundle = buildContext(input);
   const result = await gateway.run({
-    name: 'diagnose',
+    agent,
+    task: 'diagnose',
     system: SYSTEM_PROMPT,
     prompt: bundle.prompt,
     schema: LlmDiagnosisSchema,

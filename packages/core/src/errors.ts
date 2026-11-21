@@ -20,9 +20,3 @@ export class TransitionError extends GraveshiftError<TransitionErrorCode> {}
 export type TriageErrorCode = 'INVALID_ASSIGNEE' | 'TERMINAL_STATUS' | 'UNKNOWN_AGENT';
 
 export class TriageError extends GraveshiftError<TriageErrorCode> {}
-
-export class ConfigError extends GraveshiftError {
-  constructor(message: string) {
-    super('CONFIG_INVALID', message);
-  }
-}

@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test';
 import { DiagnosisSchema } from '@graveshift/core';
-import { createGateway, type LlmProvider } from '@graveshift/llm';
 import fc from 'fast-check';
 
 import leech from '../fixtures/memory-leech.json';
@@ -8,6 +7,7 @@ import nullCandy from '../fixtures/null-candy.json';
 import wrongPotion from '../fixtures/wrong-potion.json';
 import { buildContext } from './context';
 import { diagnose } from './diagnose';
+import { deps, otherAgent, replayAdapter } from './diagnoser.test-helpers';
 import { rulesOnlyDiagnosis } from './rules-only';
 import { type Category, type DiagnoseInput, LIMITS } from './types';
 
@@ -18,38 +18,12 @@ const fixtures = [nullCandy, leech, wrongPotion] as unknown as Array<{
   expectedCategory: Category;
 }>;
 
-const config = { timeoutMs: 1000, maxRetries: 0, priceTableUsdPer1M: {} };
-
-function replayProvider(responses: unknown[], available = true) {
-  const prompts: string[] = [];
-  let call = 0;
-  const provider: LlmProvider = {
-    name: 'openai-compatible',
-    paid: false,
-    available: () => available,
-    async generateObject({ prompt }) {
-      prompts.push(prompt);
-      return {
-        object: responses[Math.min(call++, responses.length - 1)],
-        model: 'recorded',
-        usage: { in: 10, out: 5 },
-      };
-    },
-  };
-  const gateway = createGateway({ providers: [provider], config, dailyBudgetUsd: 1 });
-  return { gateway, prompts, calls: () => call };
-}
-
-const deps = (gateway: ReturnType<typeof replayProvider>['gateway']) => ({
-  gateway,
-  now: () => new Date('2026-11-20T10:01:00.000Z'),
-  newId: () => 'dia-1',
-});
+const base = fixtures[0]!.input;
 
 describe('recorded fixtures: llm path', () => {
   for (const fixture of fixtures) {
     test(`${fixture.name}: validated diagnosis with the expected category`, async () => {
-      const { gateway } = replayProvider([fixture.llmResponse]);
+      const { gateway } = replayAdapter([fixture.llmResponse]);
       const result = await diagnose(deps(gateway), fixture.input);
       expect(result.status).toBe('diagnosed');
       if (result.status !== 'diagnosed') return;
@@ -64,9 +38,10 @@ describe('recorded fixtures: llm path', () => {
 describe('recorded fixtures: rules-only path', () => {
   for (const fixture of fixtures) {
     test(`${fixture.name}: same Diagnosis schema, expected category`, async () => {
-      const { gateway } = replayProvider([], false);
+      const { gateway, events } = replayAdapter([]);
       const result = await diagnose(deps(gateway), fixture.input);
       expect(result.status === 'diagnosed' && result.source).toBe('rules-only');
+      expect(events).toMatchObject([{ status: 'rules_only', reason: 'no adapter for agent' }]);
       if (result.status !== 'diagnosed') return;
       expect(result.category).toBe(fixture.expectedCategory);
       DiagnosisSchema.parse(result.diagnosis);
@@ -74,8 +49,8 @@ describe('recorded fixtures: rules-only path', () => {
   }
 
   test('no evidence at all yields unknown with confidence below 0.5', async () => {
-    const { gateway } = replayProvider([], false);
-    const input = { ...fixtures[0]!.input, logs: ['all quiet'], detections: [] };
+    const { gateway } = replayAdapter([]);
+    const input = { ...base, logs: ['all quiet'], detections: [] };
     const result = await diagnose(deps(gateway), input);
     expect(result).toMatchObject({ status: 'diagnosed', category: 'unknown' });
     expect(result.status === 'diagnosed' && result.diagnosis.confidence).toBeLessThan(0.5);
@@ -84,7 +59,7 @@ describe('recorded fixtures: rules-only path', () => {
   test('property: rules-only is deterministic and always cites refs that exist', () => {
     fc.assert(
       fc.property(fc.array(fc.string(), { maxLength: 30 }), (logs) => {
-        const input = { ...fixtures[0]!.input, logs };
+        const input = { ...base, logs };
         const bundle = buildContext(input);
         const first = rulesOnlyDiagnosis(input, bundle);
         expect(rulesOnlyDiagnosis(input, bundle)).toEqual(first);
@@ -94,21 +69,70 @@ describe('recorded fixtures: rules-only path', () => {
   });
 });
 
+describe('diagnosis gateway controls', () => {
+  test('uses the selected Agent endpoint, retries transport once and audits one result', async () => {
+    const { gateway, requests, events } = replayAdapter(
+      [new Error('busy'), nullCandy.llmResponse],
+      { maxRetries: 1 },
+    );
+    expect(await diagnose(deps(gateway), base)).toMatchObject({ source: 'llm' });
+    expect(requests.map(({ url }) => url)).toEqual([
+      'https://incidents.test/v1/chat/completions',
+      'https://incidents.test/v1/chat/completions',
+    ]);
+    expect(requests[0]?.body).toContain('"model":"test-diagnosis"');
+    expect(requests[1]?.body).toBe(requests[0]?.body);
+    expect(events).toEqual([
+      {
+        agent: 'Incident Agent',
+        task: 'diagnose',
+        status: 'ok',
+        model: 'test-diagnosis',
+        tokensIn: 100,
+        tokensOut: 30,
+        costUsd: 1,
+      },
+    ]);
+  });
+
+  test('per-Agent and global budgets stop model calls and use rules-only', async () => {
+    const { gateway, requests, events } = replayAdapter([nullCandy.llmResponse], {
+      dailyBudgetUsd: 1,
+      globalDailyBudgetUsd: 2,
+    });
+    expect(await diagnose(deps(gateway), base)).toMatchObject({ source: 'llm' });
+    expect(await diagnose(deps(gateway), base)).toMatchObject({ source: 'rules-only' });
+    expect(await diagnose(deps(gateway, otherAgent.name), base)).toMatchObject({ source: 'llm' });
+    expect(await diagnose(deps(gateway, otherAgent.name), base)).toMatchObject({
+      source: 'rules-only',
+    });
+    expect(requests).toHaveLength(2);
+    expect(events.map(({ reason }) => reason)).toEqual([
+      undefined,
+      'budget exhausted',
+      undefined,
+      'budget exhausted',
+    ]);
+  });
+});
+
 describe('evidence validation', () => {
   const bad = { ...nullCandy.llmResponse, evidence: [{ ref: 'log:999', excerpt: 'invented' }] };
 
   test('an unseen ref retries once, then falls back to rules-only', async () => {
-    const { gateway, calls, prompts } = replayProvider([bad]);
-    const result = await diagnose(deps(gateway), nullCandy.input as unknown as DiagnoseInput);
+    const { gateway, requests } = replayAdapter([bad]);
+    const result = await diagnose(deps(gateway), base);
     expect(result).toMatchObject({ status: 'diagnosed', source: 'rules-only' });
-    expect(calls()).toBe(2);
-    expect(prompts[1]).toContain('log:999');
+    expect(requests).toHaveLength(2);
+    expect(requests[1]?.body).toContain('log:999');
   });
 
   test('a corrected answer on the retry is accepted', async () => {
-    const { gateway } = replayProvider([bad, nullCandy.llmResponse]);
-    const result = await diagnose(deps(gateway), nullCandy.input as unknown as DiagnoseInput);
-    expect(result.status).toBe('diagnosed');
+    const { gateway } = replayAdapter([bad, nullCandy.llmResponse]);
+    expect(await diagnose(deps(gateway), base)).toMatchObject({
+      status: 'diagnosed',
+      source: 'llm',
+    });
   });
 
   test('schema-invalid output and a confident "unknown" both fall back to rules-only after one retry', async () => {
@@ -118,27 +142,24 @@ describe('evidence validation', () => {
     ];
     await Promise.all(
       responses.map(async (response) => {
-        const { gateway, calls } = replayProvider([response]);
-        const result = await diagnose(deps(gateway), nullCandy.input as unknown as DiagnoseInput);
+        const { gateway, requests, events } = replayAdapter([response]);
+        const result = await diagnose(deps(gateway), base);
         expect(result).toMatchObject({ status: 'diagnosed', source: 'rules-only' });
-        expect(calls()).toBe(2);
+        expect(requests).toHaveLength(2);
+        expect(requests[1]?.body).toContain('<validation_error>');
+        expect(events).toMatchObject([{ status: 'rules_only', tokensIn: 200, costUsd: 2 }]);
       }),
     );
   });
 
   test('no diagnosis source at all returns needs_human', async () => {
     const gateway = { run: async () => ({ status: 'unavailable' as const }) };
-    const result = await diagnose(
-      deps(gateway as never),
-      nullCandy.input as unknown as DiagnoseInput,
-    );
+    const result = await diagnose(deps(gateway), base);
     expect(result).toMatchObject({ status: 'needs_human' });
   });
 });
 
 describe('context builder', () => {
-  const base = fixtures[0]!.input;
-
   test('property: caps hold for any amount of input', () => {
     fc.assert(
       fc.property(
@@ -212,10 +233,10 @@ describe('context builder', () => {
   });
 
   test('redacts secrets before anything reaches the provider', async () => {
-    const { gateway, prompts } = replayProvider([wrongPotion.llmResponse]);
-    await diagnose(deps(gateway), wrongPotion.input as unknown as DiagnoseInput);
-    expect(prompts[0]).not.toContain('s3cretpw9');
-    expect(prompts[0]).toContain('[REDACTED:');
+    const { gateway, requests } = replayAdapter([wrongPotion.llmResponse]);
+    await diagnose(deps(gateway), fixtures[2]!.input);
+    expect(requests[0]?.body).not.toContain('s3cretpw9');
+    expect(requests[0]?.body).toContain('[REDACTED:');
   });
 
   test('property: an injected secret in logs, files or commits never reaches the prompt', () => {

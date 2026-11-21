@@ -3,7 +3,6 @@
   "sortPackageJson": false,
   "ignorePatterns": [
     "*.md",
-    "apps/_daemon/**",
     "packages/api-contract/src/generated/api.ts",
     "packages/api-contract/src/openapi.json",
     "**/next-env.d.ts"

@@ -25,7 +25,7 @@ Concrete bug a spec prevented, and the comparison with ad hoc coding: capture pe
 
 ## 3. Steering
 
-Seven files in `.kiro/steering/`: `product`, `tech`, `structure`, `safety` (always included), plus `halloween-voice`, `docker-k8s` and `github-app` (matched by file type). `safety.md` lists eight invariants that the code follows: signed single-use actions, draft-only PRs, pure policy, redaction before outputs, untrusted tags, no `docker.sock`, no secrets, append-only audit and the circuit breaker. The `tech` rule "no provider SDK outside `packages/llm`" is why the model call sits in one gateway package.
+Seven files in `.kiro/steering/`: `product`, `tech`, `structure`, `safety` (always included), plus `halloween-voice`, `docker-k8s` and `github-app` (matched by file type). `safety.md` lists safety rules for runtime actions, draft PRs, policy, redaction, untrusted data, credentials, audit and the circuit breaker. The `tech` rule sends each model call through `packages/gateway`.
 
 Before and after example: capture pending.
 
@@ -57,7 +57,7 @@ Consumed servers (GitHub, fetch, Kubernetes) are in `.kiro/settings/mcp.example.
 
 ## 7. Property-based testing
 
-`fast-check` properties run under `bun test` in the policy, redactor, actuator, fixer guard, core state machine, store audit chain, watcher, llm, diagnoser, metrics, runtime sources and demo app test files. The full suite at the last verification had 239 tests.
+`fast-check` properties run under `bun test` in the policy, redactor, actuator, fixer guard, core state machine, store audit chain, watcher, diagnoser, metrics, runtime sources and demo app test files.
 
 Real counterexample found: a property test on the audit chain found that a payload with a `__proto__` key hashed differently than it read back. The fix normalises the payload through Zod before hashing (`packages/store/src/sqlite.ts`), and a regression test covers it.
 
@@ -81,9 +81,9 @@ Dates are from the build run on 20 Nov 2026 (ICT). "Corrected" lists fixes made 
 | Policy and redactor | deny-first `decide()`, mode lattice, 12 detectors, policy CLI | none recorded |
 | Runtime sources and demo | Docker, Kubernetes and Prometheus clients, Haunted Candy Shop with five faults | Docker smoke test showed four scenarios behave as designed; OOM events seen |
 | Watcher | seven rules, dedupe, PromQL poller | none recorded |
-| LLM and diagnoser | single-provider gateway, budget stop, evidence validation, fixtures | none recorded |
+| Diagnosis | budget stop, evidence validation, recorded fixtures | none recorded |
 | Fixer and actuator | GitHub App client, patch guard, signed single-use actions, breaker | none recorded |
-| Daemon | pipeline, HTTP API, SSE, Haunt panel endpoint | real Docker run: SSE within about 5 s, audit chain verified |
+| Reference daemon (removed in ADR 0009) | pipeline, HTTP API, SSE, Haunt panel endpoint | real Docker run: SSE within about 5 s, audit chain verified |
 | Dashboard | Next.js graveyard, timeline, wizard | low-contrast text, 375 px tooltip overflow, favicon 404 |
 | MCP server and Autopsy | tools, prompts, resource, stdio and HTTP code | lint warnings (shadowed names, await in loop) |
 | Docs and verification | README, architecture, security, demo, this file | removed claims the code could not support |

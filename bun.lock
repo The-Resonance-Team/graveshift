@@ -100,7 +100,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@graveshift/core": "workspace:*",
-        "@graveshift/llm": "workspace:*",
+        "@graveshift/gateway": "workspace:*",
         "@graveshift/redactor": "workspace:*",
         "@graveshift/watcher": "workspace:*",
         "zod": "^4.6.7",
@@ -193,17 +193,6 @@
       "dependencies": {
         "@graveshift/core": "workspace:*",
         "@graveshift/events": "workspace:*",
-      },
-    },
-    "packages/llm": {
-      "name": "@graveshift/llm",
-      "version": "0.1.0",
-      "dependencies": {
-        "@ai-sdk/openai-compatible": "3.0.93",
-        "@graveshift/core": "workspace:*",
-        "@graveshift/redactor": "workspace:*",
-        "ai": "7.0.177",
-        "zod": "^4.6.7",
       },
     },
     "packages/metrics": {
@@ -432,8 +421,6 @@
     "@graveshift/gateway": ["@graveshift/gateway@workspace:packages/gateway"],
 
     "@graveshift/integrations": ["@graveshift/integrations@workspace:packages/integrations"],
-
-    "@graveshift/llm": ["@graveshift/llm@workspace:packages/llm"],
 
     "@graveshift/metrics": ["@graveshift/metrics@workspace:packages/metrics"],
 

@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@graveshift/core": "workspace:*",
-    "@graveshift/llm": "workspace:*",
+    "@graveshift/gateway": "workspace:*",
     "@graveshift/redactor": "workspace:*",
     "@graveshift/watcher": "workspace:*",
     "zod": "^4.6.7"

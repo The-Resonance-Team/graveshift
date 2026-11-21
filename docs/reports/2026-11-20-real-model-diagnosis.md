@@ -2,11 +2,11 @@
 
 Result: all three diagnoser fixtures pass against the real model after one prompt change (round 2). The Compose demo also produced an `llm` diagnosis for the injected `null-candy` haunt.
 
+This report records a past run. [ADR 0009](../adr/0009-remove-v1-daemon-and-diagnosis-model-path.md) removed the harness and its daemon. The current diagnosis tests replay recorded output without a model connection.
+
 ## Method
 
-- Seam: the public `diagnose({ gateway }, input)` call in `packages/diagnoser`. No internals are mocked.
-- Harness: `apps/daemon/scripts/diagnose-real-model.ts`. It sits in `apps/daemon` because that package already resolves every `@graveshift/*` workspace dependency through its exports.
-- Gateway: built as the daemon does (`buildProviders`, `createGateway`, daily budget from `policy.example.yaml`, audit callback). LLM settings come from `graveshift.config.example.yaml` (provider `openai-compatible`, model `qwen3.8-flash-next`, `timeoutMs` 30000, `maxRetries` 1). The API key comes from the gitignored `.env`.
+- The harness called the public diagnosis function with an OpenAI-compatible model. It used `qwen3.8-flash-next`, a 30 s timeout and one transport retry.
 - Inputs: the `input` field of `packages/diagnoser/fixtures/{null-candy,memory-leech,wrong-potion}.json`. `llmResponse` is ignored.
 - Expected categories: `null-candy` is `code_bug`, `memory-leech` is `resource_exhaustion`, `wrong-potion` is `config_error`.
 - A case passes only when all of these hold: category matches, every evidence ref exists in the context bundle, and no secret appears in the output. The source is recorded as `usedLlm` but is not a pass condition.
@@ -44,20 +44,11 @@ Effect: `memory-leech` became `resource_exhaustion` (0.95). The other two cases 
 
 ## Post-review fixes
 
-After the two review reports, the gateway now uses rules-only when model output stays invalid after the one validation retry. This matches ADR 0002 and the spec. The unused `Tier` type and field were removed. The harness no longer has inline lint disables; a scoped override in `.oxlintrc.json` covers its intentional sequential loop. Gateway wiring was moved to one shared factory, `apps/daemon/src/llm.ts`, used by both the daemon and the harness. The three fixtures were not called again after these changes; gateway and diagnoser tests cover the new fallback.
+After review, the gateway used rules-only when output stayed invalid after one validation retry. The three fixtures were not sent to the live model again. Gateway and diagnoser tests checked the fallback.
 
 ## Compose evidence
 
-Stack: `graveshift.compose.yml` plus `demo.compose.yml`, built locally, with ports bound to `127.0.0.1` (demo API 2600, daemon 2602). Change made: `deploy/compose/graveshift.compose.yml` now passes `OPENAI_COMPATIBLE_API_KEY` to the daemon container; it was missing. `POSTGRES_PASSWORD`, `OWNER_TOKEN` and `ACTUATOR_HMAC_SECRET` were random values created in the shell for the run. Compose was started with `--env-file .env`.
-
-Steps and output (secrets omitted):
-
-1. `curl localhost:2602/healthz` returned `{"status":"ok"}`.
-2. `POST localhost:2602/api/haunt` with body `{"scenario":"null-candy"}` returned HTTP 202. I then sent about 80 requests to `/candies/1` and `/candies/2` on port 2600 to trigger the fault.
-3. `GET localhost:2602/api/incidents` showed the incident in state `diagnosed`. The timeline entry read `code_bug (93%, llm): The API code calls candy.price.toFixed without validating that candy.price is non-null, causing a TypeError when price is null.` The evidence refs were `log:1`, `log:2` and `log:3`.
-4. The daemon log line: `llm: {task: diagnose, status: ok, provider: openai-compatible, model: qwen3.8-flash-next, tokensIn: 804, tokensOut: 245, costUsd: 0}`.
-5. `GET /api/audit/verify` returned `{"ok":true,"length":4}`.
-6. `docker compose down` removed the containers and networks. No graveshift containers remained.
+The local stack used `graveshift.compose.yml` and `demo.compose.yml`. About 80 requests to `/candies/1` and `/candies/2` triggered `null-candy`. The model reported `code_bug` at 93% confidence and cited `log:1`, `log:2` and `log:3`. The audit check reported four entries and no break in the chain. `docker compose down` removed the containers and networks.
 
 ## Limitations
 
@@ -67,28 +58,10 @@ Steps and output (secrets omitted):
 - The secret check relies on the redactor patterns plus the live credential values. The fixtures hold no secrets, so a leak was not exercised here. Redaction before the LLM is covered by the redactor and gateway tests.
 - The Compose run covered `null-candy` only. `memory-leech` and `wrong-potion` were not injected in Compose.
 - A first Compose attempt used a stale named Postgres volume with an older password, so the API was unhealthy. The volumes were recreated before the recorded run.
-- The model endpoint is a private address from `graveshift.config.example.yaml`, so the run reproduces only on a machine that can reach it.
+- The live run used a private model endpoint.
 
-## Reproduce
-
-```sh
-# .env (gitignored) must define OPENAI_COMPATIBLE_API_KEY and HAUNT_TOKEN
-bun apps/daemon/scripts/diagnose-real-model.ts --baseline --round 0 --label rules-only-baseline
-bun apps/daemon/scripts/diagnose-real-model.ts --round 1 --label initial-prompt
-# edit SYSTEM_PROMPT, then
-bun apps/daemon/scripts/diagnose-real-model.ts --round 2 --label prompt-category-mechanism
-```
-
-Each run appends to `docs/reports/real-model-results.jsonl` and exits non-zero if any case fails. To rerun round 1, check out the prompt from before this change.
-
-Compose:
+## Current offline check
 
 ```sh
-export POSTGRES_PASSWORD=$(openssl rand -hex 12) OWNER_TOKEN=$(openssl rand -hex 12) ACTUATOR_HMAC_SECRET=$(openssl rand -hex 32)
-docker compose --env-file .env -f deploy/compose/graveshift.compose.yml -f deploy/compose/demo.compose.yml up -d --build
-set -a; . ./.env; set +a
-curl -X POST localhost:2602/api/haunt -H 'content-type: application/json' -d '{"scenario":"null-candy"}'
-for i in $(seq 1 40); do curl -s -o /dev/null localhost:2600/candies/1; sleep 0.5; done
-curl -s localhost:2602/api/incidents
-docker compose -f deploy/compose/graveshift.compose.yml -f deploy/compose/demo.compose.yml down
+bun test --check packages/diagnoser packages/gateway
 ```
