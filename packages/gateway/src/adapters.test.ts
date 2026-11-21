@@ -1,9 +1,10 @@
 import { describe, expect, test } from 'bun:test';
-import { type AgentConfig, AgentConfigSchema } from '@graveshift/agents';
+import { type AgentConfig, AgentConfigSchema, PROVIDER_PACKAGES } from '@graveshift/agents';
 import { z } from 'zod';
 
 import { createAdapter, resolveApiKey } from './adapters';
 import type { GatewayConfig } from './config';
+import { PROVIDER_FACTORIES } from './providers';
 import { createGateway } from './gateway';
 import { type AuditEvent, GatewayConfigError } from './types';
 import fixture from '../fixtures/openai-compatible.json';
@@ -11,6 +12,7 @@ import fixture from '../fixtures/openai-compatible.json';
 const agent = (over: Partial<AgentConfig> = {}): AgentConfig =>
   AgentConfigSchema.parse({
     name: 'SRE Bot',
+    slug: 'sre-bot',
     role: 'sre',
     description: 'Handles incidents.',
     prompt: 'Resolve {{INCIDENT_DETAIL}}.',
@@ -71,9 +73,9 @@ const config: GatewayConfig = {
 };
 
 describe('official provider adapters', () => {
-  test('builds one thin adapter for each supported package, with no model call', async () => {
-    const providers = ['@ai-sdk/google', '@ai-sdk/anthropic', '@ai-sdk/openai-compatible'] as const;
-    const adapters = providers.map((provider) => ({
+  test('builds one thin adapter for every supported package, with no model call', async () => {
+    expect(Object.keys(PROVIDER_FACTORIES).sort()).toEqual([...PROVIDER_PACKAGES].sort());
+    const adapters = PROVIDER_PACKAGES.map((provider) => ({
       provider,
       adapter: createAdapter(agent({ provider }), { env }),
     }));
@@ -81,11 +83,9 @@ describe('official provider adapters', () => {
       expect(adapter.provider).toBe(provider);
       expect(adapter.model).toBe('test-model');
     }
-    expect(await Promise.all(adapters.map(({ adapter }) => adapter.available()))).toEqual([
-      true,
-      true,
-      true,
-    ]);
+    expect(await Promise.all(adapters.map(({ adapter }) => adapter.available()))).toEqual(
+      PROVIDER_PACKAGES.map(() => true),
+    );
   });
 
   test('rejects an unset, empty or placeholder key', () => {

@@ -1,9 +1,7 @@
-import { createAnthropic } from '@ai-sdk/anthropic';
-import { createGoogleGenerativeAI } from '@ai-sdk/google';
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import type { AgentConfig, ProviderPackage } from '@graveshift/agents';
 import { type LanguageModel, generateObject } from 'ai';
 
+import { PROVIDER_FACTORIES, type ProviderFactory } from './providers';
 import { GatewayConfigError, type ModelAdapter, type ModelRequest } from './types';
 
 export interface AdapterOptions {
@@ -24,10 +22,25 @@ export function resolveApiKey(
   return trimmed.length > 0 && !PLACEHOLDER.test(trimmed) ? trimmed : undefined;
 }
 
+// Most official providers are callable; newer ones expose languageModel(model).
+function languageModelFor(provider: unknown, model: string): LanguageModel {
+  if (typeof provider === 'function') {
+    return (provider as (id: string) => LanguageModel)(model);
+  }
+  const candidate = provider as Record<string, unknown>;
+  const selector = ['languageModel', 'chatModel'].find(
+    (key) => typeof candidate[key] === 'function',
+  );
+  if (selector !== undefined) {
+    return (candidate[selector] as (id: string) => LanguageModel)(model);
+  }
+  throw new GatewayConfigError('provider does not expose a language model');
+}
+
 function adapterFor(
   provider: ProviderPackage,
   model: string,
-  languageModel: LanguageModel,
+  resolveModel: () => LanguageModel,
 ): ModelAdapter {
   return {
     provider,
@@ -36,7 +49,7 @@ function adapterFor(
     available: () => true,
     async generateObject(request: ModelRequest) {
       const result = await generateObject({
-        model: languageModel,
+        model: resolveModel(),
         schema: request.schema,
         system: request.system,
         prompt: request.prompt,
@@ -53,7 +66,7 @@ function adapterFor(
   };
 }
 
-// One thin adapter per official package. No hand-written HTTP adapter and no vendor chain.
+// One thin adapter for every package in PROVIDER_PACKAGES. The official factory owns the HTTP call.
 export function createAdapter(agent: AgentConfig, options: AdapterOptions = {}): ModelAdapter {
   const apiKey = resolveApiKey(agent, options.env);
   if (apiKey === undefined) {
@@ -61,32 +74,13 @@ export function createAdapter(agent: AgentConfig, options: AdapterOptions = {}):
       `apiKeyEnv ${agent.apiKeyEnv} is unset or holds a placeholder value`,
     );
   }
-  const customFetch = options.fetch ? { fetch: options.fetch } : {};
-  switch (agent.provider) {
-    case '@ai-sdk/google': {
-      const google = createGoogleGenerativeAI({
-        apiKey,
-        baseURL: agent.baseUrl,
-        ...customFetch,
-      });
-      return adapterFor(agent.provider, agent.model, google(agent.model));
-    }
-    case '@ai-sdk/anthropic': {
-      const anthropic = createAnthropic({
-        apiKey,
-        baseURL: agent.baseUrl,
-        ...customFetch,
-      });
-      return adapterFor(agent.provider, agent.model, anthropic(agent.model));
-    }
-    case '@ai-sdk/openai-compatible': {
-      const compatible = createOpenAICompatible({
-        name: 'openai-compatible',
-        apiKey,
-        baseURL: agent.baseUrl,
-        ...customFetch,
-      });
-      return adapterFor(agent.provider, agent.model, compatible.chatModel(agent.model));
-    }
-  }
+  const factory = PROVIDER_FACTORIES[agent.provider] as ProviderFactory;
+  const instance = factory({
+    apiKey,
+    baseURL: agent.baseUrl,
+    ...(agent.provider === '@ai-sdk/openai-compatible' ? { name: 'openai-compatible' } : {}),
+    ...(options.fetch ? { fetch: options.fetch } : {}),
+  });
+  // Model selection is lazy: some factories validate the model id at call time.
+  return adapterFor(agent.provider, agent.model, () => languageModelFor(instance, agent.model));
 }

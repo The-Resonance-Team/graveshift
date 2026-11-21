@@ -11,6 +11,7 @@ export type Out = z.infer<typeof Out>;
 export const agent = (over: Partial<AgentConfig> = {}): AgentConfig =>
   AgentConfigSchema.parse({
     name: 'SRE Bot',
+    slug: 'sre-bot',
     role: 'sre',
     description: 'Handles incidents.',
     prompt: 'Resolve {{INCIDENT_DETAIL}}.',
