@@ -42,6 +42,25 @@ export type webhooks = Record<string, never>;
 
 export interface components {
   schemas: {
+    RuleMatchDto: {
+      severities?: ("info" | "warning" | "critical")[];
+      services?: string[];
+      types?: string[];
+      tenantId?: string;
+    };
+    RuleDto: {
+      id: string;
+      enabled: boolean;
+      priority: number;
+      match: components["schemas"]["RuleMatchDto"];
+      /** @enum {string} */
+      action: "detect" | "suppress" | "escalate";
+    };
+    ValidateRulesDto: {
+      systemRules: components["schemas"]["RuleDto"][];
+      clientRules: components["schemas"]["RuleDto"][];
+      confirmOverrides?: boolean;
+    };
     CreateCredentialDto: {
       /** @enum {string} */
       kind: "mcp" | "plugin";
@@ -77,6 +96,12 @@ export interface components {
       client_id: string;
       client_secret: string;
     };
+    TriageRequestDto: {
+      assignee: "needs_human" | `needs_agent_${string}`;
+    };
+    FixNowRequestDto: {
+      note?: string;
+    };
   };
   responses: never;
   parameters: never;
@@ -107,35 +132,7 @@ export interface operations {
   RulesController_validate: {
     requestBody: {
       content: {
-        "application/json": {
-          systemRules: ({
-              id: string;
-              enabled: boolean;
-              priority: number;
-              match: {
-                severities?: ("info" | "warning" | "critical")[];
-                services?: string[];
-                types?: string[];
-                tenantId?: string;
-              };
-              /** @enum {string} */
-              action: "detect" | "suppress" | "escalate";
-            })[];
-          clientRules: ({
-              id: string;
-              enabled: boolean;
-              priority: number;
-              match: {
-                severities?: ("info" | "warning" | "critical")[];
-                services?: string[];
-                types?: string[];
-                tenantId?: string;
-              };
-              /** @enum {string} */
-              action: "detect" | "suppress" | "escalate";
-            })[];
-          confirmOverrides?: boolean;
-        };
+        "application/json": components["schemas"]["ValidateRulesDto"];
       };
     };
     responses: {
@@ -158,6 +155,10 @@ export interface operations {
             warning: string;
           };
         };
+      };
+      /** @description The request body is not valid. */
+      422: {
+        content: never;
       };
     };
   };
@@ -435,9 +436,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        "application/json": {
-          assignee: "needs_human" | `needs_agent_${string}`;
-        };
+        "application/json": components["schemas"]["TriageRequestDto"];
       };
     };
     responses: {
@@ -498,16 +497,16 @@ export interface operations {
           };
         };
       };
-      /** @description The assignee is not valid. */
-      400: {
-        content: never;
-      };
       /** @description No work item has this id. */
       404: {
         content: never;
       };
       /** @description The work item is in a terminal status. */
       409: {
+        content: never;
+      };
+      /** @description The assignee is not valid. */
+      422: {
         content: never;
       };
     };
@@ -520,9 +519,7 @@ export interface operations {
     };
     requestBody: {
       content: {
-        "application/json": {
-          note?: string;
-        };
+        "application/json": components["schemas"]["FixNowRequestDto"];
       };
     };
     responses: {
@@ -590,16 +587,16 @@ export interface operations {
           };
         };
       };
-      /** @description The request body is not valid. */
-      400: {
-        content: never;
-      };
       /** @description No work item has this id. */
       404: {
         content: never;
       };
       /** @description The work item is in a terminal status. */
       409: {
+        content: never;
+      };
+      /** @description The request body is not valid. */
+      422: {
         content: never;
       };
     };

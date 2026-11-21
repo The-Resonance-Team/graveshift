@@ -160,11 +160,11 @@ describe('work items API (e2e)', () => {
     await request(app.getHttpServer())
       .post('/api/work-items/wi-1/triage')
       .send({ assignee: 'needs_agent_Missing Bot' })
-      .expect(400);
+      .expect(422);
     await request(app.getHttpServer())
       .post('/api/work-items/wi-1/triage')
       .send({ assignee: 'human' })
-      .expect(400);
+      .expect(422);
     expect(fixCalls()).toHaveLength(0);
   });
 
@@ -237,7 +237,59 @@ describe('work items API (e2e)', () => {
     await request(app.getHttpServer())
       .post('/api/work-items/wi-1/fix-now')
       .send({ unknown: true })
-      .expect(400);
+      .expect(422);
     expect(fixCalls()).toHaveLength(0);
+  });
+
+  test('GET /api/work-items coerces and bounds the query', async () => {
+    const page = await request(app.getHttpServer())
+      .get('/api/work-items?offset=0&limit=2')
+      .expect(200);
+    expect(page.body.offset).toBe(0);
+    expect(page.body.limit).toBe(2);
+    expect(page.body.items).toHaveLength(2);
+
+    await request(app.getHttpServer()).get('/api/work-items?offset=-1').expect(422);
+    await request(app.getHttpServer()).get('/api/work-items?limit=101').expect(422);
+    await request(app.getHttpServer()).get('/api/work-items?limit=abc').expect(422);
+  });
+
+  test('GET /api/work-items rejects an undeclared query field with 422', async () => {
+    await request(app.getHttpServer()).get('/api/work-items?unknown=1').expect(422);
+  });
+
+  test('POST fix-now rejects an empty or null note', async () => {
+    await Promise.all(
+      ['', null].map((note) =>
+        request(app.getHttpServer())
+          .post('/api/work-items/wi-1/fix-now')
+          .send({ note })
+          .expect(422),
+      ),
+    );
+    expect(fixCalls()).toHaveLength(0);
+  });
+
+  test('POST triage rejects an undeclared field', async () => {
+    await request(app.getHttpServer())
+      .post('/api/work-items/wi-1/triage')
+      .send({ assignee: NEEDS_HUMAN, extra: true })
+      .expect(422);
+  });
+
+  test('POST triage rejects a missing or malformed assignee', async () => {
+    await Promise.all(
+      [{}, { assignee: 42 }, { assignee: 'needs_humanXYZ' }].map((body) =>
+        request(app.getHttpServer()).post('/api/work-items/wi-1/triage').send(body).expect(422),
+      ),
+    );
+  });
+
+  test('POST fix-now accepts a note at the length bound', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/work-items/wi-1/fix-now')
+      .send({ note: 'x'.repeat(500) })
+      .expect(200);
+    expect(response.body.ok).toBe(true);
   });
 });

@@ -10,7 +10,6 @@ import {
   WorkItemSchema,
 } from '@graveshift/core';
 import {
-  BadRequestException,
   Body,
   ConflictException,
   Controller,
@@ -22,32 +21,29 @@ import {
   Param,
   Post,
   Query,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 import {
-  ApiBadRequestResponse,
   ApiConflictResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiTags,
+  ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
 
 import { FixService } from '../fix/fix.service';
+import { FixNowRequestDto } from './dto/fix-now-request.dto';
+import { ListWorkItemsQueryDto } from './dto/list-work-items-query.dto';
+import { TriageRequestDto } from './dto/triage-request.dto';
+import { WorkItemParamsDto } from './dto/work-item-params.dto';
 import { WORK_ITEM_POLICY, type WorkItemPolicy } from './work-item.policy';
 import {
-  type FixNowRequest,
-  fixNowRequestSchema,
   type FixResultResponse,
   fixResultSchema,
-  type ListWorkItemsQuery,
-  listWorkItemsQuerySchema,
-  type TriageRequest,
-  triageRequestSchema,
   type TriageResultResponse,
   triageResultSchema,
   type WorkItemListResponse,
   workItemListResponseSchema,
-  type WorkItemParams,
-  workItemParamsSchema,
 } from './work-item.schema';
 import { WorkItemStore } from './work-item.store';
 
@@ -65,9 +61,7 @@ export class WorkItemsController {
     description: 'A page of work items for the table.',
     standardSchema: workItemListResponseSchema,
   })
-  list(
-    @Query({ schema: listWorkItemsQuerySchema }) query: ListWorkItemsQuery,
-  ): WorkItemListResponse {
+  list(@Query() query: ListWorkItemsQueryDto): WorkItemListResponse {
     const items = this.store.list();
     return {
       items: items.slice(query.offset, query.offset + query.limit),
@@ -83,7 +77,7 @@ export class WorkItemsController {
     standardSchema: WorkItemSchema,
   })
   @ApiNotFoundResponse({ description: 'No work item has this id.' })
-  get(@Param({ schema: workItemParamsSchema }) params: WorkItemParams): WorkItem {
+  get(@Param() params: WorkItemParamsDto): WorkItem {
     const item = this.store.get(params.id);
     if (!item) throw new NotFoundException(`Unknown work item: ${params.id}`);
     return item;
@@ -95,12 +89,12 @@ export class WorkItemsController {
     description: 'The triaged work item and its auto-fix outcome.',
     standardSchema: triageResultSchema,
   })
-  @ApiBadRequestResponse({ description: 'The assignee is not valid.' })
+  @ApiUnprocessableEntityResponse({ description: 'The assignee is not valid.' })
   @ApiConflictResponse({ description: 'The work item is in a terminal status.' })
   @ApiNotFoundResponse({ description: 'No work item has this id.' })
   async triage(
-    @Param({ schema: workItemParamsSchema }) params: WorkItemParams,
-    @Body({ schema: triageRequestSchema }) body: TriageRequest,
+    @Param() params: WorkItemParamsDto,
+    @Body() body: TriageRequestDto,
   ): Promise<TriageResultResponse> {
     const item = this.store.get(params.id);
     if (!item) throw new NotFoundException(`Unknown work item: ${params.id}`);
@@ -109,7 +103,7 @@ export class WorkItemsController {
     if (!allowed.ok) throw new ConflictException(allowed.error.message);
 
     const assignee = parseAssignee(body.assignee, this.policy.agentNames);
-    if (!assignee.ok) throw new BadRequestException(assignee.error.message);
+    if (!assignee.ok) throw new UnprocessableEntityException(assignee.error.message);
 
     const result =
       assignee.value === NEEDS_HUMAN
@@ -120,7 +114,7 @@ export class WorkItemsController {
             this.policy.agentNames,
             this.policy.clientConfig,
           );
-    if (!result.ok) throw new BadRequestException(result.error.message);
+    if (!result.ok) throw new UnprocessableEntityException(result.error.message);
 
     // Triage is the real auto-fix trigger: client config sets autoFixAllowed here.
     // A failed auto-fix is reported in the result; the triage state is still saved.
@@ -155,12 +149,12 @@ export class WorkItemsController {
     description: 'The fix result with the work item, the policy effect and the draft PR ref.',
     standardSchema: fixResultSchema,
   })
-  @ApiBadRequestResponse({ description: 'The request body is not valid.' })
+  @ApiUnprocessableEntityResponse({ description: 'The request body is not valid.' })
   @ApiConflictResponse({ description: 'The work item is in a terminal status.' })
   @ApiNotFoundResponse({ description: 'No work item has this id.' })
   async fixNow(
-    @Param({ schema: workItemParamsSchema }) params: WorkItemParams,
-    @Body({ schema: fixNowRequestSchema }) body: FixNowRequest,
+    @Param() params: WorkItemParamsDto,
+    @Body() body: FixNowRequestDto,
   ): Promise<FixResultResponse> {
     const item = this.store.get(params.id);
     if (!item) throw new NotFoundException(`Unknown work item: ${params.id}`);
@@ -168,7 +162,7 @@ export class WorkItemsController {
     const allowed = assertTriageAllowed(item);
     if (!allowed.ok) throw new ConflictException(allowed.error.message);
 
-    const result = await this.fixer.fixNow(item, body.note);
+    const result = await this.fixer.fixNow(item, body);
     this.store.save(result.item);
     return {
       item: result.item,

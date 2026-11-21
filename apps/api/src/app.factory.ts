@@ -1,10 +1,5 @@
 import 'reflect-metadata';
-import {
-  HttpStatus,
-  type INestApplication,
-  StandardSchemaValidationPipe,
-  ValidationPipe,
-} from '@nestjs/common';
+import { type INestApplication, HttpStatus, ValidationPipe } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { SwaggerModule } from '@nestjs/swagger';
 
@@ -13,7 +8,7 @@ import { createOpenApiDocument } from './openapi';
 
 // Shared by bootstrap and tests that build the app through Test.createTestingModule().
 export function configureApp<T extends INestApplication>(app: T): T {
-  // DTO classes validate at the pipe with whitelist and 422 on unknown fields.
+  // Request DTO classes own validation at the boundary. Undeclared fields are 422s.
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -22,8 +17,9 @@ export function configureApp<T extends INestApplication>(app: T): T {
       errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY,
     }),
   );
-  // Older input endpoints attach a Zod schema with @Body({ schema }) or @Query({ schema }).
-  app.useGlobalPipes(new StandardSchemaValidationPipe());
+  // Request DTOs carry explicit @ApiProperty metadata: this Bun API has no Nest CLI
+  // compile step, so the Swagger classValidatorShim plugin never runs and rule #8
+  // does not apply. The metadata keeps the generated contract request types intact.
   SwaggerModule.setup('docs', app, createOpenApiDocument(app));
   return app;
 }
