@@ -43,156 +43,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "systemRules": {
-                    "maxItems": 200,
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "id": {
-                          "type": "string",
-                          "minLength": 1
-                        },
-                        "enabled": {
-                          "type": "boolean"
-                        },
-                        "priority": {
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 9007199254740991
-                        },
-                        "match": {
-                          "type": "object",
-                          "properties": {
-                            "severities": {
-                              "type": "array",
-                              "items": {
-                                "type": "string",
-                                "enum": [
-                                  "info",
-                                  "warning",
-                                  "critical"
-                                ]
-                              }
-                            },
-                            "services": {
-                              "type": "array",
-                              "items": {
-                                "type": "string",
-                                "minLength": 1
-                              }
-                            },
-                            "types": {
-                              "type": "array",
-                              "items": {
-                                "type": "string",
-                                "pattern": "^[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*$"
-                              }
-                            },
-                            "tenantId": {
-                              "type": "string",
-                              "pattern": "^[A-Za-z0-9_-]+$"
-                            }
-                          }
-                        },
-                        "action": {
-                          "type": "string",
-                          "enum": [
-                            "detect",
-                            "suppress",
-                            "escalate"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "enabled",
-                        "priority",
-                        "match",
-                        "action"
-                      ]
-                    }
-                  },
-                  "clientRules": {
-                    "maxItems": 200,
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "id": {
-                          "type": "string",
-                          "minLength": 1
-                        },
-                        "enabled": {
-                          "type": "boolean"
-                        },
-                        "priority": {
-                          "type": "integer",
-                          "minimum": 0,
-                          "maximum": 9007199254740991
-                        },
-                        "match": {
-                          "type": "object",
-                          "properties": {
-                            "severities": {
-                              "type": "array",
-                              "items": {
-                                "type": "string",
-                                "enum": [
-                                  "info",
-                                  "warning",
-                                  "critical"
-                                ]
-                              }
-                            },
-                            "services": {
-                              "type": "array",
-                              "items": {
-                                "type": "string",
-                                "minLength": 1
-                              }
-                            },
-                            "types": {
-                              "type": "array",
-                              "items": {
-                                "type": "string",
-                                "pattern": "^[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*$"
-                              }
-                            },
-                            "tenantId": {
-                              "type": "string",
-                              "pattern": "^[A-Za-z0-9_-]+$"
-                            }
-                          }
-                        },
-                        "action": {
-                          "type": "string",
-                          "enum": [
-                            "detect",
-                            "suppress",
-                            "escalate"
-                          ]
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "enabled",
-                        "priority",
-                        "match",
-                        "action"
-                      ]
-                    }
-                  },
-                  "confirmOverrides": {
-                    "type": "boolean"
-                  }
-                },
-                "required": [
-                  "systemRules",
-                  "clientRules"
-                ]
+                "$ref": "#/components/schemas/ValidateRulesDto"
               }
             }
           }
@@ -256,6 +107,9 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "The request body is not valid."
           }
         },
         "tags": [
@@ -599,10 +453,9 @@
             "required": false,
             "in": "query",
             "schema": {
-              "default": 0,
-              "type": "integer",
               "minimum": 0,
-              "maximum": 9007199254740991
+              "default": 0,
+              "type": "number"
             }
           },
           {
@@ -610,10 +463,10 @@
             "required": false,
             "in": "query",
             "schema": {
-              "default": 20,
-              "type": "integer",
               "minimum": 1,
-              "maximum": 100
+              "maximum": 100,
+              "default": 20,
+              "type": "number"
             }
           }
         ],
@@ -893,8 +746,8 @@
             "required": true,
             "in": "path",
             "schema": {
-              "type": "string",
-              "minLength": 1
+              "minLength": 1,
+              "type": "string"
             }
           }
         ],
@@ -1147,8 +1000,8 @@
             "required": true,
             "in": "path",
             "schema": {
-              "type": "string",
-              "minLength": 1
+              "minLength": 1,
+              "type": "string"
             }
           }
         ],
@@ -1157,27 +1010,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "assignee": {
-                    "anyOf": [
-                      {
-                        "type": "string",
-                        "enum": [
-                          "needs_human"
-                        ]
-                      },
-                      {
-                        "type": "string",
-                        "pattern": "^(needs_agent_)[\\s\\S]{0,}$"
-                      }
-                    ]
-                  }
-                },
-                "required": [
-                  "assignee"
-                ],
-                "additionalProperties": false
+                "$ref": "#/components/schemas/TriageRequestDto"
               }
             }
           }
@@ -1466,14 +1299,14 @@
               }
             }
           },
-          "400": {
-            "description": "The assignee is not valid."
-          },
           "404": {
             "description": "No work item has this id."
           },
           "409": {
             "description": "The work item is in a terminal status."
+          },
+          "422": {
+            "description": "The assignee is not valid."
           }
         },
         "tags": [
@@ -1490,8 +1323,8 @@
             "required": true,
             "in": "path",
             "schema": {
-              "type": "string",
-              "minLength": 1
+              "minLength": 1,
+              "type": "string"
             }
           }
         ],
@@ -1500,15 +1333,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "type": "object",
-                "properties": {
-                  "note": {
-                    "type": "string",
-                    "minLength": 1,
-                    "maxLength": 500
-                  }
-                },
-                "additionalProperties": false
+                "$ref": "#/components/schemas/FixNowRequestDto"
               }
             }
           }
@@ -1831,14 +1656,14 @@
               }
             }
           },
-          "400": {
-            "description": "The request body is not valid."
-          },
           "404": {
             "description": "No work item has this id."
           },
           "409": {
             "description": "The work item is in a terminal status."
+          },
+          "422": {
+            "description": "The request body is not valid."
           }
         },
         "tags": [
@@ -1857,6 +1682,100 @@
   "servers": [],
   "components": {
     "schemas": {
+      "RuleMatchDto": {
+        "type": "object",
+        "properties": {
+          "severities": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "info",
+                "warning",
+                "critical"
+              ]
+            }
+          },
+          "services": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "types": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*$"
+            }
+          },
+          "tenantId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]+$"
+          }
+        }
+      },
+      "RuleDto": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "minLength": 1
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "priority": {
+            "type": "number",
+            "minimum": 0
+          },
+          "match": {
+            "$ref": "#/components/schemas/RuleMatchDto"
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "detect",
+              "suppress",
+              "escalate"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "enabled",
+          "priority",
+          "match",
+          "action"
+        ]
+      },
+      "ValidateRulesDto": {
+        "type": "object",
+        "properties": {
+          "systemRules": {
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RuleDto"
+            }
+          },
+          "clientRules": {
+            "maxItems": 200,
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RuleDto"
+            }
+          },
+          "confirmOverrides": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "systemRules",
+          "clientRules"
+        ]
+      },
       "CreateCredentialDto": {
         "type": "object",
         "properties": {
@@ -1978,6 +1897,38 @@
           "client_id",
           "client_secret"
         ]
+      },
+      "TriageRequestDto": {
+        "type": "object",
+        "properties": {
+          "assignee": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "needs_human"
+                ]
+              },
+              {
+                "type": "string",
+                "pattern": "^(needs_agent_)[\\s\\S]{0,}$"
+              }
+            ]
+          }
+        },
+        "required": [
+          "assignee"
+        ]
+      },
+      "FixNowRequestDto": {
+        "type": "object",
+        "properties": {
+          "note": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          }
+        }
       }
     }
   }
