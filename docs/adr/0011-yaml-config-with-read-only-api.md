@@ -1,13 +1,15 @@
-# Agent config stays in YAML; the API exposes a read-only view
+# YAML is the config source of truth with a read-only API view
 
 Status: accepted
 
-On 2026-11-21 the owner chose YAML as the source of truth for agent and policy config in v2. The loaders already exist: `packages/agents/src/config.ts` validates `AGENTS_PATH` with Zod at boot, and `packages/policy/src/load.ts` validates the policy file the same way. Invalid config fails boot. There is no hot reload in v2. A config change needs a file edit and a restart.
+On 2026-11-21 the owner chose YAML as the source of truth for agent and policy config in v2. The loaders validated the config at boot. Invalid config stopped boot. The owner kept no hot reload in v2. A config change needed a file edit and a restart.
 
-The NestJS API exposes a read-only view of the validated config through generated types and OpenAPI. It does not write config files and does not hold config in memory for editing. Another frontend engineer owns the dashboard; this repo ships generated contracts and endpoint definitions only, with no visual design and no UI code.
+The API exposed a read-only view of the validated config. The API did not write config files. The API did not hold config for editing. Another team owned the dashboard. This repo shipped contracts and endpoint definitions only. The owner kept no visual design and no UI code here.
 
-Boot settings live in one Zod schema in `apps/api`. That schema covers host, port, NATS settings, file paths and auth settings. A secret is never stored in YAML and never returned by the config API. A key comes only from the environment variable named by the agent's `apiKeyEnv`.
+The owner kept the rule from ADR 0007. A config file held no secret. A key came only from the environment. Boot settings lived in one schema. That schema covered host, port, event backbone settings, file paths and auth settings.
 
-The v1 config path is removed with the v1 daemon. `loadConfigFile()` in `packages/core/src/config.ts` and `graveshift.config.example.yaml` have no consumer after #40 deletes `apps/_daemon` and `packages/llm`. Agents and policy keep their own loaders. No third config format is kept.
+This decision, ADR 0012 and ADR 0013 superseded the part of ADR 0003 that kept the v1 daemon for reference. The owner removed the v1 config path with the v1 daemon. Agents and policy kept their own loaders. The owner kept no third config format.
 
-Trade-off: config changes need a restart, but boot validation, version control and the one-source rule stay simple. Editable config moves to v3 with multi-tenancy, when write authorization and an audit path can be designed with the dashboard.
+Recheck trigger: The owner reviews this decision when write authorization and an audit path for config edits exist. The owner also reviews this decision when multi-tenancy arrives in v3.
+
+Trade-off: Config changes needed a restart. Boot validation and version control stayed simple. The config file stayed the only place that held config.
