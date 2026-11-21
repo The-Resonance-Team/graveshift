@@ -78,10 +78,7 @@ No v2 client is blocked by these limits. No linked wayfinder ticket is needed.
 
 ## Known gaps
 
-- The static `GRAVESHIFT_MCP_TOKEN` path named in the ticket is not present on
-  base branch `xirothedev/v2-63-credentials`. The one credential component is
-  unchanged and still guards `/mcp`. A coordinator follow-up ticket is
-  requested for this item.
+- Static token path is not present on the resolved base branch; #47 wires MCP auth to the shared #63 issuer. No follow-up ticket needed. The one credential component is unchanged and still guards `/mcp`.
 - NATS settings live in one events config provider. The stream name has one
   default, in `env.schema.ts` (`GRAVESHIFT_EVENTS`). The read side uses
   `connectNatsReader` from `@graveshift/events/nats`; `apps/api` has no direct
