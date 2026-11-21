@@ -30,7 +30,7 @@ describe('CredentialService', () => {
   test('stores only a hash and shows the value once', async () => {
     const { repo, service } = setup();
     const issued = await service.issue(dto(), principal);
-    expect(issued.value.length).toBeGreaterThan(32);
+    expect(issued.value).toMatch(/^[0-9a-f]{64}$/);
     expect(repo.records[0]?.hash).not.toContain(issued.value);
     expect(repo.records[0]).not.toHaveProperty('value');
     expect(repo.records[0]?.prefix).toBe(issued.prefix);
@@ -43,6 +43,7 @@ describe('CredentialService', () => {
     expect(verified.clientId).toBe('client-1');
     expect(verified.tenantId).toBe('tenant-1');
     expect(verified.kind).toBe('mcp');
+    expect(verified.projectId).toBeNull();
   });
 
   test('refuses an unknown value and a value for another kind', async () => {
@@ -75,6 +76,37 @@ describe('CredentialService', () => {
     expect(
       service.issue(dto({ kind: 'plugin', scopes: ['events:publish'], service: 'api' }), principal),
     ).resolves.toBeDefined();
+  });
+
+  test('issues a publish-only credential bound to a numeric Sentry project and Grave', async () => {
+    const { service, repo } = setup();
+    const issued = await service.issue(
+      dto({
+        kind: 'plugin',
+        name: 'sentry',
+        scopes: ['events:publish'],
+        service: 'api',
+        projectId: '12345',
+      }),
+      principal,
+    );
+
+    expect(issued.value).toMatch(/^[0-9a-f]{64}$/);
+    expect(issued.projectId).toBe('12345');
+    expect(issued.service).toBe('api');
+    expect(repo.records[0]?.projectId).toBe('12345');
+    await expect(
+      service.issue(
+        dto({
+          kind: 'plugin',
+          name: 'sentry-reader',
+          scopes: ['events:publish', 'incidents:read'],
+          service: 'api',
+          projectId: '12345',
+        }),
+        principal,
+      ),
+    ).rejects.toThrow();
   });
 
   test('caps parallel issues at ten active credentials', async () => {

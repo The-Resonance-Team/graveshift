@@ -7,6 +7,7 @@ const credentialMetadataSchema = z.object({
   name: z.string(),
   scopes: z.array(z.string()),
   service: z.string().nullable(),
+  projectId: z.string().nullable(),
   createdAt: z.iso.datetime(),
   expiresAt: z.iso.datetime().nullable(),
   revokedAt: z.iso.datetime().nullable(),

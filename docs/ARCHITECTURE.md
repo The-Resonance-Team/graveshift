@@ -8,14 +8,13 @@ The daemon at `apps/daemon` is an Effect v4 skeleton on Bun. ADR 0009 removed th
 
 | Component | Path | Role |
 | --- | --- | --- |
-| API | `apps/api` | NestJS app. The only external surface. Serves `GET /healthz`, the OpenAPI document, the Swagger UI, the credential routes, `POST /api/events` and the MCP endpoint at `/mcp`. |
-| Credentials | `apps/api/src/auth` | One component that issues, hashes, verifies, lists and revokes MCP credentials and Plugin credentials. PostgreSQL stores one-way hashes. |
+| API | `apps/api` | NestJS app. The only external surface. Serves `GET /healthz`, the OpenAPI document, the Swagger UI, credential routes, native event ingest, Sentry envelope ingest and MCP at `/mcp`. |
+| Credentials | `apps/api/src/auth` | One component that issues, hashes, verifies, lists and revokes MCP credentials and event keys. Values are lowercase hex; PostgreSQL stores one-way hashes. |
 | API contract | `packages/api-contract` | Publishes generated TypeScript types and a version marker from the OpenAPI document. |
 | Daemon | `apps/daemon` | Effect v4 skeleton on Bun. Serves `GET /healthz` only. |
 | Core | `packages/core` | Zod schemas, event envelope, incident state machine, circuit-breaker helper, `RuntimeSource` contract and pure rule engine. |
 | Events | `packages/events` | `Publisher` interface, NATS JetStream publisher, an HTTP publisher that posts to the API, and an in-memory fake. No consumer is wired yet. |
 | Integrations | `packages/integrations` | Plugin and Collector contract: `Integration`, `Context` and a pure envelope builder. No NATS client import. |
-| NestJS plugin | `packages/plugin-nestjs` | In-process Plugin. Publishes one envelope per HTTP request and one for an unhandled error. |
 | Audit | `apps/api/src/audit` | Pure hash-chain functions and a PostgreSQL repository. Database triggers reject audit row updates and deletes. |
 | Policy | `packages/policy` | YAML loader and `decide()`. Pure and deterministic. |
 | Redactor | `packages/redactor` | Twelve ordered detectors, idempotent. |
@@ -80,7 +79,8 @@ The API in `apps/api` is the only external surface. A client calls this API, nev
 | `POST /api/credentials` | One issued credential. The `kind` selects an MCP read token or a plugin publish key. The value is shown once. |
 | `GET /api/credentials` | Metadata for the caller credentials. No value or hash. |
 | `DELETE /api/credentials/:id` | Revokes one credential. Returns 204. |
-| `POST /api/events` | Accepts a plugin event envelope and publishes it. Returns 202. |
+| `POST /api/events` | Accepts a native `EventEnvelope` and publishes it. Returns 202. |
+| `POST /api/:projectId/envelope/` | Accepts Sentry event items and publishes `EventEnvelope` records. Returns `{ "id": "..." }`. |
 | `POST /mcp` | Streamable HTTP MCP endpoint. Requires `Authorization: Bearer <issued MCP token>`. |
 
 The API listens on 127.0.0.1 by default. Set `HOST` to change the bind address. Set `PORT` to change the port from 3000. Keep the localhost bind unless the MCP bearer token is configured and the endpoint is exposed deliberately.
@@ -133,13 +133,32 @@ The v2 daemon serves only `/healthz`, so backend reads return empty or unavailab
 
 ## Credentials and event ingest
 
-`apps/api/src/auth` owns one credential component. It issues, hashes, verifies, lists and revokes both MCP read tokens and plugin API keys. The MCP module and the plugin ingest route call this component; neither builds a second issuer or verifier.
+`apps/api/src/auth` owns one credential component. It issues, hashes, verifies, lists and revokes MCP read tokens and event keys. The MCP module and both event routes call this component; neither builds a second issuer or verifier.
 
-One scope catalog serves both surfaces. MCP scopes are `incidents:read`, `diagnoses:read`, `audit:read`, `logs:read`, `metrics:read` and `fix:propose`. The plugin scope is `events:publish`. `POST /api/credentials` takes `{ kind, name, scopes, service?, ttlSeconds? }`. `kind` selects the shape: an MCP read token or a plugin publish key. A client names the credential and chooses scopes from the ones its client-credentials token holds. A client cannot grant `admin` or `tokens:manage`, and cannot grant a scope it does not hold. A plugin key may bind to one Grave or service. A client holds at most ten active credentials; the count and the issue run in one serialized section, and revoking one frees a slot. The response shows the value once; `GET /api/credentials` returns metadata only.
+One scope catalog serves both surfaces. MCP scopes are `incidents:read`, `diagnoses:read`, `audit:read`, `logs:read`, `metrics:read` and `fix:propose`. The event scope is `events:publish`. `POST /api/credentials` takes `{ kind, name, scopes, service?, projectId?, ttlSeconds? }`. Sentry credentials set `service` to the bound Grave and `projectId` to a numeric string. They may only have `events:publish`. Every Credential value has 32 random bytes, encoded as 64 lowercase hex characters. A client chooses scopes from the ones its client-credentials token holds. A client cannot grant `admin` or `tokens:manage`, or a scope it does not hold. A client holds at most ten active credentials; the count and issue run in one serialized section, and revoking one frees a slot. The response shows the value once; `GET /api/credentials` returns metadata only.
 
 `POST /api/oauth/token` runs the OAuth 2.1 client-credentials grant against a boot client registry. It signs a JWT with `iss`, `aud`, `sub`, `scope`, `jti` and `exp` through `@nestjs/jwt`. A passport strategy validates those claims and the registry tenant. The JWT secret has no default and is required in every environment. Throttling covers the token, credential, event and MCP routes and keys by client id resolved from the bearer token. The NATS connection promise is shared, a failed connect clears the cache and publish fails closed with 503. PostgreSQL stores a SHA-256 hash, a short display prefix, kind, name, client id, tenant id, scopes, optional service binding and timestamps. It holds no credential value. Presented values are compared in constant time.
 
-`POST /api/events` is the plugin ingest route. The `class-validator` DTO rejects unknown fields with 422, then `EventEnvelopeSchema` from `packages/core` checks the canonical envelope shape. The route checks `events:publish`, the tenant and the service binding, bounds payload bytes and request rate, checks the body size before the DTO pipe, redacts every string and publishes through the injected `Publisher`. It returns 202. The NATS publisher stays in the API for daemon use. Client apps use `createHttpPublisher` from `packages/events`, which posts to `/api/events` with a bearer plugin key. Client apps no longer hold NATS credentials.
+`POST /api/events` accepts a native event. Its `class-validator` DTO rejects unknown fields with 422, then `EventEnvelopeSchema` from `packages/core` checks the canonical shape. The route checks `events:publish`, tenant and service binding, bounds payload bytes and request rate, redacts every string and publishes through the injected `Publisher`. It returns 202. Client apps use `createHttpPublisher` from `packages/events` with a bearer event key. They do not hold NATS credentials.
+
+`POST /api/:projectId/envelope/` adapts official Sentry SDK events. A host sets its DSN to `https://<public-key>@<api-host>/<numeric-project-id>`. The SDK sends an envelope to `/api/<numeric-project-id>/envelope/`. The numeric path value is only an SDK routing value. The adapter verifies the key as a plugin Credential, checks its `projectId` against the path, and uses its `service` binding as the Grave and its `tenantId` as the tenant. Event fields cannot set the tenant or Grave. The key may arrive in the SDK's `sentry_key` query parameter, an envelope `dsn` header, or `Authorization: Sentry <key>`. All supplied key forms must match. Missing or mismatched keys return 403. The key must have `events:publish` as its only scope, and requests are rate-limited. The API never returns the key.
+
+The adapter accepts `event` items and skips other item types, including `session`, `client_report`, `attachment`, `transaction`, `span`, `profile`, replay and metric items. It also skips unknown non-event types. It parses line-framed and length-prefixed payloads, with a 1 MiB limit for the full request and each event item. It redacts exception, message and request data, validates the mapped event with `EventEnvelopeSchema`, and publishes through the same `Publisher` and NATS lane as `/api/events`. It returns HTTP 200 with `{ "id": "<event_id>" }`; a rate limit returns 429 with `Retry-After`.
+
+| Sentry value | `EventEnvelope` field |
+| --- | --- |
+| Credential tenant binding | `tenantId` |
+| Credential service binding (Grave) | `service` |
+| Envelope `event_id`, then event `event_id` | `id` |
+| `sentry` | `source` |
+| Exception type, or `event` | `type` as `sentry.<type>` |
+| `fatal`, `error` | `severity: critical` |
+| `warning` | `severity: warning` |
+| `info`, `debug`, or another level | `severity: info` |
+| `timestamp` | `observedAt` |
+| `contexts.trace.trace_id`, or event id | `traceId` |
+| Sentry fingerprint, or type + culprit + message | `fingerprint` |
+| Exception, message and request data | Redacted `payload` |
 
 ## Event backbone
 
@@ -162,13 +181,7 @@ The daemon wiring is still deferred. The rule engine is in `packages/core`, and 
 
 A **Plugin** is an in-process integration shipped into a client framework. A **Collector** is a daemon-side integration that reads infrastructure or cloud state. Both implement the `Integration` contract in `packages/integrations`: a name, a kind, `start()` and `stop()`. The host gives each one a `Context` with a `Publisher`, a `tenantId` and a `service`. The `service` names the **Grave** under watch. The contract also builds a valid **Event envelope** from `packages/core` with a `traceId`, `fingerprint` and severity. Its entry point imports no NATS client.
 
-`packages/plugin-nestjs` is the first Plugin. It exposes an `init(app)` function, not a Nest module. A host calls `init(nestApp)` to get the Integration, then calls `integration.start({ publisher, tenantId, service })` before `app.init()`. The request middleware publishes one info **Event envelope** when each response finishes. A global interceptor publishes one envelope for a handler error and rethrows it, so Nest's exception layer still writes the normal response. The plugin uses Nest's `useGlobalInterceptors()`, not a bespoke exception filter. Guard errors and unmatched routes bypass interceptors, so the plugin observes handler errors only. `stop()` disables publishing without detaching handlers; a later `start()` registers a new generation, so the old handlers stay silent.
-
-An `HttpException` below 500 produces an info envelope; a server error or an unknown exception produces a critical envelope. Untrusted values are redacted before publish: the query string is stripped from the URL, and the path and exception message pass through the repo redactor. The plugin never logs the raw error. The middleware creates one `traceId` per request and keeps it in a `WeakMap`; the interceptor reuses it, so the request and error envelopes share a trace. An incoming `x-trace-id` header is redacted, cut to 128 characters and accepted only as a safe token; otherwise a generated id is used. Request fingerprints use the HTTP method and a normalized route with identifier segments collapsed; error fingerprints also include the exception name.
-
-The host supplies an HTTP publisher that uses a plugin API key issued by the API. The plugin does not import a NATS client and holds no NATS credential.
-
-The host context is validated once at `start()`: an invalid context throws at startup, because a misconfigured host must not run with a broken publisher. Only the per-request publish path fails open, catching build and publish errors so telemetry cannot break a host request.
+Official Sentry SDKs replace framework-specific host plugins. The host changes the DSN host to the API and sets the numeric project id from its Credential. The API adapter verifies the key, resolves the Grave from the Credential's service binding, redacts the event, and publishes a canonical envelope. The host does not import a Graveshift plugin or hold a NATS credential.
 
 A Collector example lives in the contract tests: a fake source that publishes one envelope when started. Docker, Kubernetes, Prometheus and cloud Collectors are out of scope. Rule evaluation stays in the daemon. No Plugin or Collector evaluates a rule.
 

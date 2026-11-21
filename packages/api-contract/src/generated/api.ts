@@ -24,6 +24,9 @@ export interface paths {
   "/api/oauth/token": {
     post: operations["OAuthController_token"];
   };
+  "/api/{projectId}/envelope": {
+    post: operations["SentryEventsController_ingest"];
+  };
   "/api/work-items": {
     get: operations["WorkItemsController_list"];
   };
@@ -69,6 +72,8 @@ export interface components {
       scopes: ("incidents:read" | "diagnoses:read" | "audit:read" | "logs:read" | "metrics:read" | "fix:propose" | "events:publish")[];
       /** @description Optional Grave or service binding. Plugin keys only. */
       service?: string;
+      /** @description Numeric Sentry project id for DSN credentials. */
+      projectId?: string;
       /** @description Lifetime in seconds. The config default applies when absent. */
       ttlSeconds?: number;
     };
@@ -175,6 +180,7 @@ export interface operations {
                 name: string;
                 scopes: string[];
                 service: string | null;
+                projectId: string | null;
                 /** Format: date-time */
                 createdAt: string;
                 /** Format: date-time */
@@ -204,6 +210,7 @@ export interface operations {
             name: string;
             scopes: string[];
             service: string | null;
+            projectId: string | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -301,6 +308,45 @@ export interface operations {
         content: never;
       };
       /** @description The client reached its request rate limit. */
+      429: {
+        content: never;
+      };
+    };
+  };
+  SentryEventsController_ingest: {
+    parameters: {
+      path: {
+        /** @description The numeric project id in the Sentry DSN. */
+        projectId: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/x-sentry-envelope": string;
+      };
+    };
+    responses: {
+      /** @description The Sentry event is accepted. */
+      200: {
+        content: {
+          "application/json": {
+            id: string;
+          };
+        };
+      };
+      /** @description The key, project, scope or binding is invalid. */
+      403: {
+        content: never;
+      };
+      /** @description The envelope or event item exceeds one MiB. */
+      413: {
+        content: never;
+      };
+      /** @description The Sentry envelope or event is malformed. */
+      422: {
+        content: never;
+      };
+      /** @description The Sentry key reached its request rate limit. */
       429: {
         content: never;
       };

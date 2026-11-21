@@ -46,6 +46,8 @@
   "devDependencies": {
     "@modelcontextprotocol/client": "2.4.0",
     "@nestjs/testing": "12.6.0",
+    "@sentry/core": "11.6.0",
+    "@sentry/node": "11.6.0",
     "@types/passport": "1.0.17",
     "@types/passport-jwt": "4.0.1",
     "@types/pg": "8.23.1",

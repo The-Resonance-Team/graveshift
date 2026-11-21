@@ -66,6 +66,7 @@ CREATE TABLE "credentials" (
     "client_id" TEXT NOT NULL,
     "scopes" TEXT[],
     "service" TEXT,
+    "project_id" TEXT,
     "created_at" TIMESTAMP(3) NOT NULL,
     "expires_at" TIMESTAMP(3),
     "revoked_at" TIMESTAMP(3),

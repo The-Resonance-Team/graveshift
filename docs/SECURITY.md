@@ -32,13 +32,38 @@ The MCP audit tools are stubs in v2. `get_audit_log` returns an empty list, and 
 
 ## Credentials and event ingest
 
-`apps/api/src/auth` is the only issuer and verifier for MCP tokens and plugin API keys. Credential management uses OAuth 2.1 client credentials: a passport strategy checks a bearer JWT signed with `@nestjs/jwt`. `POST /api/oauth/token` signs a JWT with `iss`, `aud`, `sub`, `scope`, `jti` and `exp` from a boot client registry. The secret has no default; boot fails in every environment when it is unset. A passport strategy requires `iss`, `aud` and `exp` and checks the tenant against the registry. Throttling covers the token, credential, event and MCP routes and keys by client id resolved from the bearer token. After a restart the in-memory key index is empty, so the first request from an issued key falls into the caller's IP bucket and later requests use the client-id bucket. A client holds at most ten active credentials, and the cap check runs in the same serialized section as the issue. Every MCP HTTP method is scope-checked with deny by default; the route returns 403 for a method outside the token scopes. A failed NATS connect clears the cached promise, so a later publish retries and publish fails closed with 503. Request bodies use `class-validator` DTOs with whitelist, `forbidNonWhitelisted`, transform and 422, so an unknown field fails at the pipe.
+`apps/api/src/auth` is the only issuer and verifier for MCP tokens and event keys. Credential management uses OAuth 2.1 client credentials: a passport strategy checks a bearer JWT signed with `@nestjs/jwt`. `POST /api/oauth/token` signs a JWT with `iss`, `aud`, `sub`, `scope`, `jti` and `exp` from a boot client registry. The secret has no default; boot fails in every environment when it is unset. A passport strategy requires `iss`, `aud` and `exp` and checks the tenant against the registry. Throttling covers token, credential, event and MCP routes. A client holds at most ten active credentials, and the cap check runs in the same serialized section as issue. Every MCP HTTP method is scope-checked with deny by default; the route returns 403 for a method outside token scopes. A failed NATS connect clears the cached promise, so a later publish retries and fails closed with 503. Request DTOs use `class-validator`, whitelist, `forbidNonWhitelisted`, transform and 422, so an unknown field fails at the pipe.
 
-PostgreSQL stores a SHA-256 hash, a short display prefix, kind, name, client id, tenant id, scopes, optional service binding and timestamps. It never stores the credential value. The value appears once in the create response and is never logged. Presented values are compared in constant time. Expired, revoked, unknown or wrong-kind values deny the call. Issue and revoke serialize on a tenant-and-client advisory lock; the ten-active-credential limit is checked in the same transaction as issue.
+PostgreSQL stores a SHA-256 hash, a short display prefix, kind, name, client id, tenant id, scopes, optional service and project id bindings, and timestamps. It never stores the credential value. All values are 32 random bytes encoded as 64 lowercase hex characters. The value appears once in the create response and is never logged. Presented values are hashed and compared in constant time. Expired, revoked, unknown or wrong-kind values deny the call. Issue and revoke serialize on a tenant-and-client advisory lock; the ten-active-credential limit is checked in the same transaction as issue.
 
-`tokens:manage` is required to manage credentials. The scope catalog is fixed. MCP kinds may carry the six read scopes; plugin kinds may carry `events:publish`. A client cannot grant `admin` or `tokens:manage`, and cannot grant a scope its own token does not hold. `GET /api/credentials` returns metadata only: no value and no hash.
+`tokens:manage` is required to manage credentials. The scope catalog is fixed. MCP kinds may carry the six read scopes; event keys may carry `events:publish`. A Sentry key also has a numeric `projectId` and a bound Grave in `service`. It is public by design, so it can only publish events and it is rate-limited. A client cannot grant `admin` or `tokens:manage`, and cannot grant a scope its own token does not hold. `GET /api/credentials` returns metadata only: no value and no hash.
 
-`POST /api/events` checks `events:publish`, the tenant binding and the optional service binding. A plugin key without a binding may publish for any service in its tenant. The interceptor bounds the parsed body before validation, and the request rate is bounded with the in-process throttler. The HTTP platform parses JSON with a 100 KB default limit, so `GRAVESHIFT_EVENT_MAX_BYTES` is capped at 102400 bytes; a larger body is refused by Express before the interceptor runs. `EventEnvelopeSchema` from `packages/core` checks the canonical shape, and every string passes through `packages/redactor` before publish. The API publishes through the injected `Publisher`; client apps use the HTTP publisher with a bearer plugin key and hold no NATS credential. No test uses a real secret, NATS endpoint or network call.
+`POST /api/events` checks `events:publish`, the tenant binding and the optional service binding. A native event key without a binding may publish for any service in its tenant. The interceptor bounds the parsed body before validation, and the request rate uses the in-process throttler. `EventEnvelopeSchema` from `packages/core` checks the canonical shape, and every string passes through `packages/redactor` before publish. Client apps use the HTTP publisher with a bearer event key and hold no NATS credential.
+
+## Sentry DSN ingest
+
+Create an event Credential with `events:publish` as its only scope, a Grave in `service`, and a numeric string in `projectId`. Configure an official Sentry SDK with `https://<public-key>@<api-host>/<projectId>`. The SDK sends the envelope to `/api/<projectId>/envelope/`. The project id is a path value only; it does not name the Grave. The verified Credential's `service` binding selects the Grave and its `tenantId` selects the tenant. The handler checks that the path project id equals the Credential's `projectId`. It does not use event fields for identity or authentication.
+
+The API accepts the key in the SDK's `sentry_key` query parameter, an envelope `dsn` header, or `Authorization: Sentry <key>`. The shared Credential verifier compares hashes in constant time. If more than one key form is present, all values must match. A missing, unknown or mismatched key, project id or binding returns 403. The handler never echoes a key. The request rate is bounded. A 429 response includes `Retry-After` so the SDK can pause sending.
+
+The adapter accepts `event` items and skips `session`, `client_report`, `attachment`, `transaction`, `span`, `profile`, replay and metric items. It skips other non-event item types too. The full envelope and each event item are limited to 1 MiB. The adapter maps one event to one `EventEnvelope`, redacts exception, message and request data, validates with `EventEnvelopeSchema`, then publishes through the same injected `Publisher` as `/api/events`.
+
+| Sentry value | Event field | Severity |
+| --- | --- | --- |
+| Credential tenant binding | `tenantId` | — |
+| Credential service binding | `service` (Grave) | — |
+| Envelope `event_id`, then event `event_id` | `id` | — |
+| `sentry` | `source` | — |
+| Exception type, or `event` | `type` (`sentry.<type>`) | — |
+| `fatal`, `error` | `severity` | `critical` |
+| `warning` | `severity` | `warning` |
+| `info`, `debug`, other | `severity` | `info` |
+| `timestamp` | `observedAt` | — |
+| Trace id, then event id | `traceId` | — |
+| Sentry fingerprint, else type + culprit + message | `fingerprint` | — |
+| Exception, message and request | Redacted `payload` | — |
+
+The CI e2e suite uses a fake publisher and fake Credential verifier. It makes no socket call. To test an official SDK locally, run `env -u CI bun test --tsconfig-override apps/api/tsconfig.json apps/api/test/sentry-sdk.loopback.e2e.test.ts`. The test starts Nest on loopback and sends one SDK event. It uses no Sentry account, NATS endpoint or production Credential.
 
 ## Known gaps
 
