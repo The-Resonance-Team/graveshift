@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import { type ExecutionContext, Inject, Injectable } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 
@@ -38,6 +37,8 @@ export class ThrottleKeyGenerator {
     }
 
     const known = this.credentials.clientIdForKey(token);
-    return known ?? createHash('sha256').update(token).digest('hex').slice(0, 16);
+    // Unknown tokens share the caller's bucket. Rotating garbage must not
+    // create unbounded buckets and cannot skip the request rate limit.
+    return known ?? request.ip ?? 'anonymous';
   }
 }

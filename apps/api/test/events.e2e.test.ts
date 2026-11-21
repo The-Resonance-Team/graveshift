@@ -176,6 +176,21 @@ describe('POST /api/events (e2e)', () => {
     await down.app.close();
   });
 
+  test('rotating invalid tokens share one throttle bucket', async () => {
+    const limited = await buildAuthApp({ eventRateLimit: 3 });
+    const call = (token: string) =>
+      request(limited.app.getHttpServer())
+        .post('/api/events')
+        .set('authorization', `Bearer ${token}`)
+        .send(validEnvelope({ id: 'rotating' }));
+    // Each token is distinct, but none resolves to a client, so all share the IP bucket.
+    await call('garbage-token-1-not-a-key').expect(401);
+    await call('garbage-token-2-not-a-key').expect(401);
+    await call('garbage-token-3-not-a-key').expect(401);
+    await call('garbage-token-4-not-a-key').expect(429);
+    await limited.app.close();
+  });
+
   test('bounds the request rate', async () => {
     const limited = await buildAuthApp({ eventRateLimit: 3 });
     const token = accessToken(limited.jwt, ['tokens:manage', 'events:publish']);
