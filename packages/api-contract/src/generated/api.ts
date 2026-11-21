@@ -11,6 +11,16 @@ export interface paths {
   "/api/rules/validate": {
     post: operations["RulesController_validate"];
   };
+  "/api/credentials": {
+    get: operations["CredentialsController_list"];
+    post: operations["CredentialsController_create"];
+  };
+  "/api/credentials/{id}": {
+    delete: operations["CredentialsController_revoke"];
+  };
+  "/api/events": {
+    post: operations["EventsController_ingest"];
+  };
   "/api/work-items": {
     get: operations["WorkItemsController_list"];
   };
@@ -29,6 +39,35 @@ export type webhooks = Record<string, never>;
 
 export interface components {
   schemas: {
+    CreateCredentialDto: {
+      /** @enum {string} */
+      kind: "mcp" | "plugin";
+      /** @description A display name chosen by the client. */
+      name: string;
+      scopes: ("incidents:read" | "diagnoses:read" | "audit:read" | "logs:read" | "metrics:read" | "fix:propose" | "events:publish")[];
+      /** @description The Grave or service bound to a plugin key. */
+      service?: string;
+      /** @description Lifetime in seconds. The config default applies when absent. */
+      ttlSeconds?: number;
+    };
+    PublishEventDto: {
+      id: string;
+      /** @description The tenant that owns the event. */
+      tenantId: string;
+      source: string;
+      /** @description The Grave named by this event. */
+      service: string;
+      type: string;
+      /** @enum {string} */
+      severity: "info" | "warning" | "critical";
+      /** Format: date-time */
+      observedAt: string;
+      traceId: string;
+      fingerprint: string;
+      payload: {
+        [key: string]: unknown;
+      };
+    };
   };
   responses: never;
   parameters: never;
@@ -110,6 +149,122 @@ export interface operations {
             warning: string;
           };
         };
+      };
+    };
+  };
+  CredentialsController_list: {
+    responses: {
+      /** @description Metadata only. No value or hash is returned. */
+      200: {
+        content: {
+          "application/json": {
+            items: ({
+                id: string;
+                /** @enum {string} */
+                kind: "mcp" | "plugin";
+                name: string;
+                scopes: string[];
+                service: string | null;
+                /** Format: date-time */
+                createdAt: string;
+                /** Format: date-time */
+                expiresAt: string | null;
+                /** Format: date-time */
+                revokedAt: string | null;
+              })[];
+          };
+        };
+      };
+    };
+  };
+  CredentialsController_create: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateCredentialDto"];
+      };
+    };
+    responses: {
+      /** @description The credential value is shown once. Store it now. */
+      201: {
+        content: {
+          "application/json": {
+            id: string;
+            /** @enum {string} */
+            kind: "mcp" | "plugin";
+            name: string;
+            scopes: string[];
+            service: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            expiresAt: string | null;
+            /** Format: date-time */
+            revokedAt: string | null;
+            prefix: string;
+            value: string;
+          };
+        };
+      };
+      /** @description The client access token is not valid. */
+      401: {
+        content: never;
+      };
+    };
+  };
+  CredentialsController_revoke: {
+    parameters: {
+      path: {
+        /** @description The credential id from the create response. */
+        id: string;
+      };
+    };
+    responses: {
+      /** @description The credential is revoked. */
+      204: {
+        content: never;
+      };
+      /** @description The client does not own this credential. */
+      404: {
+        content: never;
+      };
+    };
+  };
+  EventsController_ingest: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PublishEventDto"];
+      };
+    };
+    responses: {
+      /** @description The envelope is accepted for publish. */
+      202: {
+        content: {
+          "application/json": {
+            /** @enum {boolean} */
+            accepted: true;
+            id: string;
+          };
+        };
+      };
+      /** @description The plugin API key is not valid. */
+      401: {
+        content: never;
+      };
+      /** @description The scope, tenant or service binding failed. */
+      403: {
+        content: never;
+      };
+      /** @description The envelope exceeds the size limit. */
+      413: {
+        content: never;
+      };
+      /** @description The envelope is malformed. */
+      422: {
+        content: never;
+      };
+      /** @description The key reached its request rate limit. */
+      429: {
+        content: never;
       };
     };
   };

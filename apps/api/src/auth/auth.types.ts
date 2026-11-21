@@ -1,0 +1,66 @@
+import type { CredentialKind } from './scopes';
+
+export const CREDENTIAL_CONFIG = Symbol('CREDENTIAL_CONFIG');
+export const CREDENTIAL_REPO = Symbol('CREDENTIAL_REPO');
+export const EVENT_PUBLISHER = Symbol('EVENT_PUBLISHER');
+
+export interface AuthConfig {
+  credentialsPath: string;
+  jwtSecret: string;
+  jwtIssuer: string;
+  jwtAudience: string;
+  defaultTtlSeconds: number;
+  maxTtlSeconds: number;
+  maxEventBytes: number;
+  eventRateLimit: number;
+  eventRateTtlMs: number;
+  natsUrl?: string | undefined;
+}
+
+export interface CredentialRecord {
+  id: string;
+  kind: CredentialKind;
+  name: string;
+  prefix: string;
+  hash: string;
+  clientId: string;
+  tenantId: string;
+  scopes: string[];
+  service: string | null;
+  createdAt: string;
+  expiresAt: string | null;
+  revokedAt: string | null;
+}
+
+export interface Principal {
+  clientId: string;
+  tenantId: string;
+  scopes: string[];
+}
+
+export interface VerifiedCredential extends Principal {
+  id: string;
+  kind: CredentialKind;
+  service: string | null;
+}
+
+export interface CredentialMetadata {
+  id: string;
+  kind: CredentialKind;
+  name: string;
+  scopes: string[];
+  service: string | null;
+  createdAt: string;
+  expiresAt: string | null;
+  revokedAt: string | null;
+}
+
+export interface IssuedCredential extends CredentialMetadata {
+  prefix: string;
+  value: string;
+}
+
+export interface PrincipalRequest {
+  user: Principal;
+  pluginPrincipal?: VerifiedCredential;
+}

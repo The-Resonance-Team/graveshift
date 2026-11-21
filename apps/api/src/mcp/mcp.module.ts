@@ -3,6 +3,7 @@ import { McpModule } from '@nestjs/mcp';
 import { ApiExcludeController } from '@nestjs/swagger';
 import { loadPolicy, parsePolicy, type Policy } from '@graveshift/policy';
 
+import { AuthModule } from '../auth/auth.module';
 import { UnavailableMcpBackend } from './mcp.backend';
 import { McpPrompts } from './mcp.prompts';
 import { McpResources } from './mcp.resources';
@@ -28,6 +29,7 @@ const DEFAULT_POLICY: Policy = parsePolicy({
 
 /** The MCP primitives. Kept separate so tests can override the backend and policy. */
 @Module({
+  imports: [AuthModule],
   providers: [
     McpTools,
     McpPrompts,

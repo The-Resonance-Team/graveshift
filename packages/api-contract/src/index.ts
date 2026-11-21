@@ -26,3 +26,18 @@ export type FixNowResponse =
   paths['/api/work-items/{id}/fix-now']['post']['responses'][200]['content']['application/json'];
 
 export type Assignee = WorkItemResponse['assignee'];
+
+export type CreateCredentialRequest =
+  paths['/api/credentials']['post']['requestBody']['content']['application/json'];
+
+export type IssuedCredentialResponse =
+  paths['/api/credentials']['post']['responses'][201]['content']['application/json'];
+
+export type CredentialListResponse =
+  paths['/api/credentials']['get']['responses'][200]['content']['application/json'];
+
+export type PublishEventRequest =
+  paths['/api/events']['post']['requestBody']['content']['application/json'];
+
+export type EventAcceptedResponse =
+  paths['/api/events']['post']['responses'][202]['content']['application/json'];
