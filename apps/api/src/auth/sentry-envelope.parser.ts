@@ -20,6 +20,11 @@ export interface SentryEnvelope {
 export class SentryEnvelopeParseError extends Error {}
 export class SentryEnvelopeTooLargeError extends Error {}
 
+export interface SentryEnvelopeLimits {
+  maxEnvelopeBytes?: number;
+  maxEventItemBytes?: number;
+}
+
 function jsonObject(line: Buffer): Record<string, unknown> {
   const text = line.toString('utf8');
   if (line.includes(13) || text !== text.trim()) {
@@ -41,8 +46,8 @@ function lineEnd(body: Buffer, start: number): number {
   return end < 0 ? body.length : end;
 }
 
-function eventPayload(bytes: Buffer): unknown {
-  if (bytes.length > MAX_EVENT_ITEM_BYTES) throw new SentryEnvelopeTooLargeError();
+function eventPayload(bytes: Buffer, maxBytes: number): unknown {
+  if (bytes.length > maxBytes) throw new SentryEnvelopeTooLargeError();
   try {
     const payload: unknown = JSON.parse(bytes.toString('utf8'));
     if (payload !== null && typeof payload === 'object' && !Array.isArray(payload)) return payload;
@@ -62,8 +67,13 @@ export function readSentryEnvelopeHeader(body: Buffer): SentryEnvelopeHeader {
   };
 }
 
-export function parseSentryEnvelope(body: Buffer): SentryEnvelope {
-  if (body.length > MAX_ENVELOPE_BYTES) throw new SentryEnvelopeTooLargeError();
+export function parseSentryEnvelope(
+  body: Buffer,
+  limits: SentryEnvelopeLimits = {},
+): SentryEnvelope {
+  const maxEnvelopeBytes = limits.maxEnvelopeBytes ?? MAX_ENVELOPE_BYTES;
+  const maxEventItemBytes = limits.maxEventItemBytes ?? MAX_EVENT_ITEM_BYTES;
+  if (body.length > maxEnvelopeBytes) throw new SentryEnvelopeTooLargeError();
   const envelopeEnd = lineEnd(body, 0);
   const rawHeader = jsonObject(body.subarray(0, envelopeEnd));
   const header: SentryEnvelopeHeader = {
@@ -101,7 +111,7 @@ export function parseSentryEnvelope(body: Buffer): SentryEnvelope {
     const payload = body.subarray(cursor, payloadEnd);
     const type = itemHeader.type;
     if (type === 'event') {
-      items.push({ type, payload: eventPayload(payload) });
+      items.push({ type, payload: eventPayload(payload, maxEventItemBytes) });
     } else {
       items.push({ type });
     }
