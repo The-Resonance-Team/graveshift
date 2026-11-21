@@ -39,6 +39,14 @@ function jobBlocks(content: string): Map<string, string[]> {
   return blocks;
 }
 
+function hasPullRequestTrigger(content: string): boolean {
+  return /^  pull_request:\s*$/m.test(content);
+}
+
+function callsReusableWorkflow(lines: string[]): boolean {
+  return lines.some((line) => /^\s+uses:\s*\.\//.test(line));
+}
+
 describe('CI workflows', () => {
   test('workflows exist', () => {
     expect(workflows.length).toBeGreaterThan(0);
@@ -51,16 +59,45 @@ describe('CI workflows', () => {
     expect(missing).toEqual([]);
   });
 
-  test('every job sets timeout-minutes', () => {
+  test('every job sets timeout-minutes, except reusable workflow callers', () => {
     const missing: string[] = [];
     for (const workflow of workflows) {
       for (const [name, lines] of jobBlocks(workflow.content)) {
+        if (callsReusableWorkflow(lines)) continue;
         if (!lines.some((line) => /^\s+timeout-minutes:\s*\d+\s*$/.test(line))) {
           missing.push(`${workflow.name}:${name}`);
         }
       }
     }
     expect(missing).toEqual([]);
+  });
+
+  test('every pull request job guards against draft pull requests', () => {
+    const unguarded: string[] = [];
+    for (const workflow of workflows) {
+      if (!hasPullRequestTrigger(workflow.content)) continue;
+      for (const [name, lines] of jobBlocks(workflow.content)) {
+        if (!lines.some((line) => /^\s+if:.*\bdraft\b/.test(line))) {
+          unguarded.push(`${workflow.name}:${name}`);
+        }
+      }
+    }
+    expect(unguarded).toEqual([]);
+  });
+
+  test('verify depends on every job in ci.yml', () => {
+    const ci = workflows.find((workflow) => workflow.name === 'ci.yml');
+    expect(ci).toBeDefined();
+    const blocks = jobBlocks(ci!.content);
+    const needsLine = blocks.get('verify')?.find((line) => /^\s+needs:\s*\[/.test(line));
+    expect(needsLine).toBeDefined();
+    const listed =
+      needsLine!
+        .match(/\[([^\]]+)\]/)?.[1]
+        ?.split(',')
+        .map((name) => name.trim()) ?? [];
+    const expected = [...blocks.keys()].filter((name) => name !== 'verify');
+    expect(listed.sort()).toEqual(expected.sort());
   });
 
   test('every action ref is a full SHA with a version comment', () => {

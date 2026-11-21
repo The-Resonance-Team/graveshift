@@ -26,6 +26,8 @@ updates:
           - minor
           - patch
 
+  # /deploy/compose holds bun.Dockerfile; image tags in the compose files are
+  # handled by the docker-compose entry below.
   - package-ecosystem: docker
     directories:
       - /deploy/compose

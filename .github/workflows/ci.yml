@@ -23,7 +23,7 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      code: ${{ steps.filter.outputs.code }}
+      ci-affected: ${{ steps.filter.outputs.ci-affected }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         if: github.event_name == 'push'
@@ -33,7 +33,7 @@ jobs:
         id: filter
         with:
           filters: |
-            code:
+            ci-affected:
               - 'apps/**'
               - 'packages/**'
               - 'examples/**'
@@ -48,46 +48,31 @@ jobs:
 
   format:
     needs: changes
-    if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.code == 'true' }}
+    if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.ci-affected == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version-file: package.json
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - uses: ./.github/actions/setup-bun
       - name: Check formatting
         run: bun run format:check
 
   lint:
     needs: changes
-    if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.code == 'true' }}
+    if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.ci-affected == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version-file: package.json
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - uses: ./.github/actions/setup-bun
       - name: Lint
         run: bun run lint
 
   typecheck:
     needs: changes
-    if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.code == 'true' }}
+    if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.ci-affected == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version-file: package.json
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - uses: ./.github/actions/setup-bun
       - name: Typecheck
         run: bun run typecheck
 
@@ -96,65 +81,47 @@ jobs:
 
   test-types:
     needs: changes
-    if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.code == 'true' }}
+    if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.ci-affected == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version-file: package.json
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - uses: ./.github/actions/setup-bun
       - name: Type-check tests
         run: bun run test:check
 
   test:
     needs: changes
-    if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.code == 'true' }}
+    if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.ci-affected == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version-file: package.json
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - uses: ./.github/actions/setup-bun
       - name: Test
         run: bun run test
 
   build:
     needs: changes
-    if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.code == 'true' }}
+    if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.ci-affected == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version-file: package.json
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - uses: ./.github/actions/setup-bun
       - name: Build runtime entrypoints
         run: bun run build
 
   ci-structure:
     needs: changes
-    if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.code == 'true' }}
+    if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.ci-affected == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version-file: package.json
+      - uses: ./.github/actions/setup-bun
       - name: Test workflow structure
         run: bun test ./.github/tests/workflow-structure.test.ts
 
   compose:
     needs: changes
-    if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.code == 'true' }}
+    if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.ci-affected == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
