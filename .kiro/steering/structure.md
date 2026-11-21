@@ -23,7 +23,8 @@ graveshift/
 │   ├── diagnoser/                 # Medium: context builder, prompts, evidence validator
 │   ├── fixer/                     # Exorcist: patch generation, path guard, GitHub App client, draft PRs
 │   ├── notifier-discord/          # Banshee: discord.js bot, embeds, buttons, slash commands
-│   ├── llm/                       # LlmGateway: provider abstraction + fallback + budget
+│   ├── llm/                       # LlmGateway: diagnosis-only provider path + fallback + budget
+│   ├── gateway/                   # single Agent model-call path: redaction, budget, audit, retry, rules-only
 │   ├── store/                     # Drizzle ORM (SQLite default / Postgres), audit log
 │   └── actuator/                  # separate deployable: executes approved signed actions only
 ├── examples/haunted-candy-shop/   # fault-injectable demo app (api + worker + postgres)
