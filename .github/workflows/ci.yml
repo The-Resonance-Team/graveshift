@@ -3,8 +3,8 @@ name: ci
 on:
   push:
     branches: [main]
+  # Stacked pull requests target earlier stack branches, so do not filter by base branch.
   pull_request:
-    branches: [main]
     types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
 
 permissions:
