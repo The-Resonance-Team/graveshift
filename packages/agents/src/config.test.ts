@@ -10,6 +10,7 @@ import {
   paramDefaults,
   PROVIDER_PACKAGES,
   type AgentConfig,
+  type ProviderPackage,
 } from './config';
 
 const sreBot: AgentConfig = {
@@ -72,9 +73,23 @@ describe('agent config validation', () => {
     expect(() => AgentsFileSchema.parse({ system: [sreBot], unknown: true })).toThrow();
   });
 
-  test('accepts only official provider packages', () => {
-    expect(PROVIDER_PACKAGES).toContain('@ai-sdk/openai-compatible');
+  test('accepts every official AI SDK connector package', () => {
+    expect(PROVIDER_PACKAGES.length).toBe(51);
+    const samples: ProviderPackage[] = [
+      '@ai-sdk/openai',
+      '@ai-sdk/amazon-bedrock',
+      '@ai-sdk/gateway',
+      '@ai-sdk/xai',
+      '@ai-sdk/zai',
+      '@ai-sdk/openai-compatible',
+    ];
+    for (const provider of samples) {
+      expect(PROVIDER_PACKAGES).toContain(provider);
+      expect(AgentConfigSchema.parse({ ...sreBot, provider }).provider).toBe(provider);
+    }
     expect(() => AgentConfigSchema.parse({ ...sreBot, provider: '@other/google' })).toThrow();
+    expect(() => AgentConfigSchema.parse({ ...sreBot, provider: '@ai-sdk/react' })).toThrow();
+    expect(() => AgentConfigSchema.parse({ ...sreBot, provider: '@ai-sdk/provider' })).toThrow();
   });
 
   test('requires https baseUrl without credentials', () => {

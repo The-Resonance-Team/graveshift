@@ -2,11 +2,61 @@ import { z } from 'zod';
 
 import { untrustedParam } from './untrusted';
 
-// Official AI SDK provider packages. Checked with ctx7 (/vercel/ai and /websites/ai-sdk_dev).
+// All first-party AI SDK connector packages. Source: official provider docs
+// (ai-sdk.dev/providers/ai-sdk-providers) and vercel/ai packages, checked with
+// ctx7 (/vercel/ai). Core, UI, tooling and integration packages are excluded.
 export const PROVIDER_PACKAGES = [
+  '@ai-sdk/alibaba',
+  '@ai-sdk/amazon-bedrock',
   '@ai-sdk/anthropic',
+  '@ai-sdk/anthropic-aws',
+  '@ai-sdk/assemblyai',
+  '@ai-sdk/azure',
+  '@ai-sdk/baseten',
+  '@ai-sdk/black-forest-labs',
+  '@ai-sdk/bytedance',
+  '@ai-sdk/cartesia',
+  '@ai-sdk/cerebras',
+  '@ai-sdk/cohere',
+  '@ai-sdk/deepgram',
+  '@ai-sdk/deepinfra',
+  '@ai-sdk/deepseek',
+  '@ai-sdk/elevenlabs',
+  '@ai-sdk/fal',
+  '@ai-sdk/fish-audio',
+  '@ai-sdk/fireworks',
+  '@ai-sdk/gateway',
+  '@ai-sdk/gladia',
+  '@ai-sdk/gmicloud',
   '@ai-sdk/google',
+  '@ai-sdk/google-vertex',
+  '@ai-sdk/groq',
+  '@ai-sdk/heygen',
+  '@ai-sdk/huggingface',
+  '@ai-sdk/hume',
+  '@ai-sdk/klingai',
+  '@ai-sdk/liquid',
+  '@ai-sdk/luma',
+  '@ai-sdk/minimax',
+  '@ai-sdk/mistral',
+  '@ai-sdk/moonshotai',
+  '@ai-sdk/open-responses',
+  '@ai-sdk/openai',
   '@ai-sdk/openai-compatible',
+  '@ai-sdk/parallel',
+  '@ai-sdk/perplexity',
+  '@ai-sdk/prodia',
+  '@ai-sdk/quiverai',
+  '@ai-sdk/replicate',
+  '@ai-sdk/revai',
+  '@ai-sdk/scaledown',
+  '@ai-sdk/tencent',
+  '@ai-sdk/togetherai',
+  '@ai-sdk/topaz',
+  '@ai-sdk/typesafe-ai',
+  '@ai-sdk/voyage',
+  '@ai-sdk/xai',
+  '@ai-sdk/zai',
 ] as const;
 
 export const ProviderPackageSchema = z.enum(PROVIDER_PACKAGES);
