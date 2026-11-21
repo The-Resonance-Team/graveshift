@@ -8,12 +8,13 @@ The v1 daemon is at `apps/_daemon`. It is reference only. The repository does no
 
 | Component | Path | Role |
 | --- | --- | --- |
-| API | `apps/api` | NestJS app. The only external surface. Serves `GET /healthz`, the OpenAPI document, the Swagger UI and the MCP endpoint at `/mcp`. |
+| API | `apps/api` | NestJS app. The only external surface. Serves `GET /healthz`, the OpenAPI document, the Swagger UI, the credential routes, `POST /api/events` and the MCP endpoint at `/mcp`. |
+| Credentials | `apps/api/src/auth` | One component that issues, hashes, verifies, lists and revokes MCP tokens and plugin API keys. A file-backed store holds one-way hashes. |
 | API contract | `packages/api-contract` | Publishes generated TypeScript types and a version marker from the OpenAPI document. |
 | Daemon (v1) | `apps/_daemon` | Reference only. Wires Wraith, Medium, policy, optional fixer and the audit log. Not built and not started. |
 | Daemon (v2) | `apps/daemon` | New Effect v4 skeleton on Bun. Serves `GET /healthz` only. |
 | Core | `packages/core` | Zod schemas (source of truth), event envelope schema, incident state machine, circuit-breaker helper, config loader, `RuntimeSource` contract, pure rule engine. |
-| Events | `packages/events` | `Publisher` interface, NATS JetStream publisher and an in-memory fake. No consumer is wired yet. |
+| Events | `packages/events` | `Publisher` interface, NATS JetStream publisher, an HTTP publisher that posts to the API, and an in-memory fake. No consumer is wired yet. |
 | Integrations | `packages/integrations` | Plugin and Collector contract: `Integration`, `Context` and a pure envelope builder. No NATS client import. |
 | NestJS plugin | `packages/plugin-nestjs` | In-process Plugin. Publishes one envelope per HTTP request and one for an unhandled error. |
 | Store | `packages/store` | Hash-chained, append-only audit log on `bun:sqlite` through Drizzle. |
@@ -77,13 +78,18 @@ The API in `apps/api` is the only external surface. A client calls this API, nev
 | `GET /api/work-items/:id` | One work item for the detail sheet. |
 | `POST /api/work-items/:id/triage` | The triaged work item. Updates the in-memory store. |
 | `POST /api/work-items/:id/fix-now` | The work item after **Fix now** moved it to the front of the fix queue. |
-| `POST /mcp` | Streamable HTTP MCP endpoint. Requires `Authorization: Bearer <GRAVESHIFT_MCP_TOKEN>`. |
+| `POST /api/oauth/token` | Exchanges client id and secret for a short-lived access token. |
+| `POST /api/credentials` | One issued credential. The `kind` selects an MCP read token or a plugin publish key. The value is shown once. |
+| `GET /api/credentials` | Metadata for the caller credentials. No value or hash. |
+| `DELETE /api/credentials/:id` | Revokes one credential. Returns 204. |
+| `POST /api/events` | Accepts a plugin event envelope and publishes it. Returns 202. |
+| `POST /mcp` | Streamable HTTP MCP endpoint. Requires `Authorization: Bearer <issued MCP token>`. |
 
 The API listens on 127.0.0.1 by default. Set `HOST` to change the bind address. Set `PORT` to change the port from 3000. Keep the localhost bind unless the MCP bearer token is configured and the endpoint is exposed deliberately.
 
 Structured logging is deferred to the production ticket.
 
-The API uses Zod through Nest's standard-schema pipe. When a route takes input, the route attaches a Zod schema with `@Body({ schema })`, `@Query({ schema })` or `@Param({ schema })`. No business logic, rate limits or SSE were added to the HTTP routes here. MCP is served by the official module at `/mcp`; its bearer token is the only authentication on this surface. Later tickets add the routes for graves and hauntings here.
+Request bodies use `class-validator` DTO classes. The global `ValidationPipe` sets `whitelist`, `forbidNonWhitelisted`, `transform` and 422, so an unknown field fails at the pipe. Earlier routes still attach a Zod schema with `@Body({ schema })`, `@Query({ schema })` or `@Param({ schema })` and pass through the standard-schema pipe. Zod is also used for boot env config and OpenAPI response docs. No SSE was added to the HTTP routes here. Later tickets add the routes for graves and hauntings here.
 
 ## Work items
 
@@ -115,13 +121,23 @@ In production wiring there is no diagnosis context provider and no model gateway
 
 ## MCP endpoint
 
-The official `@nestjs/mcp` module serves `graveshift-mcp` at `/mcp` from the API. A guard checks one static bearer token from `GRAVESHIFT_MCP_TOKEN` (32 or more characters) on the HTTP route. No OAuth resource or authorization server is configured: static bearer auth is the only supported path today. The stdio launcher has no authentication by design.
+The official `@nestjs/mcp` module serves `graveshift-mcp` at `/mcp` from the API. The HTTP route guard and the MCP token verifier both call `CredentialService.verify(token, 'mcp')` from `apps/api/src/auth`. An MCP token is issued with `POST /api/credentials` and kind `mcp`; the old static `GRAVESHIFT_MCP_TOKEN` is no longer read. No OAuth resource or authorization server is advertised on this route. A scope floor checks every MCP HTTP method, including tools, prompts and resources, and denies a method without a scope mapping; `incidents:read` maps to the incident reads, `fix:propose` to `propose_fix`, and the other scopes to their tools. The stdio launcher has no authentication by design.
 
 MCP loads the policy in a provider factory, so a bad `POLICY_PATH` stops the API at boot. The nine tools, two prompts and the postmortem resource are injectable providers in `apps/api/src/mcp/`. Every reply passes through the redactor. `propose_fix` returns a policy decision and never executes an action.
 
 The v2 daemon serves only `/healthz`, so backend reads return empty or unavailable results. No counters are available: the `propose_fix` reply states that rate and budget limits are not enforced. Tests inject a fake backend.
 
 `packages/api-contract` generates its types from the OpenAPI document. It exports the generated types and the `API_CONTRACT_VERSION` marker through `package.json#exports` only. It does not define an event envelope or any domain event type.
+
+## Credentials and event ingest
+
+`apps/api/src/auth` owns one credential component. It issues, hashes, verifies, lists and revokes both MCP read tokens and plugin API keys. The MCP module and the plugin ingest route call this component; neither builds a second issuer or verifier.
+
+One scope catalog serves both surfaces. MCP scopes are `incidents:read`, `diagnoses:read`, `audit:read`, `logs:read`, `metrics:read` and `fix:propose`. The plugin scope is `events:publish`. `POST /api/credentials` takes `{ kind, name, scopes, service?, ttlSeconds? }`. `kind` selects the shape: an MCP read token or a plugin publish key. A client names the credential and chooses scopes from the ones its client-credentials token holds. A client cannot grant `admin` or `tokens:manage`, and cannot grant a scope it does not hold. A plugin key may bind to one Grave or service. A client holds at most ten active credentials; the count and the issue run in one serialized section, and revoking one frees a slot. The response shows the value once; `GET /api/credentials` returns metadata only.
+
+`POST /api/oauth/token` runs the OAuth 2.1 client-credentials grant against a boot client registry. It signs a JWT with `iss`, `aud`, `sub`, `scope`, `jti` and `exp` through `@nestjs/jwt`. A passport strategy validates those claims and the registry tenant. The JWT secret has no default and is required in every environment. Throttling covers the token, credential, event and MCP routes and keys by client id resolved from the bearer token. The NATS connection promise is shared, a failed connect clears the cache and publish fails closed with 503. The store writes one JSON file with mode 0600. It holds a SHA-256 hash, a short display prefix, kind, name, client id, tenant id, scopes, optional service binding and timestamps. It holds no value. Presented values are compared in constant time.
+
+`POST /api/events` is the plugin ingest route. The `class-validator` DTO rejects unknown fields with 422, then `EventEnvelopeSchema` from `packages/core` checks the canonical envelope shape. The route checks `events:publish`, the tenant and the service binding, bounds payload bytes and request rate, checks the body size before the DTO pipe, redacts every string and publishes through the injected `Publisher`. It returns 202. The NATS publisher stays in the API for daemon use. Client apps use `createHttpPublisher` from `packages/events`, which posts to `/api/events` with a bearer plugin key. Client apps no longer hold NATS credentials.
 
 ## Event backbone
 
@@ -134,7 +150,7 @@ Two lanes carry envelopes:
 | `telemetry` | `info` | Baselines and charts. |
 | `detection` | `warning`, `critical` | Detection by the Wraith. |
 
-`packages/events` owns the `Publisher` interface, `createNatsPublisher` and an in-memory fake under `./testing`. Subjects have the form `graveshift.<tenantId>.<lane>.<type>`. The publisher uses the official NATS client packages `@nats-io/transport-node` and `@nats-io/jetstream`, and sends the envelope `id` as the `msgID` option. The NATS connection code is under `./nats`; it is not loaded when a caller imports only `Publisher` or the fake.
+`packages/events` owns the `Publisher` interface, `createNatsPublisher`, `createHttpPublisher` and an in-memory fake under `./testing`. Subjects have the form `graveshift.<tenantId>.<lane>.<type>`. The NATS publisher uses the official NATS client packages `@nats-io/transport-node` and `@nats-io/jetstream`, and sends the envelope `id` as the `msgID` option. The NATS connection code is under `./nats`; it is not loaded when a caller imports only `Publisher`, the HTTP publisher or the fake. The HTTP publisher posts an envelope to `/api/events` with a bearer plugin key. The API publishes the envelope to JetStream after validation and redaction.
 
 The JetStream stream is `GRAVESHIFT_EVENTS`. It filters subjects with `graveshift.>`. JetStream detects duplicate publishes by `msgID` inside `duplicate_window`. The default `duplicate_window` is two minutes. Redelivery after that window is not idempotent: a consumer must still handle a repeated envelope `id`.
 
@@ -147,6 +163,8 @@ A **Plugin** is an in-process integration shipped into a client framework. A **C
 `packages/plugin-nestjs` is the first Plugin. It exposes an `init(app)` function, not a Nest module. A host calls `init(nestApp)` to get the Integration, then calls `integration.start({ publisher, tenantId, service })` before `app.init()`. The request middleware publishes one info **Event envelope** when each response finishes. A global interceptor publishes one envelope for a handler error and rethrows it, so Nest's exception layer still writes the normal response. The plugin uses Nest's `useGlobalInterceptors()`, not a bespoke exception filter. Guard errors and unmatched routes bypass interceptors, so the plugin observes handler errors only. `stop()` disables publishing without detaching handlers; a later `start()` registers a new generation, so the old handlers stay silent.
 
 An `HttpException` below 500 produces an info envelope; a server error or an unknown exception produces a critical envelope. Untrusted values are redacted before publish: the query string is stripped from the URL, and the path and exception message pass through the repo redactor. The plugin never logs the raw error. The middleware creates one `traceId` per request and keeps it in a `WeakMap`; the interceptor reuses it, so the request and error envelopes share a trace. An incoming `x-trace-id` header is redacted, cut to 128 characters and accepted only as a safe token; otherwise a generated id is used. Request fingerprints use the HTTP method and a normalized route with identifier segments collapsed; error fingerprints also include the exception name.
+
+The host supplies an HTTP publisher that uses a plugin API key issued by the API. The plugin does not import a NATS client and holds no NATS credential.
 
 The host context is validated once at `start()`: an invalid context throws at startup, because a misconfigured host must not run with a broken publisher. Only the per-request publish path fails open, catching build and publish errors so telemetry cannot break a host request.
 

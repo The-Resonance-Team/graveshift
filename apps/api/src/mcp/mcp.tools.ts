@@ -1,8 +1,9 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { Inject, Injectable, NotFoundException, UseGuards } from '@nestjs/common';
 import { Tool } from '@nestjs/mcp';
 import { decide, toAuditEvent, type Policy, type PolicyAction } from '@graveshift/policy';
 import { z } from 'zod';
 
+import { McpScopeGuard } from './mcp-scope.guard';
 import { deepRedact } from './mcp.redact';
 import { PromqlSchema } from './mcp.promql';
 import { MCP_BACKEND, MCP_ENV_MODE, MCP_POLICY, type McpBackend } from './mcp.types';
@@ -22,6 +23,7 @@ const need = <T>(value: T | undefined, message: string): T => {
 
 /** Tool logic lives here. The decorators only name the primitive and describe its schema. */
 @Injectable()
+@UseGuards(McpScopeGuard)
 export class McpTools {
   constructor(
     @Inject(MCP_BACKEND) private readonly backend: McpBackend,

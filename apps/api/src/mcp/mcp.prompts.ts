@@ -1,16 +1,18 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UseGuards } from '@nestjs/common';
 import { Prompt } from '@nestjs/mcp';
 import { z } from 'zod';
 
+import { McpScopeGuard } from './mcp-scope.guard';
 import { deepRedact } from './mcp.redact';
 
 const argsSchema = z.object({ incidentId: z.string().min(1).max(128) });
 
 /** Prompt text is assembled here; the decorator only names the primitive. */
 @Injectable()
+@UseGuards(McpScopeGuard)
 export class McpPrompts {
   @Prompt({
-    name: 'triage-incident',
+    name: 'triage_incident',
     description: 'Triage a Haunting: read it, check evidence, decide the next step.',
     argsSchema,
   })
@@ -23,7 +25,7 @@ export class McpPrompts {
   }
 
   @Prompt({
-    name: 'write-postmortem',
+    name: 'write_postmortem',
     description: 'Write the Autopsy for a closed Haunting.',
     argsSchema,
   })

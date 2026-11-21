@@ -5,6 +5,7 @@ coverage/
 .turbo/
 build/
 *.log
+.graveshift/
 .env
 .env.*
 !.env.example

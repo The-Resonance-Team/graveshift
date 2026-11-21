@@ -12,6 +12,8 @@ export interface PublishTarget {
   publish(subject: string, payload: Uint8Array, options: { msgID: string }): Promise<unknown>;
 }
 
+export { createHttpPublisher, type HttpPublisherOptions } from './http';
+
 export type Lane = 'telemetry' | 'detection';
 
 export function laneFor(severity: EventEnvelope['severity']): Lane {

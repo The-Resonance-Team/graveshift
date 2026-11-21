@@ -105,11 +105,17 @@ bun run verify
 
 ## MCP server
 
-The API in `apps/api` serves `graveshift-mcp` through the official `@nestjs/mcp` module (v0.0.4). It exposes nine tools (`list_services`, `list_incidents`, `get_incident`, `get_diagnosis`, `get_audit_log`, `verify_audit_chain`, `propose_fix`, `tail_logs`, `query_metric`), two prompts (`triage-incident`, `write-postmortem`) and the Autopsy resource at `graveshift://incidents/{id}/postmortem`. Every reply passes through the redactor. `propose_fix` only asks the policy engine and never executes an action.
+The API in `apps/api` serves `graveshift-mcp` through the official `@nestjs/mcp` module (v0.0.4). It exposes nine tools (`list_services`, `list_incidents`, `get_incident`, `get_diagnosis`, `get_audit_log`, `verify_audit_chain`, `propose_fix`, `tail_logs`, `query_metric`), two prompts (`triage_incident`, `write_postmortem`) and the Autopsy resource at `graveshift://incidents/{id}/postmortem`. Every reply passes through the redactor. `propose_fix` only asks the policy engine and never executes an action.
 
-The Streamable HTTP endpoint is `/mcp` on the API. It requires a static bearer token from `GRAVESHIFT_MCP_TOKEN` (at least 32 characters); no OAuth resource or authorization server is configured. The module keeps no sessions and serves 2025-era clients on the same endpoint. Kiro can also launch it over stdio from a standalone application context with `bun run --filter @graveshift/api start:stdio`; stdio has no authentication by design and trusts the local process.
+The Streamable HTTP endpoint is `/mcp` on the API. It requires an unexpired MCP token issued by `POST /api/credentials` with kind `mcp`. The shared credential component in `apps/api/src/auth` verifies the token; no static token is read. The module keeps no sessions and serves 2025-era clients on the same endpoint. Kiro can also launch it over stdio from a standalone application context with `bun run --filter @graveshift/api start:stdio`; stdio has no authentication by design and trusts the local process. The stdio launcher still builds the same `AppModule`, so `GRAVESHIFT_OAUTH_JWT_SECRET` (at least 32 characters) must be set at boot; `powers/graveshift/mcp.json` carries a placeholder to replace with a strong local value.
 
 The v2 daemon serves only `/healthz`, so the read tools return empty results today. No daemon data is invented. Tool logic lives in injectable providers in `apps/api/src/mcp/`. A test connects an official in-memory MCP client with `era: 'legacy'` to prove a `2025-06-18` client can list tools and call one.
+
+## API credential configuration
+
+The API reads its boot config from the environment. `GRAVESHIFT_OAUTH_JWT_SECRET` has no default and must be at least 32 characters. `GRAVESHIFT_OAUTH_CLIENTS` is a JSON map of client id to `{ "secret", "tenantId", "scopes" }`; `POST /api/oauth/token` exchanges those values for a short-lived token. `GRAVESHIFT_OAUTH_ISSUER` and `GRAVESHIFT_OAUTH_AUDIENCE` set the token claims that the API checks.
+
+`GRAVESHIFT_CREDENTIALS_PATH` points to the one credential file, created with mode 0600. `GRAVESHIFT_CREDENTIAL_TTL_SECONDS` and `GRAVESHIFT_CREDENTIAL_MAX_TTL_SECONDS` bound issued credential lifetime. `GRAVESHIFT_EVENT_MAX_BYTES`, `GRAVESHIFT_EVENT_RATE_LIMIT` and `GRAVESHIFT_EVENT_RATE_TTL_MS` bound the event ingest route. `GRAVESHIFT_NATS_URL` enables NATS publish; without it, publish fails closed with 503. See `.env.example` for the full list.
 
 ## Roadmap
 

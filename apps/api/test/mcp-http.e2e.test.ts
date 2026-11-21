@@ -1,17 +1,20 @@
-import 'reflect-metadata';
 import type { INestApplication } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { parsePolicy } from '@graveshift/policy';
-import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import request from 'supertest';
 
+import { configureApp } from '../src/app.factory';
 import { AppModule } from '../src/app.module';
+import { CREDENTIAL_CONFIG, CREDENTIAL_REPO } from '../src/auth/auth.types';
 import { MCP_BACKEND, MCP_POLICY } from '../src/mcp/mcp.types';
+import { TEST_CONFIG } from './fakes/auth-test-config';
+import { FakeCredentialRepo } from './fakes/fake-credential-repo';
+import { accessToken } from './fakes/auth-test-helpers';
 import { FakeMcpBackend } from './fakes/fake-mcp-backend';
 
-const VALID_TOKEN = 'x'.repeat(32);
 const rpc = { jsonrpc: '2.0', id: 1, method: 'tools/list' };
-const originalToken = process.env.GRAVESHIFT_MCP_TOKEN;
 
 const policy = parsePolicy({
   version: 1,
@@ -31,6 +34,9 @@ const policy = parsePolicy({
 
 describe('POST /mcp bearer auth (e2e)', () => {
   let app!: INestApplication;
+  let mcpToken!: string;
+  let metricsToken!: string;
+  let pluginKey!: string;
 
   beforeAll(async () => {
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
@@ -38,18 +44,41 @@ describe('POST /mcp bearer auth (e2e)', () => {
       .useValue(new FakeMcpBackend())
       .overrideProvider(MCP_POLICY)
       .useValue(policy)
+      .overrideProvider(CREDENTIAL_CONFIG)
+      .useValue(TEST_CONFIG)
+      .overrideProvider(CREDENTIAL_REPO)
+      .useValue(new FakeCredentialRepo())
       .compile();
     app = moduleRef.createNestApplication();
+    configureApp(app);
     await app.init();
-  });
 
-  beforeEach(() => {
-    process.env.GRAVESHIFT_MCP_TOKEN = VALID_TOKEN;
-  });
-
-  afterEach(() => {
-    if (originalToken === undefined) delete process.env.GRAVESHIFT_MCP_TOKEN;
-    else process.env.GRAVESHIFT_MCP_TOKEN = originalToken;
+    const token = accessToken(moduleRef.get(JwtService), [
+      'tokens:manage',
+      'incidents:read',
+      'events:publish',
+    ]);
+    const create = async (kind: 'mcp' | 'plugin', scopes: string[]) => {
+      const response = await request(app.getHttpServer())
+        .post('/api/credentials')
+        .set('authorization', `Bearer ${token}`)
+        .send(
+          kind === 'plugin'
+            ? { kind, name: `${kind}-key`, scopes, service: 'api' }
+            : { kind, name: `${kind}-key`, scopes },
+        )
+        .expect(201);
+      return response.body.value as string;
+    };
+    mcpToken = await create('mcp', ['incidents:read']);
+    pluginKey = await create('plugin', ['events:publish']);
+    const metricsJwt = accessToken(moduleRef.get(JwtService), ['tokens:manage', 'metrics:read']);
+    const metricsResponse = await request(app.getHttpServer())
+      .post('/api/credentials')
+      .set('authorization', `Bearer ${metricsJwt}`)
+      .send({ kind: 'mcp', name: 'metrics-key', scopes: ['metrics:read'] })
+      .expect(201);
+    metricsToken = metricsResponse.body.value as string;
   });
 
   afterAll(async () => {
@@ -63,22 +92,69 @@ describe('POST /mcp bearer auth (e2e)', () => {
     return (token ? call.set('authorization', `Bearer ${token}`) : call).send(rpc);
   };
 
-  test('accepts a valid 32-character token', async () => {
-    const response = await post(VALID_TOKEN);
-    expect(response.status).toBe(200);
+  test('accepts an MCP token from the shared issuer', async () => {
+    await post(mcpToken).expect(200);
   });
 
-  test('refuses a token shorter than 32 characters', async () => {
+  test('refuses a short token', async () => {
     await post('short').expect(401);
   });
 
-  test('refuses a request when GRAVESHIFT_MCP_TOKEN is unset', async () => {
-    delete process.env.GRAVESHIFT_MCP_TOKEN;
-    await post(VALID_TOKEN).expect(401);
+  test('refuses an unknown token', async () => {
+    await post('x'.repeat(32)).expect(401);
+  });
+
+  test('refuses a plugin key at the MCP endpoint', async () => {
+    await post(pluginKey).expect(401);
   });
 
   test('refuses a request without a bearer header', async () => {
     const response = await post().expect(401);
     expect(response.headers['www-authenticate']).toContain('Bearer');
+  });
+
+  const call = (token: string, method: string, params?: object) =>
+    request(app.getHttpServer())
+      .post('/mcp')
+      .set('accept', 'application/json, text/event-stream')
+      .set('authorization', `Bearer ${token}`)
+      .send({ jsonrpc: '2.0', id: 7, method, ...(params ? { params } : {}) });
+
+  test('allows an in-scope tools/call', async () => {
+    await call(mcpToken, 'tools/call', {
+      name: 'get_incident',
+      arguments: { id: 'inc-1' },
+    }).expect(200);
+  });
+
+  test('refuses a wrong-scope prompts/get with 403', async () => {
+    await call(metricsToken, 'prompts/get', {
+      name: 'triage_incident',
+      arguments: { incidentId: 'inc-1' },
+    }).expect(403);
+  });
+
+  test('refuses a wrong-scope resources/read with 403', async () => {
+    await call(metricsToken, 'resources/read', {
+      uri: 'graveshift://incidents/inc-1/postmortem',
+    }).expect(403);
+  });
+
+  test('denies by default when a method has no scope mapping', async () => {
+    await call(mcpToken, 'tools/unknown').expect(403);
+  });
+
+  test('refuses a primitive outside the token scopes with 403', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/mcp')
+      .set('accept', 'application/json, text/event-stream')
+      .set('authorization', `Bearer ${mcpToken}`)
+      .send({
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/call',
+        params: { name: 'propose_fix', arguments: { incidentId: 'inc-1', action: 'open_pr' } },
+      });
+    expect(response.status).toBe(403);
   });
 });
