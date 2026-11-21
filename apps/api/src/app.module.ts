@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule } from '@nestjs/throttler';
 
 import { HealthController } from './health.controller';
+import { AuditModule } from './audit/audit.module';
 import { AuthConfigModule } from './auth/auth.config.module';
 import { AuthModule } from './auth/auth.module';
 import { CREDENTIAL_CONFIG, type AuthConfig } from './auth/auth.types';
@@ -20,6 +21,7 @@ import { WorkItemsModule } from './work-items/work-items.module';
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validationSchema: envSchema }),
     PrismaInfraModule,
+    AuditModule,
     AuthConfigModule,
     EventsConfigModule,
     CredentialCoreModule,

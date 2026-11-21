@@ -17,6 +17,8 @@ import type { EventReadResult, EventSource, StoredEvent } from './events.types';
 
 /** Optional reader seam for tests. Production connects lazily on the first poll. */
 export const NATS_READER = Symbol('NATS_READER');
+export const NATS_READER_CONNECTOR = Symbol('NATS_READER_CONNECTOR');
+export type NatsReaderConnector = typeof connectNatsReader;
 
 /** Bounded source used by tests. `headSeq` is the last assigned sequence. */
 @Injectable()
@@ -69,21 +71,30 @@ const FETCH_CONCURRENCY = 16;
 /** Reads envelopes from JetStream by stream sequence. A cursor is a sequence. */
 @Injectable()
 export class NatsEventSource implements EventSource, OnModuleDestroy {
-  private cached?: EventsReader;
+  private readerPromise: Promise<EventsReader> | undefined;
   private handle?: NatsReaderHandle;
 
   constructor(
     @Inject(EVENTS_CONFIG) private readonly config: EventsConfig,
     @Optional() @Inject(NATS_READER) private readonly injected?: EventsReader,
+    @Optional()
+    @Inject(NATS_READER_CONNECTOR)
+    private readonly connectReader: NatsReaderConnector = connectNatsReader,
   ) {}
 
-  private async reader(): Promise<EventsReader> {
-    if (this.injected) return this.injected;
-    if (this.cached) return this.cached;
+  private reader(): Promise<EventsReader> {
+    if (this.injected) return Promise.resolve(this.injected);
+    if (this.readerPromise) return this.readerPromise;
     if (!this.config.natsUrl) throw new ServiceUnavailableException('NATS is not configured');
-    this.handle = await connectNatsReader(this.config.natsUrl);
-    this.cached = this.handle.reader;
-    return this.cached;
+    const pending = this.connectReader(this.config.natsUrl).then((handle) => {
+      this.handle = handle;
+      return handle.reader;
+    });
+    this.readerPromise = pending.catch((error: unknown) => {
+      this.readerPromise = undefined;
+      throw error;
+    });
+    return this.readerPromise;
   }
 
   async read(afterSeq: number | null, maxEvents: number): Promise<EventReadResult> {
@@ -145,6 +156,7 @@ export class NatsEventSource implements EventSource, OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
+    await this.readerPromise?.catch(() => undefined);
     await this.handle?.close();
   }
 }

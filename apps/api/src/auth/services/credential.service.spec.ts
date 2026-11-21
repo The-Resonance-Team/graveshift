@@ -48,27 +48,30 @@ describe('CredentialService', () => {
   test('refuses an unknown value and a value for another kind', async () => {
     const { service } = setup();
     const mcp = await service.issue(dto(), principal);
-    expect(service.verify('x'.repeat(32))).rejects.toThrow();
-    expect(service.verify(mcp.value, 'plugin')).rejects.toThrow();
+    await expect(service.verify('x'.repeat(32))).rejects.toThrow();
+    await expect(service.verify(mcp.value, 'plugin')).rejects.toThrow();
   });
 
   test('refuses a revoked or expired credential', async () => {
     const { repo, service } = setup();
     const issued = await service.issue(dto(), principal);
     await service.revoke(issued.id, principal);
-    expect(service.verify(issued.value)).rejects.toThrow();
+    await expect(service.verify(issued.value)).rejects.toThrow();
 
     const second = await service.issue(dto({ name: 'old' }), principal);
     const record = repo.records.find((item) => item.id === second.id);
     if (record) record.expiresAt = '2020-01-01T00:00:00.000Z';
-    expect(service.verify(second.value)).rejects.toThrow();
+    await expect(service.verify(second.value)).rejects.toThrow();
+    expect(repo.auditEvents.filter((event) => event.type === 'credential.expired')).toHaveLength(1);
+    await expect(service.verify(second.value)).rejects.toThrow();
+    expect(repo.auditEvents.filter((event) => event.type === 'credential.expired')).toHaveLength(1);
   });
 
   test('enforces the scope catalog and the client holdings', async () => {
     const { service } = setup();
-    expect(service.issue(dto({ scopes: ['tokens:manage'] }), principal)).rejects.toThrow();
-    expect(service.issue(dto({ scopes: ['events:publish'] }), principal)).rejects.toThrow();
-    expect(service.issue(dto({ scopes: ['audit:read'] }), principal)).rejects.toThrow();
+    await expect(service.issue(dto({ scopes: ['tokens:manage'] }), principal)).rejects.toThrow();
+    await expect(service.issue(dto({ scopes: ['events:publish'] }), principal)).rejects.toThrow();
+    await expect(service.issue(dto({ scopes: ['audit:read'] }), principal)).rejects.toThrow();
     expect(
       service.issue(dto({ kind: 'plugin', scopes: ['events:publish'], service: 'api' }), principal),
     ).resolves.toBeDefined();
@@ -91,15 +94,20 @@ describe('CredentialService', () => {
   });
 
   test('lists metadata and revokes only own credentials', async () => {
-    const { service } = setup();
+    const { repo, service } = setup();
     const issued = await service.issue(dto(), principal);
     const list = await service.list(principal);
     expect(list).toHaveLength(1);
     expect(list[0]).not.toHaveProperty('value');
     expect(list[0]).not.toHaveProperty('hash');
+    expect(repo.auditEvents.map((event) => event.type)).toContain('credential.created');
     expect(
       await service.list({ ...principal, clientId: 'client-2', tenantId: 'tenant-2' }),
     ).toEqual([]);
-    expect(service.revoke(issued.id, { ...principal, clientId: 'client-2' })).rejects.toThrow();
+    await expect(
+      service.revoke(issued.id, { ...principal, clientId: 'client-2' }),
+    ).rejects.toThrow();
+    await service.revoke(issued.id, principal);
+    expect(repo.auditEvents.map((event) => event.type)).toContain('credential.revoked');
   });
 });

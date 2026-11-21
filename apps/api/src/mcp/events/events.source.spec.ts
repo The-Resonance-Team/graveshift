@@ -132,4 +132,47 @@ describe('NatsEventSource', () => {
     expect(error).toBeInstanceOf(Error);
     expect((error as { message: string }).message).toContain('NATS is not configured');
   });
+
+  test('shares the first reader connection across concurrent polls and closes it', async () => {
+    let resolveConnection!: (value: { reader: EventsReader; close(): Promise<void> }) => void;
+    let connects = 0;
+    let closes = 0;
+    const reader = fakeReader({ lastSeq: 0 });
+    const pending = new Promise<{ reader: EventsReader; close(): Promise<void> }>((resolve) => {
+      resolveConnection = resolve;
+    });
+    const source = new NatsEventSource(
+      { ...config, natsUrl: 'nats://local' },
+      undefined,
+      async () => {
+        connects++;
+        return pending;
+      },
+    );
+    const first = source.read(null, 1);
+    const second = source.read(null, 1);
+    resolveConnection({ reader, close: async () => void closes++ });
+    await Promise.all([first, second]);
+    expect(connects).toBe(1);
+    await source.onModuleDestroy();
+    expect(closes).toBe(1);
+  });
+
+  test('clears a failed reader connection so a later poll can retry', async () => {
+    let connects = 0;
+    const reader = fakeReader({ lastSeq: 0 });
+    const source = new NatsEventSource(
+      { ...config, natsUrl: 'nats://local' },
+      undefined,
+      async () => {
+        connects++;
+        if (connects === 1) throw new Error('temporary connect failure');
+        return { reader, close: async () => {} };
+      },
+    );
+    await expect(source.read(null, 1)).rejects.toThrow('temporary connect failure');
+    await source.read(null, 1);
+    expect(connects).toBe(2);
+    await source.onModuleDestroy();
+  });
 });

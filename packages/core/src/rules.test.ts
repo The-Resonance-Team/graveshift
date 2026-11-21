@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import {
-  DEFAULT_RULE_ACTION,
+  DEFAULT_RULE_ACTIONS,
   detectRuleOverrides,
   evaluateEnvelope,
   mergeRules,
@@ -39,11 +39,24 @@ describe('rule engine', () => {
     expect(RuleSchema.safeParse({ ...valid, priority: -1 }).success).toBe(false);
   });
 
-  test('returns the default action when no rule matches', () => {
-    expect(DEFAULT_RULE_ACTION).toBe('detect');
+  test('defaults info to telemetry and warning or critical to detection', () => {
+    expect(DEFAULT_RULE_ACTIONS).toEqual({
+      info: 'telemetry',
+      warning: 'detect',
+      critical: 'detect',
+    });
     expect(evaluateEnvelope(envelope, [])).toBe('detect');
     const other = rule('rule-1', 'suppress', 0, { services: ['worker'] });
     expect(evaluateEnvelope(envelope, [other])).toBe('detect');
+    expect(evaluateEnvelope({ ...envelope, severity: 'critical' }, [])).toBe('detect');
+    expect(evaluateEnvelope({ ...envelope, severity: 'info' }, [])).toBe('telemetry');
+  });
+
+  test('info events never enter detection, but a rule may suppress them', () => {
+    const detect = rule('detect-info', 'detect', 0, {});
+    const suppress = rule('suppress-info', 'suppress', 0, {});
+    expect(evaluateEnvelope({ ...envelope, severity: 'info' }, [detect])).toBe('telemetry');
+    expect(evaluateEnvelope({ ...envelope, severity: 'info' }, [suppress])).toBe('suppress');
   });
 
   test('returns the action of one matching rule', () => {

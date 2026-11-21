@@ -1,5 +1,7 @@
 import type { EventEnvelope } from '@graveshift/core';
 
+export type { EventEnvelope } from '@graveshift/core';
+
 export interface Publisher {
   publish(envelope: EventEnvelope): Promise<void>;
 }

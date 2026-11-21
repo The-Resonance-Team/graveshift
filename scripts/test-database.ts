@@ -1,0 +1,41 @@
+import { resolve } from 'node:path';
+
+const root = resolve(import.meta.dir, '..');
+const port = process.env.GRAVESHIFT_TEST_PG_PORT ?? '55438';
+if (!/^\d{4,5}$/.test(port) || Number(port) > 65535) throw new Error('Invalid test database port');
+const compose = [
+  'docker',
+  'compose',
+  '-f',
+  'deploy/compose/database-test.yml',
+  '-p',
+  `graveshift-tests-${process.pid}`,
+];
+const env = {
+  ...process.env,
+  GRAVESHIFT_TEST_PG_PORT: port,
+  DATABASE_URL: `postgresql://graveshift_test:local-test-only@127.0.0.1:${port}/graveshift_test`,
+};
+async function run(command: string[], cwd: string = root) {
+  const child = Bun.spawn(command, { cwd, env, stdout: 'inherit', stderr: 'inherit' });
+  const status = await child.exited;
+  if (status !== 0)
+    throw new Error(`Database check failed: ${command[0]} ${command[1] ?? ''} (${status})`);
+}
+try {
+  await run([...compose, 'up', '-d', '--wait', '--wait-timeout', '40']);
+  // prisma.config.ts lives in apps/api on this branch; run migrations from there.
+  await run(['bun', 'x', '--no-install', 'prisma', 'migrate', 'deploy'], resolve(root, 'apps/api'));
+  await run([
+    'bun',
+    'test',
+    '--check',
+    '--timeout',
+    '30000',
+    '--tsconfig-override',
+    'apps/api/tsconfig.json',
+    './apps/api/test/database',
+  ]);
+} finally {
+  await run([...compose, 'down', '--volumes', '--remove-orphans']);
+}

@@ -5,7 +5,7 @@ import { EventEnvelopeSchema, type EventEnvelope } from './schemas';
 // Reuse the envelope field validators so a rule match uses the same wire vocabulary.
 const field = EventEnvelopeSchema.shape;
 
-export const RULE_ACTIONS = ['detect', 'suppress', 'escalate'] as const;
+export const RULE_ACTIONS = ['detect', 'suppress', 'escalate', 'telemetry'] as const;
 export const RuleActionSchema = z.enum(RULE_ACTIONS);
 export type RuleAction = z.infer<typeof RuleActionSchema>;
 
@@ -26,7 +26,11 @@ export const RuleSchema = z.object({
 });
 export type Rule = z.infer<typeof RuleSchema>;
 
-export const DEFAULT_RULE_ACTION: RuleAction = 'detect';
+export const DEFAULT_RULE_ACTIONS: Readonly<Record<EventEnvelope['severity'], RuleAction>> = {
+  info: 'telemetry',
+  warning: 'detect',
+  critical: 'detect',
+};
 
 export interface OverrideDetection {
   ids: string[];
@@ -73,9 +77,11 @@ const matches = (rule: Rule, envelope: EventEnvelope): boolean => {
 // A pure engine: it sorts a copy, calls no model and causes no side effects.
 export function evaluateEnvelope(envelope: EventEnvelope, rules: readonly Rule[]): RuleAction {
   for (const rule of [...rules].sort(order)) {
-    if (rule.enabled && matches(rule, envelope)) return rule.action;
+    if (rule.enabled && matches(rule, envelope)) {
+      return envelope.severity === 'info' && rule.action !== 'suppress' ? 'telemetry' : rule.action;
+    }
   }
-  return DEFAULT_RULE_ACTION;
+  return DEFAULT_RULE_ACTIONS[envelope.severity];
 }
 
 export function mergeRules(systemRules: readonly Rule[], clientRules: readonly Rule[]): Rule[] {

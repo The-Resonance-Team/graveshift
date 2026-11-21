@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, mkdirSync, realpathSync } from 'node:fs';
+import { lstatSync, mkdirSync, realpathSync } from 'node:fs';
 import { dirname, sep } from 'node:path';
 
 import { type Patch, guardPatch, PatchSchema, type RepoRules } from '@graveshift/patch';
@@ -11,15 +11,14 @@ import {
 } from '@graveshift/policy';
 import { redact } from '@graveshift/redactor';
 
+import { type DecisionBinding, verifyPolicySignature } from './policy-signature';
+
 export const BRANCH_SLUG_PATTERN = /^graveshift\/[A-Za-z0-9._/-]+$/;
-
 const SAFE_REF = /^[A-Za-z0-9._/-]+$/;
-
 export const MAX_PATCH_PAYLOAD_BYTES = 1024 * 1024;
 
 export class OneShotPolicyError extends Error {
   readonly code: 'REPO_RULES_UNKNOWN' | 'POLICY_DENIED' | 'POLICY_DECISION_INVALID';
-
   constructor(code: OneShotPolicyError['code'], message: string) {
     super(message);
     this.name = 'OneShotPolicyError';
@@ -37,11 +36,9 @@ export function assertBranchSlug(slug: string | undefined): string {
   return slug;
 }
 
-// The pre-checkout step checks this value against the repository allowlist.
 export function assertBaseRef(baseRef: string | undefined): string {
-  if (baseRef === undefined || !SAFE_REF.test(baseRef)) {
+  if (baseRef === undefined || !SAFE_REF.test(baseRef))
     throw new Error('base_ref is not a safe git ref');
-  }
   if (baseRef.split('/').some((part) => part === '' || part === '.' || part === '..')) {
     throw new Error('base_ref has an invalid path segment');
   }
@@ -50,26 +47,23 @@ export function assertBaseRef(baseRef: string | undefined): string {
 
 export function assertPayloadSize(raw: string | undefined): string {
   if (raw === undefined || raw.length === 0) throw new Error('patch_payload is empty');
-  if (Buffer.byteLength(raw, 'utf8') > MAX_PATCH_PAYLOAD_BYTES) {
+  if (Buffer.byteLength(raw, 'utf8') > MAX_PATCH_PAYLOAD_BYTES)
     throw new Error('patch_payload exceeds the size limit');
-  }
   return raw;
 }
 
 const asObject = (value: unknown): Record<string, unknown> => {
-  if (typeof value !== 'object' || value === null) throw new Error('expected an object');
+  if (typeof value !== 'object' || value === null || Array.isArray(value))
+    throw new Error('expected an object');
   return value as Record<string, unknown>;
 };
-
 const asString = (value: unknown, field: string): string => {
   if (typeof value !== 'string' || value === '') throw new Error(`${field} must be a string`);
   return value;
 };
-
 const asNumber = (value: unknown, field: string): number => {
-  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value < 0)
     throw new Error(`${field} must be a non-negative number`);
-  }
   return value;
 };
 
@@ -89,15 +83,12 @@ export function assertPolicyAllow(raw: string | undefined): RecordedDecision {
   }
   const decision = asObject(value);
   if (decision.effect !== 'allow') throw new Error('no recorded policy allow');
-  if (decision.action !== undefined && decision.action !== 'open_pr') {
+  if (decision.action !== undefined && decision.action !== 'open_pr')
     throw new Error('policy_decision is not for open_pr');
-  }
   if (decision.context === undefined) throw new Error('policy_decision has no context');
-
   const recorded: RecordedDecision = { context: decision.context };
-  if (typeof decision.matchedRule === 'string' || decision.matchedRule === null) {
+  if (typeof decision.matchedRule === 'string' || decision.matchedRule === null)
     recorded.matchedRule = decision.matchedRule;
-  }
   if (typeof decision.reason === 'string') recorded.reason = decision.reason;
   return recorded;
 }
@@ -105,9 +96,8 @@ export function assertPolicyAllow(raw: string | undefined): RecordedDecision {
 export function parsePolicyContext(raw: unknown): PolicyContext {
   const context = asObject(raw);
   const signals = context.signals;
-  if (!Array.isArray(signals) || !signals.every((signal) => typeof signal === 'string')) {
+  if (!Array.isArray(signals) || !signals.every((signal) => typeof signal === 'string'))
     throw new Error('context.signals must be an array of strings');
-  }
   const counters = asObject(context.counters);
   const base: PolicyContext = {
     service: asString(context.service, 'context.service'),
@@ -126,23 +116,30 @@ export function parsePolicyContext(raw: unknown): PolicyContext {
   return base;
 }
 
-// A caller-supplied "allow" is not a grant. Re-evaluate it with the policy engine.
 export function evaluatePolicyAllow(raw: string | undefined, policy: Policy): PolicyDecision {
   const recorded = assertPolicyAllow(raw);
   const decision = decide(policy, parsePolicyContext(recorded.context), { name: 'open_pr' });
-  if (decision.effect !== 'allow') {
+  if (decision.effect !== 'allow')
     throw new OneShotPolicyError(
       'POLICY_DENIED',
       `policy re-evaluation did not allow open_pr: ${decision.reason}`,
     );
-  }
-  if (recorded.matchedRule !== undefined && recorded.matchedRule !== decision.matchedRule) {
+  if (recorded.matchedRule !== undefined && recorded.matchedRule !== decision.matchedRule)
     throw new OneShotPolicyError('POLICY_DECISION_INVALID', 'recorded matchedRule does not match');
-  }
-  if (recorded.reason !== undefined && recorded.reason !== decision.reason) {
+  if (recorded.reason !== undefined && recorded.reason !== decision.reason)
     throw new OneShotPolicyError('POLICY_DECISION_INVALID', 'recorded reason does not match');
-  }
   return decision;
+}
+
+export function evaluateSignedPolicyAllow(
+  raw: string | undefined,
+  signature: string | undefined,
+  secret: string | undefined,
+  binding: DecisionBinding,
+  policy: Policy,
+): PolicyDecision {
+  verifyPolicySignature(raw, signature, secret, binding);
+  return evaluatePolicyAllow(raw, policy);
 }
 
 export interface OneShotPolicy {
@@ -152,17 +149,12 @@ export interface OneShotPolicy {
 
 export async function loadOneShotPolicy(): Promise<OneShotPolicy> {
   const policy = await loadPolicy(process.env.POLICY_PATH ?? 'policy.example.yaml');
-  const repoName = process.env.GITHUB_REPOSITORY;
-  const repo =
-    repoName === undefined
-      ? undefined
-      : policy.github.repos.find((entry) => entry.repo === repoName);
-  if (repo === undefined) {
+  const repo = policy.github.repos.find((entry) => entry.repo === process.env.GITHUB_REPOSITORY);
+  if (repo === undefined)
     throw new OneShotPolicyError(
       'REPO_RULES_UNKNOWN',
-      `no policy rules for repository ${repoName ?? '<unset>'}`,
+      `no policy rules for repository ${process.env.GITHUB_REPOSITORY ?? '<unset>'}`,
     );
-  }
   return {
     policy,
     rules: {
@@ -190,32 +182,30 @@ export function validatePatch(raw: string, rules: RepoRules): Patch {
   try {
     guardPatch(parsed.data, rules);
   } catch (error) {
-    const reason = error instanceof Error ? redact(error.message) : 'unknown reason';
-    throw new Error(`patch rejected: ${reason}`, { cause: error });
+    throw new Error(
+      `patch rejected: ${error instanceof Error ? redact(error.message) : 'unknown reason'}`,
+      { cause: error },
+    );
   }
   return parsed.data;
 }
 
-// Redaction can change file content, so parse and guard the result again.
 export function redactPatch(patch: Patch): Patch {
-  const files = patch.files.map((file) => ({
-    ...file,
-    content: file.content === null ? null : redact(file.content),
-  }));
-  const parsed = PatchSchema.safeParse({ files });
-  if (!parsed.success) throw new Error('redacted patch failed schema validation');
-  return parsed.data;
+  return PatchSchema.parse({
+    files: patch.files.map((file) => ({
+      ...file,
+      content: file.content === null ? null : redact(file.content),
+    })),
+  });
 }
 
 export function assertNoSymlinkEscape(rootReal: string, target: string): void {
-  if (target !== rootReal && !target.startsWith(`${rootReal}${sep}`)) {
+  if (target !== rootReal && !target.startsWith(`${rootReal}${sep}`))
     throw new Error('patch path escapes the workspace');
-  }
   let cursor = target;
   while (cursor !== rootReal && cursor !== dirname(cursor)) {
-    if (existsSync(cursor) && lstatSync(cursor).isSymbolicLink()) {
+    if (lstatSync(cursor, { throwIfNoEntry: false })?.isSymbolicLink())
       throw new Error('patch path crosses a symlink');
-    }
     cursor = dirname(cursor);
   }
 }
@@ -224,16 +214,15 @@ export function assertParentInside(rootReal: string, target: string): void {
   const parent = dirname(target);
   mkdirSync(parent, { recursive: true });
   const realParent = realpathSync(parent);
-  if (realParent !== rootReal && !realParent.startsWith(`${rootReal}${sep}`)) {
+  if (realParent !== rootReal && !realParent.startsWith(`${rootReal}${sep}`))
     throw new Error('patch path escapes the workspace');
-  }
-  if (existsSync(target) && lstatSync(target).isSymbolicLink()) {
+  if (lstatSync(target, { throwIfNoEntry: false })?.isSymbolicLink())
     throw new Error('patch path crosses a symlink');
-  }
 }
 
 export function fail(error: unknown): never {
-  const message = error instanceof Error ? redact(error.message) : 'unknown failure';
-  console.error(`one-shot job failed: ${message}`);
+  console.error(
+    `one-shot job failed: ${error instanceof Error ? redact(error.message) : 'unknown failure'}`,
+  );
   process.exit(1);
 }

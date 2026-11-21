@@ -11,7 +11,6 @@ export const NATS_CONNECTOR = Symbol('NATS_CONNECTOR');
 export type NatsConnector = (servers: string) => Promise<NatsPublisherHandle>;
 
 export interface AuthConfig {
-  credentialsPath: string;
   jwtSecret: string;
   jwtIssuer: string;
   jwtAudience: string;
@@ -36,6 +35,7 @@ export interface CredentialRecord {
   createdAt: string;
   expiresAt: string | null;
   revokedAt: string | null;
+  expirationAuditedAt: string | null;
 }
 
 export interface Principal {

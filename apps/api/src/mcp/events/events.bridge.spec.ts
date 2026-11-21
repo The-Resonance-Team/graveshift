@@ -3,7 +3,7 @@ import type { McpServer } from '@modelcontextprotocol/server';
 import { describe, expect, test } from 'bun:test';
 
 import type { CredentialService } from '../../auth/services/credential.service';
-import { EventsBridge, EventsBridgeError } from './events.bridge';
+import { EventsBridge, EventsBridgeError, registerEvents } from './events.bridge';
 import type { EventPollService } from './events.service';
 
 interface RecordedFactory {
@@ -48,5 +48,31 @@ describe('EventsBridge', () => {
       'events/subscribe',
       'events/unsubscribe',
     ]);
+  });
+
+  test('requires authentication for events/list and tenant scope for events/poll', async () => {
+    const handlers = new Map<string, (...args: never[]) => unknown>();
+    const server = {
+      server: {
+        registerCapabilities: () => undefined,
+        setRequestHandler: (
+          method: string,
+          _schema: unknown,
+          handler: (...args: never[]) => unknown,
+        ) => handlers.set(method, handler),
+      },
+    } as unknown as McpServer;
+    const service = {
+      list: () => ({ resultType: 'complete' as const, events: [] }),
+      poll: (_params: unknown, scopes: readonly string[], tenantId: string) =>
+        Promise.resolve({ scopes, tenantId }),
+    } as unknown as EventPollService;
+    registerEvents(server, service, async () => ({ scopes: [] }));
+    const list = handlers.get('events/list')!;
+    await expect(list()).rejects.toMatchObject({ code: -32024 });
+    const poll = handlers.get('events/poll')!;
+    await expect(poll({ name: 'incident.changed' } as never)).rejects.toMatchObject({
+      code: -32024,
+    });
   });
 });

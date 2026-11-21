@@ -1,7 +1,7 @@
 export { err, GraveshiftError, ok, TransitionError, TriageError } from './errors';
 export type { Result, TransitionErrorCode, TriageErrorCode } from './errors';
 export {
-  DEFAULT_RULE_ACTION,
+  DEFAULT_RULE_ACTIONS,
   detectRuleOverrides,
   evaluateEnvelope,
   mergeRules,

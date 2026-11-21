@@ -6,7 +6,6 @@ import type { OAuthClientConfig } from './env.schema';
 
 export function createAuthConfig(config: ConfigService): AuthConfig {
   return {
-    credentialsPath: config.getOrThrow<string>('GRAVESHIFT_CREDENTIALS_PATH'),
     jwtSecret: config.getOrThrow<string>('GRAVESHIFT_OAUTH_JWT_SECRET'),
     jwtIssuer: config.getOrThrow<string>('GRAVESHIFT_OAUTH_ISSUER'),
     jwtAudience: config.getOrThrow<string>('GRAVESHIFT_OAUTH_AUDIENCE'),

@@ -93,6 +93,7 @@ describe('MCP Events extension through /mcp (e2e)', () => {
   let source!: InMemoryEventSource;
   let client!: Client;
   let other!: Client;
+  let readerToken!: string;
   let persistedCursor!: string;
 
   beforeAll(async () => {
@@ -126,7 +127,7 @@ describe('MCP Events extension through /mcp (e2e)', () => {
         .expect(201);
       return response.body.value as string;
     };
-    const readerToken = await create('events-reader', ['incidents:read']);
+    readerToken = await create('events-reader', ['incidents:read']);
     const otherToken = await create('events-other', ['logs:read']);
     client = await connectMcpClient(moduleRef, { token: readerToken });
     other = await connectMcpClient(moduleRef, { token: otherToken });
@@ -241,5 +242,30 @@ describe('MCP Events extension through /mcp (e2e)', () => {
       .set('authorization', `Bearer ${'x'.repeat(32)}`)
       .send({ jsonrpc: '2.0', id: 1, method: 'events/list' })
       .expect(404);
+  });
+
+  test('HTTP guards allow authenticated discovery and deny a wrong event scope', async () => {
+    const httpCall = (method: string, params: object) =>
+      request(app.getHttpServer())
+        .post('/mcp')
+        .set('accept', 'application/json, text/event-stream')
+        .set('authorization', `Bearer ${readerToken}`)
+        .set('MCP-Protocol-Version', '2026-07-28')
+        .set('Mcp-Method', method)
+        .send({
+          jsonrpc: '2.0',
+          id: 9,
+          method,
+          params: {
+            ...params,
+            _meta: {
+              'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+              'io.modelcontextprotocol/clientCapabilities': {},
+            },
+          },
+        });
+    const discovered = await httpCall('events/list', {});
+    expect(discovered.status, JSON.stringify(discovered.body)).toBe(200);
+    await httpCall('events/poll', { name: 'log.entry', cursor: null }).expect(403);
   });
 });

@@ -16,6 +16,10 @@ if (migrationFiles.length === 0) {
 
 const normalize = (sql: string) =>
   sql
+    .replace(
+      /-- BEGIN unmanaged append-only audit enforcement[\s\S]*?-- END unmanaged append-only audit enforcement\./g,
+      '',
+    )
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(

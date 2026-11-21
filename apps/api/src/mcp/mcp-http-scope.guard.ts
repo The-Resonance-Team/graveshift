@@ -6,6 +6,8 @@ import {
 } from '@nestjs/common';
 import type { AuthInfo } from '@modelcontextprotocol/server';
 
+import { findEventType } from './events/events.types';
+
 export const MCP_READ_SCOPE_ORDER = [
   'incidents:read',
   'diagnoses:read',
@@ -36,7 +38,7 @@ interface McpCall {
 }
 
 interface McpHttpRequest {
-  authInfo?: AuthInfo;
+  authInfo?: AuthInfo & { tenantId?: string };
   body?: McpCall | McpCall[];
 }
 
@@ -57,6 +59,10 @@ export class McpHttpScopeGuard implements CanActivate {
     for (const call of calls) {
       const method = call.method ?? '';
       if (method.startsWith('notifications/') || PROTOCOL_METHODS.has(method)) continue;
+      if (method === 'events/list') {
+        if (!auth.tenantId) throw new ForbiddenException();
+        continue;
+      }
       const required = this.requiredScope(method, call, scopes);
       if (!required || !scopes.includes(required)) throw new ForbiddenException();
     }
@@ -75,6 +81,10 @@ export class McpHttpScopeGuard implements CanActivate {
     if (method === 'tools/call' || method === 'prompts/get') {
       const name = call.params?.name;
       return name ? PRIMITIVE_SCOPES[name] : undefined;
+    }
+    if (method === 'events/poll') {
+      const name = call.params?.name;
+      return name ? findEventType(name)?.scope : undefined;
     }
     if (method === 'resources/read') {
       const uri = call.params?.uri ?? '';

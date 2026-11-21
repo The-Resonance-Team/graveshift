@@ -1,105 +1,63 @@
-import { mkdir, mkdtemp, readdir, rm, stat, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 
-import { TEST_CONFIG } from '../../../test/fakes/auth-test-config';
-import type { CredentialRecord } from '../auth.types';
-import { FileCredentialRepo } from './credential.repo';
+import { FakeCredentialRepo } from '../../../test/fakes/fake-credential-repo';
+import type { CredentialRecord, Principal } from '../auth.types';
+import { CredentialLimitError } from './credential.repo';
 
-const record: CredentialRecord = {
-  id: 'cred-1',
-  kind: 'plugin',
-  name: 'publisher',
-  prefix: 'plugin_abcdef12',
-  hash: 'a'.repeat(64),
+const principal: Principal = {
   clientId: 'client-1',
   tenantId: 'tenant-1',
-  scopes: ['events:publish'],
-  service: null,
-  createdAt: '2026-11-20T10:00:00.000Z',
-  expiresAt: null,
-  revokedAt: null,
+  scopes: ['tokens:manage', 'events:publish'],
 };
 
-describe('FileCredentialRepo', () => {
-  let dir: string;
-  let repo: FileCredentialRepo;
+const record = (id: string, hash: string): CredentialRecord => ({
+  id,
+  kind: 'plugin',
+  name: id,
+  prefix: 'plugin_abcdef12',
+  hash,
+  clientId: principal.clientId,
+  tenantId: principal.tenantId,
+  scopes: ['events:publish'],
+  service: null,
+  createdAt: new Date().toISOString(),
+  expiresAt: null,
+  revokedAt: null,
+  expirationAuditedAt: null,
+});
 
-  beforeEach(async () => {
-    dir = await mkdtemp(join(tmpdir(), 'graveshift-creds-'));
-    repo = new FileCredentialRepo({ ...TEST_CONFIG, credentialsPath: join(dir, 'store.json') });
+describe('credential repository contract', () => {
+  test('stores only the hash, scopes by principal and emits a create event', async () => {
+    const repo = new FakeCredentialRepo();
+    await repo.add(record('cred-1', 'a'.repeat(64)));
+    expect(await repo.findByHash('a'.repeat(64))).toMatchObject({ id: 'cred-1' });
+    expect(await repo.list(principal)).toHaveLength(1);
+    expect(await repo.list({ ...principal, tenantId: 'tenant-2' })).toEqual([]);
+    expect(repo.auditEvents).toEqual([
+      {
+        actor: 'client-1',
+        type: 'credential.created',
+        payload: { credentialId: 'cred-1', kind: 'plugin', name: 'cred-1' },
+      },
+    ]);
   });
 
-  afterEach(async () => {
-    await rm(dir, { recursive: true, force: true });
-  });
-
-  test('returns an empty list when no file exists', async () => {
-    expect(await repo.list()).toEqual([]);
-  });
-
-  test('persists a record with mode 0600', async () => {
-    await repo.add(record);
-    expect(await repo.list()).toHaveLength(1);
-    expect((await repo.findById('cred-1'))?.hash).toBe(record.hash);
-    expect((await repo.findById('cred-1'))?.name).toBe('publisher');
-    const info = await stat(join(dir, 'store.json'));
-    expect(info.mode & 0o777).toBe(0o600);
-  });
-
-  test('serializes concurrent writes without losing records', async () => {
-    await Promise.all(
-      Array.from({ length: 8 }, (_, index) =>
-        repo.add({ ...record, id: `cred-${index}`, hash: `${index}`.repeat(64) }),
+  test('limits concurrent issue calls and records revocation once', async () => {
+    const repo = new FakeCredentialRepo();
+    const results = await Promise.allSettled(
+      Array.from({ length: 12 }, (_, index) =>
+        repo.add(record(`cred-${index}`, `${index}`.repeat(64))),
       ),
     );
-    expect(await repo.list()).toHaveLength(8);
-  });
+    expect(results.filter((item) => item.status === 'fulfilled')).toHaveLength(10);
+    expect(
+      results.filter(
+        (item) => item.status === 'rejected' && item.reason instanceof CredentialLimitError,
+      ),
+    ).toHaveLength(2);
 
-  test('rejects an invalid JSON shape', async () => {
-    await writeFile(join(dir, 'store.json'), JSON.stringify({ bad: true }));
-    expect(repo.list()).rejects.toThrow('invalid shape');
-  });
-
-  test('rejects an unknown kind and non-string scopes', async () => {
-    const bad = { ...record, kind: 'other' };
-    await writeFile(join(dir, 'store.json'), JSON.stringify([bad]));
-    expect(repo.list()).rejects.toThrow('invalid shape');
-    await writeFile(join(dir, 'store.json'), JSON.stringify([{ ...record, scopes: [3] }]));
-    expect(repo.list()).rejects.toThrow('invalid shape');
-  });
-
-  test('creates the directory with mode 0700', async () => {
-    const nested = join(dir, 'nested', 'store.json');
-    const nestedRepo = new FileCredentialRepo({ ...TEST_CONFIG, credentialsPath: nested });
-    await nestedRepo.add(record);
-    const info = await stat(join(dir, 'nested'));
-    expect(info.mode & 0o777).toBe(0o700);
-  });
-
-  test('removes the temp file when a write fails', async () => {
-    await mkdir(join(dir, 'store.json'));
-    expect(repo.add(record)).rejects.toThrow();
-    const files = await readdir(dir);
-    expect(files.some((file) => file.endsWith('.tmp'))).toBe(false);
-  });
-
-  test('surfaces a write failure', async () => {
-    const blocker = join(dir, 'blocker');
-    await writeFile(blocker, 'not a directory');
-    const badRepo = new FileCredentialRepo({
-      ...TEST_CONFIG,
-      credentialsPath: join(blocker, 'store.json'),
-    });
-    expect(badRepo.add(record)).rejects.toThrow();
-  });
-
-  test('replaces a record in place', async () => {
-    await repo.add(record);
-    await repo.replace({ ...record, revokedAt: '2026-11-21T10:00:00.000Z' });
-    const list = await repo.list();
-    expect(list).toHaveLength(1);
-    expect(list[0]?.revokedAt).not.toBeNull();
+    expect(await repo.revoke('cred-0', principal, new Date().toISOString())).toBe(true);
+    expect(await repo.revoke('cred-0', principal, new Date().toISOString())).toBe(true);
+    expect(repo.auditEvents.filter((event) => event.type === 'credential.revoked')).toHaveLength(1);
   });
 });

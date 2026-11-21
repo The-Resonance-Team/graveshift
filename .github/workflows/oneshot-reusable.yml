@@ -21,7 +21,11 @@ on:
         required: true
         type: string
       policy_decision:
-        description: Recorded policy decision with context; re-evaluated before any write.
+        description: Platform policy decision with signed binding metadata.
+        required: true
+        type: string
+      policy_signature:
+        description: HMAC-SHA256 signature over the policy decision and job binding.
         required: true
         type: string
       pr_title:
@@ -32,9 +36,16 @@ on:
         description: Base branch for the draft pull request, including stacked PRs.
         required: true
         type: string
+      base_sha:
+        description: Full base commit SHA bound to the signed platform decision.
+        required: true
+        type: string
     secrets:
       pr_token:
         description: Fine-grained, repo-scoped PAT used to push and open the draft PR.
+        required: true
+      policy_signing_key:
+        description: Shared HMAC key used by the platform policy signer.
         required: true
 
 permissions:
@@ -79,34 +90,55 @@ jobs:
           esac
           echo "base_ref=$BASE_REF" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout base
+      - name: Resolve trusted workflow revision
+        id: trusted
+        env:
+          TRUSTED_WORKFLOW_SHA: ${{ vars.GRAVESHIFT_TRUSTED_WORKFLOW_SHA }}
+        run: |
+          sha="$TRUSTED_WORKFLOW_SHA"
+          case "$sha" in
+            ''|*[!0-9a-f]*) echo "could not resolve trusted workflow revision" >&2; exit 1 ;;
+          esac
+          [ "${#sha}" = 40 ] || exit 1
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout trusted workflow code
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-          ref: ${{ steps.refs.outputs.base_ref }}
+          ref: ${{ steps.trusted.outputs.sha }}
+          path: trusted
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version-file: package.json
+          bun-version-file: trusted/package.json
 
       - name: Install dependencies
+        working-directory: trusted
         run: bun install --frozen-lockfile
 
       - name: Prepare patch
         env:
           BASE_REF: ${{ steps.refs.outputs.base_ref }}
+          BASE_SHA: ${{ inputs.base_sha }}
+          WORK_ITEM_ID: ${{ inputs.work_item_id }}
+          INCIDENT_REF: ${{ inputs.incident_ref }}
           BRANCH_SLUG: ${{ inputs.branch_slug }}
           PATCH_PAYLOAD: ${{ inputs.patch_payload }}
           POLICY_DECISION: ${{ inputs.policy_decision }}
+          POLICY_SIGNATURE: ${{ inputs.policy_signature }}
+          POLICY_SIGNING_KEY: ${{ secrets.policy_signing_key }}
+          PR_TITLE: ${{ inputs.pr_title }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+        working-directory: trusted
         run: bun run scripts/actions/prepare-patch.ts
 
       - name: Upload patch
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: oneshot-patch
-          path: patch.json
+          path: trusted/patch.json
           retention-days: 1
 
   open-pr:
@@ -114,8 +146,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
-      contents: write
-      pull-requests: write
+      contents: read
     steps:
       - name: Validate refs
         id: refs
@@ -145,32 +176,63 @@ jobs:
           esac
           echo "base_ref=$BASE_REF" >> "$GITHUB_OUTPUT"
 
-      - name: Checkout base
+      - name: Resolve trusted workflow revision
+        id: trusted
+        env:
+          TRUSTED_WORKFLOW_SHA: ${{ vars.GRAVESHIFT_TRUSTED_WORKFLOW_SHA }}
+        run: |
+          sha="$TRUSTED_WORKFLOW_SHA"
+          case "$sha" in
+            ''|*[!0-9a-f]*) echo "could not resolve trusted workflow revision" >&2; exit 1 ;;
+          esac
+          [ "${#sha}" = 40 ] || exit 1
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout trusted workflow code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          ref: ${{ steps.trusted.outputs.sha }}
+          path: trusted
+
+      - name: Checkout target base as data
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
           ref: ${{ steps.refs.outputs.base_ref }}
+          path: target
 
       - name: Setup Bun
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
-          bun-version-file: package.json
+          bun-version-file: trusted/package.json
 
       - name: Install dependencies
+        working-directory: trusted
         run: bun install --frozen-lockfile
 
       - name: Download patch
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           name: oneshot-patch
+          path: trusted
 
       - name: Apply patch and push branch
         env:
           BASE_REF: ${{ steps.refs.outputs.base_ref }}
+          BASE_SHA: ${{ inputs.base_sha }}
+          WORK_ITEM_ID: ${{ inputs.work_item_id }}
+          INCIDENT_REF: ${{ inputs.incident_ref }}
           BRANCH_SLUG: ${{ inputs.branch_slug }}
           POLICY_DECISION: ${{ inputs.policy_decision }}
+          POLICY_SIGNATURE: ${{ inputs.policy_signature }}
+          POLICY_SIGNING_KEY: ${{ secrets.policy_signing_key }}
+          PATCH_PAYLOAD: ${{ inputs.patch_payload }}
+          PR_TITLE: ${{ inputs.pr_title }}
           PR_TOKEN: ${{ secrets.pr_token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
+          PATCH_WORKSPACE: ../target
+        working-directory: trusted
         run: bun run scripts/actions/apply-patch.ts
 
       - name: Open draft pull request
@@ -180,7 +242,16 @@ jobs:
           BRANCH_SLUG: ${{ inputs.branch_slug }}
           WORK_ITEM_ID: ${{ inputs.work_item_id }}
           BASE_REF: ${{ steps.refs.outputs.base_ref }}
+        working-directory: trusted
         run: |
+          existing="$(gh pr list --head "$BRANCH_SLUG" --base "$BASE_REF" --state all --json url,state --jq '.[0] // empty')"
+          if [ -n "$existing" ]; then
+            url="$(echo "$existing" | jq -r .url)"
+            state="$(echo "$existing" | jq -r .state)"
+            if [ "$state" != "OPEN" ]; then echo "Pull request already exists in state $state: $url" >&2; exit 1; fi
+            echo "Draft pull request already exists: $url"
+            exit 0
+          fi
           gh pr create --draft \
             --base "$BASE_REF" \
             --head "$BRANCH_SLUG" \

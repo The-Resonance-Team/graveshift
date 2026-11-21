@@ -21,7 +21,11 @@ on:
         required: true
         type: string
       policy_decision:
-        description: Recorded policy decision with context; re-evaluated before any write.
+        description: Signed platform policy decision with bound job metadata.
+        required: true
+        type: string
+      policy_signature:
+        description: HMAC-SHA256 signature supplied by the trusted platform.
         required: true
         type: string
       pr_title:
@@ -30,6 +34,10 @@ on:
         type: string
       base_ref:
         description: Base branch for the draft pull request, including stacked PRs.
+        required: true
+        type: string
+      base_sha:
+        description: Full base commit SHA bound to the signed platform decision.
         required: true
         type: string
 
@@ -49,7 +57,10 @@ jobs:
       branch_slug: ${{ inputs.branch_slug }}
       patch_payload: ${{ inputs.patch_payload }}
       policy_decision: ${{ inputs.policy_decision }}
+      policy_signature: ${{ inputs.policy_signature }}
       pr_title: ${{ inputs.pr_title }}
       base_ref: ${{ inputs.base_ref }}
+      base_sha: ${{ inputs.base_sha }}
     secrets:
       pr_token: ${{ secrets.GRAVESHIFT_PR_TOKEN }}
+      policy_signing_key: ${{ secrets.GRAVESHIFT_POLICY_SIGNING_KEY }}

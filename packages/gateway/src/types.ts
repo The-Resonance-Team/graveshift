@@ -38,7 +38,7 @@ export interface GatewayTask<T> {
   system: string;
   prompt: string;
   schema: z.ZodType<T>;
-  validate?: (value: T) => string | undefined;
+  validate: (value: T) => string | undefined;
   rulesOnly?: () => T;
 }
 
