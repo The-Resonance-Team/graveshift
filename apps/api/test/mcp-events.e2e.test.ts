@@ -155,8 +155,8 @@ describe('MCP Events extension through /mcp (e2e)', () => {
     });
     expect((await client.listTools()).tools).toHaveLength(9);
     expect((await client.listPrompts()).prompts.map((p) => p.name)).toEqual([
-      'triage-incident',
-      'write-postmortem',
+      'triage_incident',
+      'write_postmortem',
     ]);
     expect((await client.listResourceTemplates()).resourceTemplates[0]?.uriTemplate).toBe(
       'graveshift://incidents/{id}/postmortem',
