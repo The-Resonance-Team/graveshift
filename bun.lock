@@ -15,6 +15,7 @@
       "name": "@graveshift/api",
       "version": "0.0.0",
       "dependencies": {
+        "@graveshift/agents": "workspace:*",
         "@graveshift/api-contract": "workspace:*",
         "@graveshift/core": "workspace:*",
         "@graveshift/policy": "workspace:*",

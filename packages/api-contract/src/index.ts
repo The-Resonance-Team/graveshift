@@ -6,3 +6,14 @@ export type { paths } from './generated/api';
 
 export type HealthResponse =
   paths['/healthz']['get']['responses'][200]['content']['application/json'];
+
+export type WorkItemListResponse =
+  paths['/api/work-items']['get']['responses'][200]['content']['application/json'];
+
+export type WorkItemResponse =
+  paths['/api/work-items/{id}']['get']['responses'][200]['content']['application/json'];
+
+export type TriageRequest =
+  paths['/api/work-items/{id}/triage']['post']['requestBody']['content']['application/json'];
+
+export type Assignee = WorkItemResponse['assignee'];

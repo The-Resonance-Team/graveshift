@@ -10,6 +10,7 @@
     "typecheck": "bun check --no-script"
   },
   "dependencies": {
+    "@graveshift/agents": "workspace:*",
     "@graveshift/api-contract": "workspace:*",
     "@graveshift/core": "workspace:*",
     "@graveshift/policy": "workspace:*",

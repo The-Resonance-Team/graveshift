@@ -12,7 +12,18 @@ const document = createOpenApiDocument(app);
 await app.close();
 
 // Adapter boundary: Swagger and the generator define their own OpenAPI object types.
-const types = await openapiTS(document as OpenAPI3);
+// openapi-typescript 6 drops Zod string patterns, so restore the assignee template literal here.
+const AGENT_ASSIGNEE_PATTERN = '^(needs_agent_)[\\s\\S]{0,}$';
+const types = await openapiTS(document as OpenAPI3, {
+  transform(schemaObject) {
+    // The pinned generator's SchemaObject type omits type and pattern, so narrow at this boundary.
+    const candidate = schemaObject as { type?: unknown; pattern?: unknown };
+    if (candidate.type === 'string' && candidate.pattern === AGENT_ASSIGNEE_PATTERN) {
+      return '`needs_agent_${string}`';
+    }
+    return undefined;
+  },
+});
 
 const outputs: Array<[URL, string]> = [
   [new URL('../src/openapi.json', import.meta.url), `${JSON.stringify(document, null, 2)}\n`],
