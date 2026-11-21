@@ -5,6 +5,10 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { loadPolicy, parsePolicy, type Policy } from '@graveshift/policy';
 
 import { AuthModule } from '../auth/auth.module';
+import { EventsBridge } from './events/events.bridge';
+import { EventPollService } from './events/events.service';
+import { NatsEventSource } from './events/events.source';
+import { MCP_EVENT_SOURCE } from './events/events.types';
 import { UnavailableMcpBackend } from './mcp.backend';
 import { McpPrompts } from './mcp.prompts';
 import { McpResources } from './mcp.resources';
@@ -38,6 +42,9 @@ const DEFAULT_POLICY: Policy = parsePolicy({
     McpResources,
     McpTokenVerifierService,
     McpBearerGuard,
+    EventPollService,
+    EventsBridge,
+    { provide: MCP_EVENT_SOURCE, useClass: NatsEventSource },
     { provide: MCP_BACKEND, useClass: UnavailableMcpBackend },
     {
       provide: MCP_POLICY,

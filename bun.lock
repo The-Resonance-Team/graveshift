@@ -26,6 +26,8 @@
         "@graveshift/policy": "workspace:*",
         "@graveshift/redactor": "workspace:*",
         "@modelcontextprotocol/server": "2.4.0",
+        "@nats-io/jetstream": "3.5.0",
+        "@nats-io/transport-node": "3.5.0",
         "@nestjs/common": "12.6.0",
         "@nestjs/config": "12.1.1",
         "@nestjs/core": "12.6.0",
