@@ -17,7 +17,7 @@ The Sentry DSN project id is the same `projectId`. It is not a second field. A s
 
 `projectId` keeps the safe-subject-token rule that `tenantId` had. A value may hold letters, digits, underscore and hyphen. A dot, a wildcard and a space are refused.
 
-A Credential has one `projectId`. A plugin Credential bound to Sentry must have the numeric DSN project id as its `projectId`. An MCP Credential has the project key as its `projectId`. The Credential no longer has a separate project id field, and the `(tenantId, projectId)` pair is removed. A Credential takes its `projectId` from the OAuth client that issues it. The create request cannot set it.
+A Credential has one `projectId`. A plugin Credential with a `service` binding must have the numeric DSN project id as its `projectId`. `POST /api/credentials` returns 422 when the issuing OAuth client has a `projectId` that is not 1 to 20 digits. An MCP Credential has the `projectId` of the issuing OAuth client, which may be any safe subject token. The Credential no longer has a separate project id field, and the `(tenantId, projectId)` pair is removed. A Credential takes its `projectId` from the OAuth client that issues it. The create request cannot set it.
 
 The route `POST /api/:projectId/envelope/` still requires a numeric value in the path. That is a narrower use of the same field. A Credential must have an equal `projectId`, or the route returns 403.
 

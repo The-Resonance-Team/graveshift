@@ -59,7 +59,7 @@ export function accessToken(
   return jwt.sign(
     {
       sub: overrides.clientId ?? 'client-1',
-      projectId: overrides.projectId ?? 'project-1',
+      projectId: overrides.projectId ?? '12345',
       scope: scopes,
       jti: 'test-jti',
     },
@@ -89,7 +89,7 @@ export function rawToken(jwt: JwtService, options: RawTokenOptions = {}): string
   return jwt.sign(
     {
       sub: options.sub ?? 'client-1',
-      projectId: options.projectId ?? 'project-1',
+      projectId: options.projectId ?? '12345',
       scope: options.scope ?? ['tokens:manage'],
       jti: 'raw-jti',
       ...(options.noExp ? {} : { exp: options.expired ? now - 60 : now + 300 }),
@@ -105,7 +105,7 @@ export function rawToken(jwt: JwtService, options: RawTokenOptions = {}): string
 export function validEnvelope(overrides: Partial<EventEnvelope> = {}): EventEnvelope {
   return {
     id: 'evt-1',
-    projectId: 'project-1',
+    projectId: '12345',
     source: 'native',
     service: 'api',
     type: 'signal.oom',

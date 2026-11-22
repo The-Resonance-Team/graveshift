@@ -1,3 +1,4 @@
+import { UnprocessableEntityException } from '@nestjs/common';
 import { describe, expect, test } from 'bun:test';
 
 import { TEST_CONFIG } from '../../../test/fakes/auth-test-config';
@@ -8,7 +9,7 @@ import { CredentialService } from './credential.service';
 
 const principal: Principal = {
   clientId: 'client-1',
-  projectId: 'project-1',
+  projectId: '12345',
   scopes: ['tokens:manage', 'incidents:read', 'events:publish'],
 };
 
@@ -41,7 +42,7 @@ describe('CredentialService', () => {
     const issued = await service.issue(dto(), principal);
     const verified = await service.verify(issued.value);
     expect(verified.clientId).toBe('client-1');
-    expect(verified.projectId).toBe('project-1');
+    expect(verified.projectId).toBe('12345');
     expect(verified.kind).toBe('mcp');
   });
 
@@ -75,6 +76,21 @@ describe('CredentialService', () => {
     expect(
       service.issue(dto({ kind: 'plugin', scopes: ['events:publish'], service: 'api' }), principal),
     ).resolves.toBeDefined();
+  });
+
+  test('rejects a service-bound plugin credential when the projectId is not numeric', async () => {
+    const { service } = setup();
+    await expect(
+      service.issue(dto({ kind: 'plugin', scopes: ['events:publish'], service: 'api' }), {
+        ...principal,
+        projectId: 'acme',
+      }),
+    ).rejects.toThrow(UnprocessableEntityException);
+    const mcp = await service.issue(dto({ kind: 'mcp', scopes: ['incidents:read'] }), {
+      ...principal,
+      projectId: 'acme',
+    });
+    expect(mcp.kind).toBe('mcp');
   });
 
   test('issues a publish-only credential bound to a Sentry project and Grave', async () => {

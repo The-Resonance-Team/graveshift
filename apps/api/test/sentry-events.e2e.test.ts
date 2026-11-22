@@ -113,6 +113,25 @@ describe('POST /api/:projectId/envelope (e2e)', () => {
     await push('54321').expect(403);
   });
 
+  test('rejects a non-numeric project id in the path with 422 and publishes nothing', async () => {
+    // The guard runs first. A Credential with an equal non-numeric projectId passes it,
+    // so the path DTO is the check that refuses the request.
+    const loose: CredentialVerifier = {
+      async verify(): Promise<VerifiedCredential> {
+        return { ...TEST_CREDENTIAL, projectId: 'acme' };
+      },
+    };
+    const looseCtx = await buildAuthApp({}, undefined, loose);
+    await request(looseCtx.app.getHttpServer())
+      .post('/api/acme/envelope/')
+      .query({ sentry_key: TEST_KEY })
+      .set('content-type', 'application/x-sentry-envelope')
+      .send(fixture)
+      .expect(422);
+    expect(looseCtx.publisher.envelopes).toHaveLength(0);
+    await looseCtx.app.close();
+  });
+
   test('rejects a missing key and a key without a Grave binding', async () => {
     const noDsn = Buffer.from(
       fixture.toString('utf8').replace(`,"dsn":"https://${TEST_KEY}@ingest.invalid/12345"`, ''),

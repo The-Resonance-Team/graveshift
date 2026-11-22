@@ -83,6 +83,19 @@ describe('credential routes (e2e)', () => {
     }).expect(422);
   });
 
+  test('POST rejects a service-bound plugin key when the client projectId is not numeric', async () => {
+    const nonNumeric = accessToken(ctx.jwt, ['tokens:manage', 'events:publish'], {
+      clientId: 'client-2',
+      projectId: 'project-2',
+    });
+    await post(nonNumeric, {
+      kind: 'plugin',
+      name: 'sentry',
+      scopes: ['events:publish'],
+      service: 'api',
+    }).expect(422);
+  });
+
   test('POST rejects a client-supplied projectId with 422', async () => {
     await post(manageToken, {
       kind: 'plugin',

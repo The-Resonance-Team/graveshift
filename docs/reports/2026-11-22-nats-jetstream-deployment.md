@@ -1,5 +1,7 @@
 # Self-hosted NATS JetStream for v2 (ticket 57)
 
+> Historical record. [ADR 0018](../adr/0018-project-scoped-state.md) supersedes the old `tenantId` text in this report. `projectId` replaces it.
+
 Date: 2026-11-22. Status: proposed for v2. Research only. No code changed.
 
 ## Goal

@@ -1,5 +1,7 @@
 # Deployment topology and the daemon link (ticket #61)
 
+> Historical record. [ADR 0018](../adr/0018-project-scoped-state.md) supersedes the old `tenantId` text in this report. `projectId` replaces it.
+
 Date: 2026-11-22. Status: done for v2.
 
 Base branch: `feat/platform-v2` at `0580ffc`, the head of the active stack at

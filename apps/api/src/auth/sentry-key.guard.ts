@@ -48,7 +48,6 @@ export class SentryKeyGuard implements CanActivate {
       credential.kind !== 'plugin' ||
       credential.projectId !== request.params.projectId ||
       !credential.service ||
-      !credential.projectId ||
       credential.scopes.length !== 1 ||
       credential.scopes[0] !== EVENTS_PUBLISH_SCOPE
     ) {

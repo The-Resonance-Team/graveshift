@@ -6,6 +6,7 @@ import {
   Injectable,
   NotFoundException,
   UnauthorizedException,
+  UnprocessableEntityException,
 } from '@nestjs/common';
 
 import {
@@ -53,6 +54,16 @@ export class CredentialService implements CredentialVerifier {
     if (!accepted) throw new ForbiddenException('The requested scopes are not allowed');
     if (dto.kind === 'mcp' && dto.service !== undefined) {
       throw new ForbiddenException('An MCP token cannot have a service binding');
+    }
+    // A bound plugin Credential serves the Sentry route, which needs a numeric DSN project id.
+    if (
+      dto.kind === 'plugin' &&
+      dto.service !== undefined &&
+      !/^\d{1,20}$/.test(principal.projectId)
+    ) {
+      throw new UnprocessableEntityException(
+        'A service-bound plugin credential needs an OAuth client with a numeric projectId',
+      );
     }
 
     try {

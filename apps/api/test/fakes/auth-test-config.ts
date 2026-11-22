@@ -7,7 +7,7 @@ export const TEST_CLIENT_SECRET = 'test-client-secret-123456';
 export const TEST_OAUTH_CLIENTS: Record<string, OAuthClientConfig> = {
   'client-1': {
     secret: TEST_CLIENT_SECRET,
-    projectId: 'project-1',
+    projectId: '12345',
     scopes: [
       'tokens:manage',
       'incidents:read',
@@ -22,7 +22,7 @@ export const TEST_OAUTH_CLIENTS: Record<string, OAuthClientConfig> = {
   'client-2': {
     secret: 'test-client-secret-654321',
     projectId: 'project-2',
-    scopes: ['tokens:manage', 'incidents:read'],
+    scopes: ['tokens:manage', 'incidents:read', 'events:publish'],
   },
 };
 
