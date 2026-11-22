@@ -4,11 +4,11 @@ This guide shows a host team how to send telemetry to Graveshift with an officia
 
 ## One SDK per host
 
-Use the official Sentry SDK for the host framework or language. One SDK per host is enough. No Graveshift SDK is needed. The host does not import a Graveshift plugin and does not hold a NATS credential. Do not build a custom Graveshift plugin for a framework that has an official Sentry SDK.
+Use the official Sentry SDK for the host framework or language. One SDK per host is enough. No Graveshift SDK is needed. The host does not hold a NATS credential.
 
 ## Supported platform families
 
-Sentry provides official SDKs for more than 100 platforms and frameworks. Use the official setup guide for the host platform. The table below groups the supported families. Each link opens an official Sentry setup guide. This page does not copy a full setup sequence and does not define an API; use the linked guide for the setup steps.
+Sentry provides official SDKs for many platforms. Use the official setup guide for your host platform. Each link below opens an official Sentry setup guide. This page does not copy setup steps. Use the linked guide for the steps.
 
 | Family | Official Sentry setup guides |
 | --- | --- |
@@ -17,7 +17,7 @@ Sentry provides official SDKs for more than 100 platforms and frameworks. Use th
 | Mobile | [Apple (iOS and macOS)](https://docs.sentry.io/platforms/apple/), [Android](https://docs.sentry.io/platforms/android/), [React Native](https://docs.sentry.io/platforms/react-native/), [Flutter](https://docs.sentry.io/platforms/dart/guides/flutter/) |
 | Game engines | [Unity](https://docs.sentry.io/platforms/unity/), [Unreal Engine](https://docs.sentry.io/platforms/unreal/), [Godot](https://docs.sentry.io/platforms/godot/) |
 | Native | [Native (C and C++)](https://docs.sentry.io/platforms/native/) (this family also holds the console SDKs) |
-| Serverless | [AWS Lambda (JavaScript)](https://docs.sentry.io/platforms/javascript/guides/aws-lambda/) and the other runtimes in the full platform list |
+| Serverless | [AWS Lambda (JavaScript)](https://docs.sentry.io/platforms/javascript/guides/aws-lambda/), [Google Cloud Functions (JavaScript)](https://docs.sentry.io/platforms/javascript/guides/gcp-functions/) |
 
 Use the [full Sentry platform list](https://docs.sentry.io/platforms/) to find a guide for a platform that is not named here.
 
@@ -29,7 +29,7 @@ A Sentry DSN keeps this structure:
 
 To send telemetry to Graveshift, the host takes its Sentry DSN and replaces the host with the Graveshift API host. Keep the official DSN structure.
 
-- `<credential>` is the text before `@`. It is the hex Credential value issued by #63 and stored by #71. Sentry DSN keys allow only letters, digits and underscore. #63 issues Credential values in lowercase hex, so the public key is the Credential value verbatim. Do not use a base64url value here.
+- `<credential>` is the text before `@`. It is the hex Credential value issued by #63 and stored by #71. The key is 64 lowercase hex characters. Use it verbatim in the DSN.
 - `<api-host>` is the Graveshift API host. See "Local development" below for the local case.
 - `<project-id>` is the numeric value after the last `/`. It exists only for SDK compatibility. It must equal `CredentialRecord.projectId`. The value is not the Grave.
 
@@ -39,7 +39,7 @@ The SDK posts standard Sentry envelopes to the route owned by #71:
 
 `POST /api/:projectId/envelope/`
 
-The `:projectId` path value must equal `CredentialRecord.projectId`. The host does not change how the SDK sends its key. The adapter accepts the SDK's default `sentry_key` query parameter and the envelope `dsn` and `Authorization: Sentry <key>` header forms. The adapter checks the key and the path value, resolves the Grave from the Credential service binding, redacts the event and publishes one `EventEnvelope`.
+The host does not change how the SDK sends its key. The adapter accepts the SDK's default `sentry_key` query parameter and the envelope `dsn` and `Authorization: Sentry <key>` header forms. The adapter checks the key and the path value, resolves the Grave from the Credential service binding, redacts the event and publishes one `EventEnvelope`. The adapter returns 403 when the key is not 64 lowercase hex characters, when the Credential is not a plugin Credential with only the events:publish scope, or when the Credential has no service binding or no projectId. Issue the Credential with a projectId.
 
 ## Local development
 
@@ -53,7 +53,7 @@ This setup needs no real Sentry account, no real NATS, no real secret and no cal
 
 ## What v2 collects
 
-In v2 the API collects every event the SDK sends. It does not apply the per-request or severity rules of the old hand-written plugin.
+In v2 the API collects every event the SDK sends.
 
 - An `event` item maps to a valid `EventEnvelope`.
 - Every other item type is skipped. This includes `session`, `client_report`, `attachment`, `transaction`, `span`, `profile`, replay and metric items. Unknown item types are skipped too.
@@ -62,7 +62,7 @@ Ticket #86 owns the next step: shaped telemetry, route fingerprints, trace handl
 
 ## Related documents
 
-- [ADR 0014: Official Sentry SDKs with a custom DSN own Plugin telemetry](https://github.com/The-Resonance-Team/graveshift/blob/feat/platform-v2/docs/adr/0014-official-sentry-sdks-for-supported-frameworks.md)
+- [ADR 0014: Official Sentry SDKs with a custom DSN own Plugin telemetry](../adr/0014-official-sentry-sdks-for-supported-frameworks.md)
 - [#63: hex Credential issuance](https://github.com/The-Resonance-Team/graveshift/issues/63)
 - [#71: Sentry envelope ingest adapter](https://github.com/The-Resonance-Team/graveshift/issues/71)
 - [#86: shaped telemetry](https://github.com/The-Resonance-Team/graveshift/issues/86)
