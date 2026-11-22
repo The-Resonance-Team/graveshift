@@ -22,6 +22,8 @@ export class FakeIdentityRepo implements IdentityRepo {
   readonly grants = new Map<string, DaemonGrantRecord>();
   /** Test seam: fail the root bootstrap before any in-memory write is committed. */
   failBootstrap = false;
+  /** Test seam: simulate a competing API instance that seeded the root Account. */
+  seedWinnerOnBootstrap = false;
   private sequence = 9999;
 
   async countAccounts(): Promise<number> {
@@ -37,6 +39,20 @@ export class FakeIdentityRepo implements IdentityRepo {
   }): Promise<{ account: AccountRecord; organization: OrganizationRecord }> {
     if (this.accounts.size > 0) {
       throw new IdentityConflictError('The root admin was already seeded');
+    }
+    if (this.seedWinnerOnBootstrap) {
+      const winner: AccountRecord = {
+        id: randomUUID(),
+        email: `winner-${randomUUID()}@identity.test`,
+        passwordHash: 'test-only-hash',
+        mustChangePassword: true,
+        createdAt: new Date().toISOString(),
+      };
+      this.accounts.set(winner.id, winner);
+      throw new IdentityConflictError('The root admin was already seeded');
+    }
+    if ([...this.organizations.values()].some((org) => org.slug === input.orgSlug)) {
+      throw new IdentityConflictError('The root Organization slug is already used');
     }
     // Stage every write. Nothing is visible until the whole bootstrap succeeds.
     const account: AccountRecord = {

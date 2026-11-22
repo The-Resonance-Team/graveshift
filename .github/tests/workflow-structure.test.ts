@@ -105,6 +105,16 @@ describe('CI workflows', () => {
     expect(listed.sort()).toEqual(expected.sort());
   });
 
+  test('the database gate runs test:database without a Graveshift daemon', () => {
+    const ci = workflows.find((workflow) => workflow.name === 'ci.yml');
+    expect(ci).toBeDefined();
+    const job = jobBlocks(ci!.content).get('test-database');
+    expect(job).toBeDefined();
+    const body = job!.join('\n');
+    expect(body).toContain('bun run test:database');
+    expect(/graveshift[\w-]*daemon|apps\/daemon\/src\/main\.ts/i.test(body)).toBe(false);
+  });
+
   test('every action ref is a full SHA with a version comment', () => {
     const invalid: string[] = [];
     for (const workflow of workflows) {

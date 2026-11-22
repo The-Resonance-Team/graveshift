@@ -15,6 +15,8 @@ export interface ActuatorOptions {
   namespace: string;
   requiredAudit: types.RequiredAudit;
   durableAdmission: claims.RequiredAdmission;
+  /** False when the audit sink acknowledges but does not persist a record. */
+  durableAudit?: boolean;
   envMode?: string;
   now?: () => number;
   maxTrackedActions?: number;
@@ -30,6 +32,7 @@ interface Admission {
 
 export function createActuator(options: ActuatorOptions) {
   const { secret, docker, kube, namespace, requiredAudit, durableAdmission, envMode } = options;
+  const durableAudit = options.durableAudit ?? true;
   if (secret.length < MIN_SECRET_LENGTH)
     throw new types.ActuatorError('ACTUATOR_CONFIG', 'HMAC secret is too short');
   if (typeof requiredAudit !== 'function')
@@ -53,7 +56,7 @@ export function createActuator(options: ActuatorOptions) {
   async function acknowledge(draft: core.AuditDraft): Promise<boolean> {
     try {
       const ack = await requiredAudit(structuredClone(draft));
-      return ack?.key === draft.key;
+      return durableAudit && ack?.key === draft.key;
     } catch {
       return false;
     }
@@ -133,7 +136,7 @@ export function createActuator(options: ActuatorOptions) {
           ack.result.status === result.status &&
           ack.result.reason === result.reason)
       ) {
-        return { ...result, audit, auditStatus: 'acknowledged' };
+        return { ...result, audit, auditStatus: durableAudit ? 'acknowledged' : 'pending' };
       }
     } catch {
       // The known runtime result is retained. An unfinished durable claim blocks another effect.

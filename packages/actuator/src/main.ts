@@ -1,6 +1,7 @@
 import { loadGraveshiftConfig } from '@graveshift/config';
 
-import { createAdmissionFixture } from './admission-fixture';
+import { createDurableAdmission } from './admission-durable';
+import type { RequiredAdmission } from './claims';
 import { createDockerRestarter, createKubeWriter } from './backends';
 import { createActuator } from './execute';
 import { createActionHandler, MAX_ACTION_BODY_BYTES } from './handler';
@@ -33,15 +34,30 @@ const kube: KubeWriter = env.KUBERNETES_SERVICE_HOST
     };
 
 // ponytail: the signed action claim has no projectId, so the actuator must not
-// bind audit or admission to an arbitrary grant entry. Both stay local.
-// Upgrade both when the actuator receives a signed projectId in the claim.
+// append audit to an arbitrary Project chain. Acknowledge locally and report
+// 'pending' until the actuator receives a signed projectId in the claim.
 const requiredAudit: RequiredAudit = async (draft) => ({ key: draft.key });
 const policy = (await loadGraveshiftConfig()).policy;
-const durableAdmission = createAdmissionFixture(policy, () => Date.now(), requiredAudit).admission;
+
+// Durable admission is mandatory. If the store cannot be opened, do not start.
+const stateDir = env.ACTUATOR_STATE_DIR ?? '/data/graveshift-actuator';
+let durableAdmission: RequiredAdmission;
+try {
+  durableAdmission = createDurableAdmission(
+    `${stateDir}/admission.db`,
+    policy,
+    () => Date.now(),
+    requiredAudit,
+  );
+} catch {
+  log('fatal', 'Durable admission store is unavailable; refusing to start');
+  process.exit(1);
+}
 const actuator = createActuator({
   secret,
   requiredAudit,
   durableAdmission,
+  durableAudit: false,
   ...(env.GRAVESHIFT_MODE === undefined ? {} : { envMode: env.GRAVESHIFT_MODE }),
   // Boot config is the single source of truth (base convention); the durable audit
   // controls from our architecture remain wired alongside it.

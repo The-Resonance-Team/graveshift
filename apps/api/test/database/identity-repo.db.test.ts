@@ -75,15 +75,20 @@ describe.skipIf(!dbTestEnabled)('identity repository over PostgreSQL', () => {
     );
   });
 
-  test('createProjectWithGrant uses an atomic array_append without duplicates', async () => {
+  test('createProjectWithGrant uses an atomic array_append under concurrent writes', async () => {
     await clearIdentity(db);
     const org = await repo.addOrganization({ name: 'Grant Org', slug: 'grant-org' });
     await repo.addGrant({ id: 'grant-2', name: 'default', projectIds: [] });
-    const first = { projectId: '4001', orgId: org.id, name: 'First', slug: 'first' };
-    const second = { projectId: '4002', orgId: org.id, name: 'Second', slug: 'second' };
-    await repo.createProjectWithGrant(first, 'default');
-    await repo.createProjectWithGrant(second, 'default');
+    const projects = [4001, 4002, 4003, 4004, 4005].map((id) => ({
+      projectId: String(id),
+      orgId: org.id,
+      name: `Project ${id}`,
+      slug: `project-${id}`,
+    }));
+    await Promise.all(projects.map((project) => repo.createProjectWithGrant(project, 'default')));
     const grant = await repo.findGrant('default');
-    expect(grant?.projectIds.sort()).toEqual(['4001', '4002']);
+    const ids = grant?.projectIds ?? [];
+    expect(ids.sort()).toEqual(projects.map((project) => project.projectId).sort());
+    expect(new Set(ids).size).toBe(projects.length);
   });
 });

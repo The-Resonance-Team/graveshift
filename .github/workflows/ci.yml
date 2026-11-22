@@ -127,20 +127,8 @@ jobs:
     if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.ci-affected == 'true' }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    # A throwaway Postgres service is allowed. No Graveshift daemon runs here.
-    services:
-      postgres:
-        image: postgres:18.7
-        env:
-          POSTGRES_USER: ci_check
-          POSTGRES_PASSWORD: ci-check-only
-          POSTGRES_DB: ci_check
-        ports: ['5432:5432']
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+    # The gate starts its own throwaway Postgres through Docker Compose in
+    # scripts/test-database.ts. No service container and no Graveshift daemon run here.
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
       - uses: ./.github/actions/setup-bun

@@ -127,6 +127,20 @@ describe('identity security boundaries (e2e)', () => {
     expect(context.identity.memberships.size).toBe(0);
   });
 
+  test('a competing bootstrap winner is a no-op but a stale root slug is not', async () => {
+    const loser = await buildIdentityApp(true);
+    loser.identity.seedWinnerOnBootstrap = true;
+    await expect(loser.app.get(IdentityService).bootstrap()).resolves.toBeUndefined();
+    expect(await loser.identity.countAccounts()).toBe(1);
+
+    const staleOrg = async (identity: FakeIdentityRepo): Promise<void> => {
+      await identity.addOrganization({ name: 'Stale', slug: 'root-org' });
+    };
+    const stale = await buildIdentityApp(true, staleOrg);
+    await expect(stale.app.get(IdentityService).bootstrap()).rejects.toHaveProperty('status', 409);
+    expect(await stale.identity.countAccounts()).toBe(0);
+  });
+
   test('duplicate email and duplicate Project slug return 409 instead of 500', async () => {
     const context = await buildIdentityApp();
     await http(context)
