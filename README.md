@@ -124,6 +124,10 @@ The API reads its boot config from the environment. `GRAVESHIFT_OAUTH_JWT_SECRET
 
 The public `@graveshift/core` and `@graveshift/events` packages contain the state and event contracts. Build both with `bun run build:contracts`; publish them from their package directories when a release is approved. This branch does not publish packages.
 
+## Guides
+
+- [Sentry SDK guide](docs/guides/sentry-sdks.md)
+
 ## Roadmap
 
 Open work is tracked in issues #11 to #16.
