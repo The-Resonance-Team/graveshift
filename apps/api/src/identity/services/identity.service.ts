@@ -11,11 +11,12 @@ import { JwtService } from '@nestjs/jwt';
 import { BOOT_CONFIG, type RootBootConfig } from '../../config/boot.config';
 
 import { CREDENTIAL_CONFIG, type AuthConfig } from '../../auth/auth.types';
-import { expandScopes } from '../../auth/scopes';
+import { expandScopes, isClientIssuableScope } from '../../auth/scopes';
 import {
   ACCOUNT_JWT_AUDIENCE,
   DEFAULT_DAEMON_GRANT,
   IDENTITY_REPO,
+  IdentityConflictError,
   MIGRATED_ORG_ID,
   type AccountPrincipal,
   type AccountProfile,
@@ -113,22 +114,24 @@ export class IdentityService {
 
   /** A registered account with no Organization may only call this route. */
   async onboarding(accountId: string, dto: OnboardingDto): Promise<AccountProfile> {
-    if ((await this.repo.listMemberships(accountId)).length > 0) {
-      throw new ConflictException('The account already belongs to an Organization');
+    // Migrated Projects are adopted only by root admin bootstrap. A public
+    // onboarding route must never gain ownership of another tenant's data.
+    try {
+      await this.repo.createOrganizationForOwner(accountId, dto, true);
+    } catch (error) {
+      throw this.toConflict(error);
     }
-    const organization = await this.repo.addOrganization(dto);
-    await this.repo.addMembership({ accountId, orgId: organization.id, role: 'owner' });
     await this.ensureGrant();
-    // Projects rewritten by the identity migration become owned by the first org.
-    await this.repo.adoptMigratedProjects(organization.id);
     return this.profile(accountId);
   }
 
   async createOrganization(accountId: string, dto: CreateOrganizationDto) {
     await this.requireMembership(accountId);
-    const organization = await this.repo.addOrganization(dto);
-    await this.repo.addMembership({ accountId, orgId: organization.id, role: 'owner' });
-    return organization;
+    try {
+      return await this.repo.createOrganizationForOwner(accountId, dto, false);
+    } catch (error) {
+      throw this.toConflict(error);
+    }
   }
 
   async createProject(accountId: string, orgId: string, dto: CreateProjectDto) {
@@ -151,11 +154,20 @@ export class IdentityService {
     await this.requireOwner(accountId, orgId);
     const account = await this.repo.findAccountByEmail(dto.email.toLowerCase());
     if (account === undefined) throw new NotFoundException('The registered Account was not found');
-    await this.repo.addMembership({ accountId: account.id, orgId, role: 'member' });
+    try {
+      await this.repo.addMemberToOrg(account.id, orgId, 'member');
+    } catch (error) {
+      throw this.toConflict(error);
+    }
     return { accountId: account.id, orgId, role: 'member' as const };
   }
 
   async createOAuthClient(accountId: string, orgId: string, dto: CreateOAuthClientDto) {
+    // The DTO filters the wire body. This check holds when the service is called
+    // directly, so no caller can grant config:export or tokens:manage here.
+    if (dto.scopes.length === 0 || !dto.scopes.every(isClientIssuableScope)) {
+      throw new ForbiddenException('The requested scopes are not allowed for a client');
+    }
     await this.requireOwner(accountId, orgId);
     const project = await this.repo.findProject(dto.projectId);
     if (project === undefined || project.orgId !== orgId) {
@@ -193,6 +205,11 @@ export class IdentityService {
       mustChangePassword: account.mustChangePassword,
       memberships: await this.repo.listMemberships(accountId),
     };
+  }
+
+  private toConflict(error: unknown): Error {
+    if (error instanceof IdentityConflictError) return new ConflictException(error.message);
+    return error instanceof Error ? error : new Error(String(error));
   }
 
   private async ensureGrant(): Promise<void> {

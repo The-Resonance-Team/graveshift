@@ -1,18 +1,6 @@
-import {
-  IsArray,
-  IsEmail,
-  IsIn,
-  IsInt,
-  IsOptional,
-  IsString,
-  Matches,
-  Max,
-  MaxLength,
-  Min,
-  MinLength,
-} from 'class-validator';
+import { IsArray, IsEmail, IsIn, IsString, Matches, MaxLength, MinLength } from 'class-validator';
 
-import { SCOPE_ALIASES } from '../../auth/scopes';
+import { CLIENT_ISSUABLE_SCOPES } from '../../auth/scopes';
 
 const SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const NUMERIC_ID = /^\d{1,20}$/;
@@ -82,12 +70,6 @@ export class CreateOAuthClientDto {
 
   @IsArray()
   @IsString({ each: true })
-  @IsIn(Object.keys(SCOPE_ALIASES), { each: true })
+  @IsIn(CLIENT_ISSUABLE_SCOPES, { each: true })
   scopes!: string[];
-
-  @IsOptional()
-  @IsInt()
-  @Min(60)
-  @Max(2_592_000)
-  ttlSeconds?: number;
 }

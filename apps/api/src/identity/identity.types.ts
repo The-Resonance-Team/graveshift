@@ -12,6 +12,14 @@ export const DEFAULT_DAEMON_GRANT = 'default';
 
 export const ACCOUNT_JWT_AUDIENCE = 'graveshift-account';
 
+/** A unique constraint at the store boundary. Routes map it to 409. */
+export class IdentityConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'IdentityConflictError';
+  }
+}
+
 export interface AccountRecord {
   id: string;
   email: string;
@@ -82,7 +90,14 @@ export interface IdentityRepo {
   setPassword(id: string, passwordHash: string): Promise<void>;
   findOrganizationBySlug(slug: string): Promise<OrganizationRecord | undefined>;
   addOrganization(input: { name: string; slug: string }): Promise<OrganizationRecord>;
+  /** Creates the Organization and its owner Membership in one transaction. */
+  createOrganizationForOwner(
+    accountId: string,
+    input: { name: string; slug: string },
+    onlyIfNoMembership: boolean,
+  ): Promise<OrganizationRecord>;
   addMembership(input: MembershipRecord): Promise<void>;
+  addMemberToOrg(accountId: string, orgId: string, role: MembershipRole): Promise<void>;
   hasMembership(accountId: string, orgId: string): Promise<boolean>;
   listMemberships(accountId: string): Promise<MembershipRecord[]>;
   addProject(input: {

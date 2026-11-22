@@ -499,15 +499,13 @@ export interface operations {
       200: {
         content: {
           "application/json": {
-            items: {
-                projectId: string;
-                orgId: string;
-                name: string;
-                slug: string;
-                /** Format: date-time */
-                createdAt: string;
-              }[];
-          };
+              projectId: string;
+              orgId: string;
+              name: string;
+              slug: string;
+              /** Format: date-time */
+              createdAt: string;
+            }[];
         };
       };
     };

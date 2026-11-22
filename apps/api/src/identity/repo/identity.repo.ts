@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, type MembershipRole } from '@prisma/client';
 
 import { PrismaService } from '../../infra/prisma.service';
 import {
+  IdentityConflictError,
   MIGRATED_ORG_ID,
   type AccountRecord,
   type DaemonGrantRecord,
@@ -60,11 +61,51 @@ export class PrismaIdentityRepo implements IdentityRepo {
   }
 
   async addOrganization(input: { name: string; slug: string }): Promise<OrganizationRecord> {
-    return toOrganization(await this.db.organization.create({ data: input }));
+    try {
+      return toOrganization(await this.db.organization.create({ data: input }));
+    } catch (error) {
+      throw mapConflict(error, 'The Organization slug is already used');
+    }
+  }
+
+  async createOrganizationForOwner(
+    accountId: string,
+    input: { name: string; slug: string },
+    onlyIfNoMembership: boolean,
+  ): Promise<OrganizationRecord> {
+    try {
+      return await this.db.$transaction(async (tx) => {
+        if (onlyIfNoMembership) {
+          const count = await tx.membership.count({ where: { accountId } });
+          if (count > 0) {
+            throw new IdentityConflictError('The account already belongs to an Organization');
+          }
+        }
+        const organization = await tx.organization.create({ data: input });
+        await tx.membership.create({
+          data: { accountId, orgId: organization.id, role: 'owner' },
+        });
+        return toOrganization(organization);
+      });
+    } catch (error) {
+      throw mapConflict(error, 'The Organization slug is already used');
+    }
   }
 
   async addMembership(input: MembershipRecord): Promise<void> {
-    await this.db.membership.create({ data: input });
+    try {
+      await this.db.membership.create({ data: input });
+    } catch (error) {
+      throw mapConflict(error, 'The Account already belongs to this Organization');
+    }
+  }
+
+  async addMemberToOrg(accountId: string, orgId: string, role: MembershipRole): Promise<void> {
+    try {
+      await this.db.membership.create({ data: { accountId, orgId, role } });
+    } catch (error) {
+      throw mapConflict(error, 'The Account already belongs to this Organization');
+    }
   }
 
   async hasMembership(accountId: string, orgId: string): Promise<boolean> {
@@ -91,7 +132,11 @@ export class PrismaIdentityRepo implements IdentityRepo {
     name: string;
     slug: string;
   }): Promise<ProjectRecord> {
-    return toProject(await this.db.project.create({ data: input }));
+    try {
+      return toProject(await this.db.project.create({ data: input }));
+    } catch (error) {
+      throw mapConflict(error, 'The Project slug is already used in this Organization');
+    }
   }
 
   async findProject(projectId: string): Promise<ProjectRecord | undefined> {
@@ -157,6 +202,14 @@ type OrganizationRow = Awaited<ReturnType<PrismaService['organization']['findUni
 type ProjectRow = Awaited<ReturnType<PrismaService['project']['findUnique']>>;
 type OAuthClientRow = Awaited<ReturnType<PrismaService['oAuthClient']['findUnique']>>;
 type GrantRow = Awaited<ReturnType<PrismaService['daemonGrant']['findUnique']>>;
+
+function mapConflict(error: unknown, message: string): unknown {
+  if (error instanceof IdentityConflictError) return error;
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+    return new IdentityConflictError(message);
+  }
+  return error;
+}
 
 function toAccount(row: NonNullable<AccountRow>): AccountRecord {
   return {

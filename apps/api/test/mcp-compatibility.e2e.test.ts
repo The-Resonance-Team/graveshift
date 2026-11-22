@@ -3,15 +3,15 @@ import type { Client } from '@modelcontextprotocol/client';
 import { McpModule } from '@nestjs/mcp';
 import { connectMcpClient } from '@nestjs/mcp/testing';
 import { Test, type TestingModule } from '@nestjs/testing';
+import type { AuditDraft } from '@graveshift/core';
 import { ConfigService } from '@nestjs/config';
 import { getHttpClientToken } from '@nestjs/http-client';
 import { parsePolicy } from '@graveshift/policy';
 import { afterAll, beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
 
 import { AuditRepo } from '../src/audit/audit.repo';
-import { ProjectGrant } from '../src/internal/project-grant';
-import { testProjectGrant } from '../src/internal/testing/project-grant.fixture';
-import { DaemonMcpBackend } from '../src/mcp/mcp.backend';
+import { DaemonMcpBackend, HttpMcpBackend } from '../src/mcp/mcp.backend';
+import { McpProjectContext } from '../src/mcp/mcp-project-context';
 import { writeAutopsy } from '../src/mcp/mcp.postmortem';
 import { McpPrompts } from '../src/mcp/mcp.prompts';
 import { McpResources } from '../src/mcp/mcp.resources';
@@ -225,8 +225,8 @@ describe('production MCP backend', () => {
         DaemonMcpBackend,
         { provide: AuditRepo, useValue: { list, verifyChain, append: async () => ({}) } },
         {
-          provide: ProjectGrant,
-          useValue: testProjectGrant(['project-1']),
+          provide: McpProjectContext,
+          useValue: { projectId: 'project-1', require: () => 'project-1' },
         },
         {
           provide: ConfigService,
@@ -266,6 +266,21 @@ describe('production MCP backend', () => {
     } finally {
       await moduleRef.close();
     }
+  });
+
+  test('audit append uses the authenticated Project of the caller', async () => {
+    const append = mock(async (_projectId: string, _draft: AuditDraft) => ({ key: 'ack' }));
+    const context = { projectId: '12346', require: () => '12346' };
+    const backend = new HttpMcpBackend({} as never, { append } as never, context as never);
+    const draft = {
+      actor: 'policy',
+      type: 'policy.decision',
+      payload: { effect: 'allow' },
+      key: 'mcp:test',
+    } as AuditDraft;
+    expect(await backend.auditDecision(draft)).toEqual({ key: 'mcp:test' });
+    expect(append).toHaveBeenCalledTimes(1);
+    expect(append).toHaveBeenCalledWith('12346', draft);
   });
 
   test('Autopsy uses complete canonical facts and preserves recorded times and references', () => {

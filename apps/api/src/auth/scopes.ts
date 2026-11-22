@@ -63,6 +63,15 @@ export const ALL_SCOPES = [...MCP_READ_SCOPES, ...PLUGIN_SCOPES, ...HTTP_CONFIG_
 // this list, not ALL_SCOPES: the HTTP-only config scopes are never issued as credentials.
 export const CREDENTIAL_ISSUABLE_SCOPES = [...MCP_READ_SCOPES, ...PLUGIN_SCOPES] as const;
 
+// Scopes a console-created OAuth client may hold. config:export and
+// tokens:manage stay out: they are boot-only grants for the one config route
+// and for management tokens, never granted by a public organization route.
+export const CLIENT_ISSUABLE_SCOPES = [...SIMPLE_SCOPES, ...CREDENTIAL_ISSUABLE_SCOPES] as const;
+
+export function isClientIssuableScope(scope: string): boolean {
+  return (CLIENT_ISSUABLE_SCOPES as readonly string[]).includes(scope);
+}
+
 // A client cannot grant these scopes, even when its own access token has them.
 export const FORBIDDEN_SCOPES = ['admin', 'tokens:manage'] as const;
 

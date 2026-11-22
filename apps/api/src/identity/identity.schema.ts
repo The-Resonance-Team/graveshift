@@ -30,7 +30,7 @@ export const projectSchema = z.object({
   createdAt: z.iso.datetime(),
 });
 
-export const projectListSchema = z.object({ items: z.array(projectSchema) });
+export const projectListSchema = z.array(projectSchema);
 
 export const oauthClientSchema = z.object({
   clientId: z.string(),

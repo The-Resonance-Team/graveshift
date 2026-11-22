@@ -1,13 +1,14 @@
 import { randomUUID } from 'node:crypto';
 
-import type {
-  AccountRecord,
-  DaemonGrantRecord,
-  IdentityRepo,
-  MembershipRecord,
-  OAuthClientRecord,
-  OrganizationRecord,
-  ProjectRecord,
+import {
+  IdentityConflictError,
+  type AccountRecord,
+  type DaemonGrantRecord,
+  type IdentityRepo,
+  type MembershipRecord,
+  type OAuthClientRecord,
+  type OrganizationRecord,
+  type ProjectRecord,
 } from '../identity.types';
 
 /** In-memory identity store for HTTP tests. No network or database call is made. */
@@ -58,18 +59,47 @@ export class FakeIdentityRepo implements IdentityRepo {
     return [...this.organizations.values()].find((org) => org.slug === slug);
   }
 
-  async addOrganization(input: { name: string; slug: string }): Promise<OrganizationRecord> {
+  async addOrganization(input: {
+    name: string;
+    slug: string;
+    id?: string;
+  }): Promise<OrganizationRecord> {
     const organization: OrganizationRecord = {
-      ...input,
-      id: randomUUID(),
+      name: input.name,
+      slug: input.slug,
+      id: input.id ?? randomUUID(),
       createdAt: new Date().toISOString(),
     };
     this.organizations.set(organization.id, organization);
     return organization;
   }
 
+  async createOrganizationForOwner(
+    accountId: string,
+    input: { name: string; slug: string },
+    onlyIfNoMembership: boolean,
+  ): Promise<OrganizationRecord> {
+    if (onlyIfNoMembership && (await this.listMemberships(accountId)).length > 0) {
+      throw new IdentityConflictError('The account already belongs to an Organization');
+    }
+    if ([...this.organizations.values()].some((org) => org.slug === input.slug)) {
+      throw new IdentityConflictError('The Organization slug is already used');
+    }
+    const organization = await this.addOrganization(input);
+    await this.addMembership({ accountId, orgId: organization.id, role: 'owner' });
+    return organization;
+  }
+
   async addMembership(input: MembershipRecord): Promise<void> {
-    this.memberships.set(`${input.accountId}:${input.orgId}`, input);
+    const key = `${input.accountId}:${input.orgId}`;
+    if (this.memberships.has(key)) {
+      throw new IdentityConflictError('The Account already belongs to this Organization');
+    }
+    this.memberships.set(key, input);
+  }
+
+  async addMemberToOrg(accountId: string, orgId: string, role: 'owner' | 'member'): Promise<void> {
+    await this.addMembership({ accountId, orgId, role });
   }
 
   async hasMembership(accountId: string, orgId: string): Promise<boolean> {

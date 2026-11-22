@@ -103,7 +103,7 @@ ALTER TABLE "oauth_clients" ADD CONSTRAINT "oauth_clients_project_id_fkey" FOREI
 -- BEGIN unmanaged identity data rewrite
 -- Each distinct legacy project id gets one numeric id. All seven project_id rows
 -- are rewritten in the same transaction. No mapping column survives the rewrite.
-CREATE SEQUENCE "project_numeric_id_seq" START WITH 1000;
+CREATE SEQUENCE IF NOT EXISTS "project_numeric_id_seq" START WITH 1000;
 
 CREATE TEMP TABLE "legacy_project_ids" (
     "old_id" TEXT NOT NULL PRIMARY KEY,
@@ -154,5 +154,14 @@ ON CONFLICT DO NOTHING;
 INSERT INTO "projects" ("project_id", "org_id", "name", "slug")
 SELECT "new_id", '00000000-0000-4000-8000-000000000000',
        'Migrated Project ' || "new_id", 'migrated-' || "new_id"
-FROM "legacy_project_ids";
+FROM "legacy_project_ids"
+ON CONFLICT DO NOTHING;
+
+-- The daemon grant names the migrated Projects. Without this row the grant
+-- check would return 403 for every rewritten Project after the migration.
+INSERT INTO "daemon_grants" ("id", "name", "project_ids")
+SELECT '00000000-0000-4000-8000-000000000001', 'default',
+       ARRAY(SELECT "new_id" FROM "legacy_project_ids")
+WHERE EXISTS (SELECT 1 FROM "legacy_project_ids")
+ON CONFLICT ("name") DO NOTHING;
 -- END unmanaged identity data rewrite.

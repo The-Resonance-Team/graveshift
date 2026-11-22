@@ -16,12 +16,4 @@ export class ProjectGrant {
       throw new ForbiddenException('This Project is not granted to this integration');
     }
   }
-
-  /** The first granted Project. The daemon uses it until per-Project routing lands. */
-  async first(): Promise<string> {
-    const grant = await this.identity.findGrant(DEFAULT_DAEMON_GRANT);
-    const projectId = grant?.projectIds[0];
-    if (projectId === undefined) throw new ForbiddenException('No Project is granted');
-    return projectId;
-  }
 }
