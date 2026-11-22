@@ -11,6 +11,8 @@ import {
   type WorkRuntime,
 } from '@graveshift/work';
 
+import { withAuditScope } from './audit';
+import { auditScopeOfCaller } from './fix-audit';
 import { runFix, type FixOptions } from './run-fix';
 import { replayWork } from './recovery';
 
@@ -104,9 +106,18 @@ export function createWorkCommands(options: WorkFlowOptions): WorkCommands {
       return runFix(options, caller, claim);
     },
   };
+  // Every command runs under the audit scope of its authenticated caller. The Fix attempt it
+  // starts writes its entries to that Project's chain, and the shared gateway attributes its
+  // model calls to the same binding instead of any deployment-wide project.
+  const underScope =
+    <Body, Value>(run: (caller: WorkCaller, id: string, body: Body) => Promise<Value>) =>
+    (caller: WorkCaller, id: string, body: Body): Promise<Value> => {
+      const authenticated = { ...caller, workerId };
+      return withAuditScope(auditScopeOfCaller(authenticated), () => run(authenticated, id, body));
+    };
   return {
-    triage: (caller, id, body) => commands.triage({ ...caller, workerId }, id, body),
-    fixNow: (caller, id, body) => commands.fixNow({ ...caller, workerId }, id, body),
-    answer: (caller, id, body) => commands.answer({ ...caller, workerId }, id, body),
+    triage: underScope(commands.triage),
+    fixNow: underScope(commands.fixNow),
+    answer: underScope(commands.answer),
   };
 }

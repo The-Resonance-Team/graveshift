@@ -1,4 +1,4 @@
-import { UnprocessableEntityException } from '@nestjs/common';
+import { ForbiddenException, UnprocessableEntityException } from '@nestjs/common';
 import { describe, expect, test } from 'bun:test';
 
 import { TEST_CONFIG } from '../../../test/fakes/auth-test-config';
@@ -76,6 +76,20 @@ describe('CredentialService', () => {
     expect(
       service.issue(dto({ kind: 'plugin', scopes: ['events:publish'], service: 'api' }), principal),
     ).resolves.toBeDefined();
+  });
+
+  test('fix:trigger is never issuable as a credential, even for a client that holds it', async () => {
+    const { service } = setup();
+    const holding: Principal = { ...principal, scopes: [...principal.scopes, 'fix:trigger'] };
+    await expect(service.issue(dto({ scopes: ['fix:trigger'] }), holding)).rejects.toThrow(
+      ForbiddenException,
+    );
+    await expect(
+      service.issue(
+        dto({ kind: 'plugin', scopes: ['fix:trigger'], service: 'api', name: 'trigger-key' }),
+        holding,
+      ),
+    ).rejects.toThrow(ForbiddenException);
   });
 
   test('rejects a service-bound plugin credential when the projectId is not numeric', async () => {

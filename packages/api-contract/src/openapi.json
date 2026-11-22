@@ -2920,6 +2920,9 @@
           "401": {
             "description": "A management access token is required."
           },
+          "403": {
+            "description": "The token does not hold fix:trigger, so triage cannot start an automatic Fix."
+          },
           "404": {
             "description": "The Work item does not exist in this project."
           },
@@ -3432,7 +3435,7 @@
             "description": "A management access token is required."
           },
           "403": {
-            "description": "Human assignments have no Fix now action. Agent autoFix must be disabled for Fix now."
+            "description": "Human assignments have no Fix now action, Agent autoFix must be disabled for Fix now, or the token does not hold fix:trigger."
           },
           "404": {
             "description": "The Work item does not exist in this project."
@@ -3944,6 +3947,9 @@
           },
           "401": {
             "description": "A management access token is required."
+          },
+          "403": {
+            "description": "The token does not hold fix:trigger, so an answer cannot resume a Fix attempt."
           },
           "404": {
             "description": "The Work item does not exist in this project."

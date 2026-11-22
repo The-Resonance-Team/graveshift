@@ -15,13 +15,17 @@ import { testIdentityRepo } from '../../../test/fakes/auth-test-helpers';
 import { CREDENTIAL_CONFIG } from '../../auth/auth.types';
 import { OAuthClientCredentialsStrategy } from '../../auth/oauth-client-credentials.strategy';
 import { IDENTITY_REPO } from '../../identity/identity.types';
+import { AuditedWorkCommands, WORK_COMMANDS_INNER } from '../../fix/audited-work.commands';
+import { AUDIT_SINK } from '../../audit/audit.sink';
+import { InMemoryAuditSink } from '../../audit/testing/in-memory-audit.sink';
 import { WorkItemsController } from '../controllers/work-items.controller';
 import { WorkItemRepo } from '../work-item.repo';
 
 export async function workHttpApp(
   repo: WorkItemRepo,
   commands: WorkCommands,
-): Promise<{ app: INestApplication; token: string }> {
+): Promise<{ app: INestApplication; token: string; audit: InMemoryAuditSink }> {
+  const audit = new InMemoryAuditSink();
   const moduleRef = await Test.createTestingModule({
     imports: [
       PassportModule,
@@ -34,7 +38,10 @@ export async function workHttpApp(
       { provide: CREDENTIAL_CONFIG, useValue: TEST_CONFIG },
       { provide: IDENTITY_REPO, useValue: testIdentityRepo() },
       { provide: WorkItemRepo, useValue: repo },
-      { provide: WORK_COMMANDS, useValue: commands },
+      AuditedWorkCommands,
+      { provide: WORK_COMMANDS, useExisting: AuditedWorkCommands },
+      { provide: WORK_COMMANDS_INNER, useValue: commands },
+      { provide: AUDIT_SINK, useValue: audit },
     ],
   })
     // This fixture tests Work routing over HTTP, not OAuth validation. It pins
@@ -49,7 +56,11 @@ export async function workHttpApp(
         if (!request.headers?.authorization?.startsWith('Bearer ')) {
           throw new UnauthorizedException();
         }
-        request.user = { clientId: 'client-1', projectId: 'project-1', scopes: ['tokens:manage'] };
+        request.user = {
+          clientId: 'client-1',
+          projectId: 'project-1',
+          scopes: ['tokens:manage', 'fix:trigger'],
+        };
         return true;
       },
     })
@@ -65,7 +76,7 @@ export async function workHttpApp(
   );
   await app.init();
   const token = moduleRef.get(JwtService).sign(
-    { sub: 'client-1', projectId: 'project-1', scope: ['tokens:manage'] },
+    { sub: 'client-1', projectId: 'project-1', scope: ['tokens:manage', 'fix:trigger'] },
     {
       secret: TEST_CONFIG.jwtSecret,
       issuer: TEST_CONFIG.jwtIssuer,
@@ -73,5 +84,5 @@ export async function workHttpApp(
       expiresIn: 300,
     },
   );
-  return { app, token };
+  return { app, token, audit };
 }

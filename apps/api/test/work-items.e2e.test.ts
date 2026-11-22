@@ -1,4 +1,3 @@
-import { WORK_COMMANDS } from '@graveshift/work';
 import { HttpStatus, ValidationPipe, type INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule, JwtService } from '@nestjs/jwt';
@@ -9,6 +8,10 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import request from 'supertest';
 
 import { CREDENTIAL_CONFIG } from '../src/auth/auth.types';
+import { AUDIT_SINK } from '../src/audit/audit.sink';
+import { InMemoryAuditSink } from '../src/audit/testing/in-memory-audit.sink';
+import { AuditedWorkCommands, WORK_COMMANDS_INNER } from '../src/fix/audited-work.commands';
+import { WORK_COMMANDS } from '@graveshift/work';
 import { OAuthClientCredentialsStrategy } from '../src/auth/oauth-client-credentials.strategy';
 import { IDENTITY_REPO } from '../src/identity/identity.types';
 import { InternalGuard } from '../src/internal/internal.guard';
@@ -40,7 +43,10 @@ describe('Work item HTTP boundary', () => {
         { provide: IDENTITY_REPO, useValue: testIdentityRepo() },
         { provide: ConfigService, useValue: new ConfigService(TEST_ROOT_ENV) },
         { provide: WorkItemRepo, useValue: adapter.repo },
-        { provide: WORK_COMMANDS, useValue: adapter.commands },
+        AuditedWorkCommands,
+        { provide: WORK_COMMANDS, useExisting: AuditedWorkCommands },
+        { provide: WORK_COMMANDS_INNER, useValue: adapter.commands },
+        { provide: AUDIT_SINK, useValue: new InMemoryAuditSink() },
       ],
     }).compile();
     app = moduleRef.createNestApplication({ logger: false });
@@ -57,7 +63,7 @@ describe('Work item HTTP boundary', () => {
       {
         sub: 'client-1',
         projectId: '12345',
-        scope: ['tokens:manage'],
+        scope: ['tokens:manage', 'fix:trigger'],
       },
       {
         secret: TEST_CONFIG.jwtSecret,

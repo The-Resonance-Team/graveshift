@@ -26,7 +26,7 @@ describe('daemon Work orchestration', () => {
     expect(flow.audit.map((entry) => entry.type)).toEqual([
       'policy.decision',
       'model.call',
-      'fix.verified',
+      'fix.pr_intent',
     ]);
   });
 

@@ -4,7 +4,7 @@ import { describe, expect, test } from 'bun:test';
 import { gatewayAudit } from './audit';
 import { createFixExecutor } from './fix-execution';
 import { githubRecording, gitChecks } from './fix-recording';
-import { agent, caller, context } from './flow-fixtures';
+import { agent, caller, context, withFixAuditScope } from './flow-fixtures';
 import { harness } from './flow-harness';
 
 const TEST_BASE_SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
@@ -89,7 +89,8 @@ describe('concrete daemon fix executor', () => {
       dashboardUrl: '',
       runner: gitChecks,
     });
-    const prepared = await executor(await input());
+    const request = await input();
+    const prepared = await withFixAuditScope(() => executor(request));
     expect(recording.writes).toEqual([]);
     expect(prepared.intent).toMatchObject({ repo: 'team/grave', baseSha: TEST_BASE_SHA });
     expect(model.prompts[0]?.system).toContain('configured Agent instructions for v2');
@@ -120,7 +121,10 @@ describe('concrete daemon fix executor', () => {
         throw new Error('Must not verify an unaudited patch');
       },
     });
-    await expect(executor(await input())).rejects.toMatchObject({ failure: 'audit_failed' });
+    const request = await input();
+    await expect(withFixAuditScope(() => executor(request))).rejects.toMatchObject({
+      failure: 'audit_failed',
+    });
     expect(model.prompts).toHaveLength(1);
     expect(checks).toBe(0);
     expect(recording.writes).toEqual([]);
@@ -129,13 +133,16 @@ describe('concrete daemon fix executor', () => {
   test('missing repository checks fail before source and model access', async () => {
     const recording = recorded();
     const model = configured();
+    const request = await input();
     await expect(
-      createFixExecutor({
-        client: recording.client,
-        gateway: model.gateway,
-        verification: {},
-        dashboardUrl: '',
-      })(await input()),
+      withFixAuditScope(() =>
+        createFixExecutor({
+          client: recording.client,
+          gateway: model.gateway,
+          verification: {},
+          dashboardUrl: '',
+        })(request),
+      ),
     ).rejects.toMatchObject({ failure: 'fix_error' });
     expect(recording.calls).toEqual([]);
     expect(model.prompts).toEqual([]);
@@ -151,7 +158,10 @@ describe('concrete daemon fix executor', () => {
       dashboardUrl: '',
       runner: async () => ({ exitCode: 1, stdout: '', timedOut: false }),
     });
-    await expect(executor(await input())).rejects.toMatchObject({ code: 'CHECK_FAILED' });
+    const request = await input();
+    await expect(withFixAuditScope(() => executor(request))).rejects.toMatchObject({
+      code: 'CHECK_FAILED',
+    });
     expect(recording.writes).toEqual([]);
   });
 });

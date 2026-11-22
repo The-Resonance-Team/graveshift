@@ -4,7 +4,7 @@ import { describe, expect, test } from 'bun:test';
 import { z } from 'zod';
 
 import { gatewayAudit } from './audit';
-import { agent, caller } from './flow-fixtures';
+import { agent, caller, withFixAuditScope } from './flow-fixtures';
 import { harness } from './flow-harness';
 import { withModelContext } from './model-context';
 
@@ -48,12 +48,13 @@ describe('model audit context', () => {
         schema: z.object({ accepted: z.boolean() }).strict(),
         validate: () => undefined,
       });
-    const pending = withModelContext({ incidentId: 'haunting-a', service: 'checkout' }, () =>
-      run('first'),
+    // Each Haunting runs as its own authenticated unit of work, as a command does.
+    const pending = withFixAuditScope(() =>
+      withModelContext({ incidentId: 'haunting-a', service: 'checkout' }, () => run('first')),
     );
     await entered.promise;
-    const second = await withModelContext({ incidentId: 'haunting-b', service: 'worker' }, () =>
-      run('second'),
+    const second = await withFixAuditScope(() =>
+      withModelContext({ incidentId: 'haunting-b', service: 'worker' }, () => run('second')),
     );
     first.resolve();
     const one = await pending;

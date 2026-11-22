@@ -48,7 +48,7 @@ export async function createPlatform(db: PrismaService) {
   // A patch must carry a 40-hex base; the recorded client is pinned to it.
   recording.client.getBaseSha = async () => TEST_BASE_SHA;
   const models: ModelRequest[] = [];
-  const audit = createAudit(http.api, caller.projectId);
+  const audit = createAudit(http.api);
   const gateway = createGateway({
     agents: PLATFORM_AGENTS.map((selected) => {
       const adapter: ModelAdapter = {

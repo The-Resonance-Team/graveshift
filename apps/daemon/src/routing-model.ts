@@ -1,11 +1,18 @@
 import type { RoutingModel } from '@graveshift/agents/routing';
 import type { Gateway } from '@graveshift/gateway';
 import { z } from 'zod';
+
+import { currentAuditScope } from './audit';
 import { modelContext } from './model-context';
 
 export function routingModel(gateway: Pick<Gateway, 'run'>): RoutingModel {
   return {
     async generateText(input) {
+      // Checked before the model call: a routing call with no authenticated audit scope would
+      // spend budget on a model call whose durable entry has no chain to belong to.
+      if (currentAuditScope() === undefined) {
+        return { status: 'unavailable', reason: 'audit_unavailable' };
+      }
       const signal = modelContext()?.signal;
       const result = await gateway.run({
         agent: input.selectedAgent.name,

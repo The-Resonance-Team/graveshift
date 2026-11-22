@@ -1019,6 +1019,10 @@ export interface operations {
       401: {
         content: never;
       };
+      /** @description The token does not hold fix:trigger, so triage cannot start an automatic Fix. */
+      403: {
+        content: never;
+      };
       /** @description The Work item does not exist in this project. */
       404: {
         content: never;
@@ -1145,7 +1149,7 @@ export interface operations {
       401: {
         content: never;
       };
-      /** @description Human assignments have no Fix now action. Agent autoFix must be disabled for Fix now. */
+      /** @description Human assignments have no Fix now action, Agent autoFix must be disabled for Fix now, or the token does not hold fix:trigger. */
       403: {
         content: never;
       };
@@ -1273,6 +1277,10 @@ export interface operations {
       };
       /** @description A management access token is required. */
       401: {
+        content: never;
+      };
+      /** @description The token does not hold fix:trigger, so an answer cannot resume a Fix attempt. */
+      403: {
         content: never;
       };
       /** @description The Work item does not exist in this project. */

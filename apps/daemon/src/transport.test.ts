@@ -8,7 +8,15 @@ import { BootConfigSchema, configuredGateway, loadBootConfig } from './boot-conf
 import { readDaemonConfig } from './config';
 import { fakeApi } from './fake-api';
 import { contextClient } from './fix-context';
-import { agent, caller, context, diagnosis, item, policy } from './flow-fixtures';
+import {
+  agent,
+  caller,
+  context,
+  diagnosis,
+  item,
+  policy,
+  withFixAuditScope,
+} from './flow-fixtures';
 import { createWorkClient } from './work-client';
 
 const apiToken = 'local-api-internal-token-long-enough';
@@ -143,29 +151,29 @@ describe('daemon private transport and config', () => {
         saved.push(request.draft.key);
         return { key: request.draft.key };
       }),
-      caller.projectId,
     );
-    const ack = await gatewayAudit(write)({
-      callId: 'call-1',
-      agent: 'Assigned Agent',
-      task: 'route_work',
-      status: 'ok',
-      tokensIn: 4,
-      tokensOut: 2,
-      costUsd: 0.01,
-    });
+    const ack = await withFixAuditScope(() =>
+      gatewayAudit(write)({
+        callId: 'call-1',
+        agent: 'Assigned Agent',
+        task: 'route_work',
+        status: 'ok',
+        tokensIn: 4,
+        tokensOut: 2,
+        costUsd: 0.01,
+      }),
+    );
     expect(saved).toEqual(['gateway:call-1']);
     expect(ack).toEqual({ callId: 'call-1' });
     await expect(
-      createAudit(
-        fakeApi(() => ({ key: 'wrong-key' })),
-        caller.projectId,
-      )({
-        key: 'wanted',
-        actor: 'daemon',
-        type: 'test',
-        payload: {},
-      }),
+      withFixAuditScope(() =>
+        createAudit(fakeApi(() => ({ key: 'wrong-key' })))({
+          key: 'wanted',
+          actor: 'daemon',
+          type: 'test',
+          payload: {},
+        }),
+      ),
     ).rejects.toThrow('does not match');
   });
 

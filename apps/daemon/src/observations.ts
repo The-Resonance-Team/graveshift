@@ -12,8 +12,12 @@ import type { Gateway } from '@graveshift/gateway';
 import { createWatcher, type WatcherOutcome } from '@graveshift/watcher';
 
 import type { PrivateApi } from './api-client';
+import { withAuditScope } from './audit';
 import { HttpFailure } from './private-http';
 import { withModelContext } from './model-context';
+
+/** The actor a Collector-driven observation records when no OAuth principal asked for it. */
+const DAEMON_ACTOR = 'daemon';
 
 export interface ObservationOptions {
   projectId: string;
@@ -57,7 +61,7 @@ export async function createObservations(options: ObservationOptions) {
     byService.set(persisted.incident.service, persisted.incident.id);
     return persisted;
   };
-  return async (event: EventEnvelope): Promise<void> => {
+  const observe = async (event: EventEnvelope): Promise<void> => {
     if (event.projectId !== projectId) throw new Error('Observation belongs to another project');
     current = event;
     let outcomes = pending.get(event.id);
@@ -179,4 +183,9 @@ export async function createObservations(options: ObservationOptions) {
     );
     pending.delete(event.id);
   };
+  // A Collector event carries no OAuth principal. The daemon acts on it as itself, inside the
+  // one Project its grant covers and the check above confirms. A model call outside this
+  // binding has no chain, so the durable sink refuses it and the gateway withholds the result.
+  return (event: EventEnvelope) =>
+    withAuditScope({ projectId, actor: DAEMON_ACTOR }, () => observe(event));
 }
