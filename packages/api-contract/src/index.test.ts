@@ -77,8 +77,8 @@ describe('api contract', () => {
   });
 
   test('the create-credential request advertises credential scopes only', () => {
-    // The document must not offer config:read or config:export: the service denies them
-    // for every credential kind, so advertising them would promise the impossible.
+    // The document must not offer config:export: the service denies it for every
+    // credential kind, so advertising it would promise the impossible.
     const enumValues = openapi.components.schemas.CreateCredentialDto.properties.scopes.items.enum;
     expect(enumValues).toEqual([
       'incidents:read',
@@ -99,12 +99,12 @@ describe('config response document', () => {
       openapi.paths['/api/config/export'].get.responses['200'].content['application/json'].schema;
     expect(Object.keys(schema.properties)).toEqual(['boot', 'agents', 'policy', 'fix']);
     expect(Object.keys(schema.properties.boot.properties)).toEqual(['host', 'port']);
-    // The export is full: no sanitized whitelist is used at this endpoint.
+    // The export is full: every validated field is published at this endpoint.
     const agent = schema.properties.agents.properties.system.items.properties;
     for (const key of ['prompt', 'baseUrl', 'apiKeyEnv', 'allowedTools']) {
       expect(agent).toHaveProperty(key);
     }
-    // Full export params are key-value entries, not a sanitized list of names.
+    // Export params are key-value entries, not a list of names.
     expect(agent.params.items).toHaveProperty('additionalProperties');
     expect(Object.keys(schema.properties.policy.properties)).toEqual(
       expect.arrayContaining(['approvers', 'github', 'rules', 'default']),

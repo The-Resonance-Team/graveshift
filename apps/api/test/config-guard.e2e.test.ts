@@ -64,17 +64,15 @@ describe('config guards (e2e)', () => {
     }
   });
 
-  test('config scopes stay HTTP-only: the catalog holds them, no credential kind does', async () => {
-    // Catalog check: the scopes exist for the #63 OAuth issuer only.
-    expect(ALL_SCOPES).toContain('config:read');
+  test('config:export stays HTTP-only: the catalog holds it, no credential kind does', async () => {
+    // Catalog check: the scope exists for the #63 OAuth issuer only. The removed
+    // config:read scope must not return to the catalog.
     expect(ALL_SCOPES).toContain('config:export');
-    expect(CREDENTIAL_ISSUABLE_SCOPES).not.toContain('config:read');
+    expect(ALL_SCOPES).not.toContain('config:read');
     expect(CREDENTIAL_ISSUABLE_SCOPES).not.toContain('config:export');
-    expect(MCP_READ_SCOPES).not.toContain('config:read');
     expect(MCP_READ_SCOPES).not.toContain('config:export');
-    expect(PLUGIN_SCOPES).not.toContain('config:read');
     expect(PLUGIN_SCOPES).not.toContain('config:export');
-    expect(scopesForKind('mcp')).not.toContain('config:read');
+    expect(scopesForKind('mcp')).not.toContain('config:export');
     expect(scopesForKind('plugin')).not.toContain('config:export');
 
     // Request check: the DTO rejects a config scope before any credential store is read.
@@ -82,37 +80,33 @@ describe('config guards (e2e)', () => {
     const token = await bearerToken(app, 'client-1', 'test-client-secret-123456');
     const server = app.getHttpServer();
     const denials = await Promise.all(
-      (['mcp', 'plugin'] as const).flatMap((kind) =>
-        (['config:read', 'config:export'] as const).map((scope) =>
-          request(server)
-            .post('/api/credentials')
-            .set('Authorization', `Bearer ${token}`)
-            .send({ kind, name: `cfg-${kind}-${scope}`, scopes: [scope] }),
-        ),
+      (['mcp', 'plugin'] as const).map((kind) =>
+        request(server)
+          .post('/api/credentials')
+          .set('Authorization', `Bearer ${token}`)
+          .send({ kind, name: `cfg-${kind}`, scopes: ['config:export'] }),
       ),
     );
-    expect(denials.length).toBe(4);
+    expect(denials.length).toBe(2);
     expect(denials.every((response) => response.status === 422)).toBe(true);
 
     // Choke-point check: even a request DTO that bypassed validation is denied by the
     // service for both kinds, before any store access.
     const credentialService = app.get(CredentialService, { strict: false });
     const principal = { clientId: 'client-1', projectId: '12345', scopes: ['tokens:manage'] };
-    const attempts = (['mcp', 'plugin'] as const).flatMap((kind) =>
-      (['config:read', 'config:export'] as const).map(async (scope) => {
-        try {
-          await credentialService.issue(
-            { kind, name: `cfg-${kind}-${scope}`, scopes: [scope] },
-            principal,
-          );
-          return undefined;
-        } catch (error) {
-          return error;
-        }
-      }),
-    );
+    const attempts = (['mcp', 'plugin'] as const).map(async (kind) => {
+      try {
+        await credentialService.issue(
+          { kind, name: `cfg-${kind}`, scopes: ['config:export'] },
+          principal,
+        );
+        return undefined;
+      } catch (error) {
+        return error;
+      }
+    });
     const denialsFromService = await Promise.all(attempts);
-    expect(denialsFromService.length).toBe(4);
+    expect(denialsFromService.length).toBe(2);
     expect(denialsFromService.every((error) => error instanceof ForbiddenException)).toBe(true);
   });
 });

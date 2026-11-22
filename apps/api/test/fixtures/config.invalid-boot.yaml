@@ -68,8 +68,8 @@ policy:
       action: '*'
       when: { services: [postgres] }
       effect: deny
-    # The sanitized view must drop when.* and params.replicas, so the fixture carries
-    # every one of those keys: a projection that leaks them shows up in the response.
+    # The export carries the full rule: when.* and params.replicas stay in the response.
+    # The e2e test checks these values so a dropped field fails the test.
     - id: fake-scale-up
       action: scale_service
       when:

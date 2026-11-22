@@ -37,9 +37,8 @@ export const UNKNOWN_SECRET_KEY = 'secretToken';
 export const UNKNOWN_SECRET_VALUE = 'sk-fake-unknown-key-secret-never-returned';
 
 // Test-only OAuth clients from apps/api/test/setup.ts. Their secrets are placeholders.
-// The read client is kept only to prove that config:read is denied on the one endpoint.
+// The unrelated client has no config scope; it is used to prove scope denial.
 export const CLIENTS = {
-  read: { id: 'client-config-read', secret: 'test-client-secret-config-read' },
   export: { id: 'client-config-export', secret: 'test-client-secret-config-export' },
   unrelated: { id: 'client-no-config', secret: 'test-client-secret-no-config' },
 } as const;

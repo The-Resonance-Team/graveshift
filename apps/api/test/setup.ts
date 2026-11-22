@@ -22,12 +22,7 @@ process.env.GRAVESHIFT_OAUTH_CLIENTS ??= JSON.stringify({
     projectId: 'project-2',
     scopes: ['tokens:manage', 'incidents:read', 'events:publish'],
   },
-  // Test-only clients for the read-only config routes. Test-only placeholders, no real secret.
-  'client-config-read': {
-    secret: 'test-client-secret-config-read',
-    projectId: '12345',
-    scopes: ['config:read'],
-  },
+  // Test-only client for the one config endpoint. Test-only placeholder, no real secret.
   'client-config-export': {
     secret: 'test-client-secret-config-export',
     projectId: '12345',

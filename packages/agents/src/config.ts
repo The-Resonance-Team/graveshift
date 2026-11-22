@@ -74,7 +74,7 @@ const HttpsUrlSchema = z.url().refine((value) => {
 }, 'baseUrl must use https and carry no credentials');
 
 // A param is one key-value map, for example { INCIDENT_DETAIL: "OOM VPS" }.
-// The name schema is separate so a sanitized view can publish param names without values.
+// The name schema is separate so a caller can name a param without its value.
 export const ParamNameSchema = z.string().regex(UPPER_SNAKE, 'param name must be UPPER_SNAKE_CASE');
 export type ParamName = z.infer<typeof ParamNameSchema>;
 
