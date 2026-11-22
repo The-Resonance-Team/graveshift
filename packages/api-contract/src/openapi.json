@@ -1363,6 +1363,409 @@
         ]
       }
     },
+    "/api/organizations/{orgId}/releases": {
+      "get": {
+        "operationId": "ReleasesController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The Releases in the caller Organization.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "orgId": {
+                        "type": "string"
+                      },
+                      "version": {
+                        "type": "string"
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                      },
+                      "projectIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "orgId",
+                      "version",
+                      "createdAt",
+                      "projectIds"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer client token was presented."
+          },
+          "403": {
+            "description": "The Organization, Project or scope is not allowed."
+          },
+          "429": {
+            "description": "The client exceeded the rate limit."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "releases"
+        ]
+      },
+      "post": {
+        "operationId": "ReleasesController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateReleaseDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "A new Release linked to its Projects.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "orgId": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
+                    "projectIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "orgId",
+                    "version",
+                    "createdAt",
+                    "projectIds"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer client token was presented."
+          },
+          "403": {
+            "description": "The Organization, Project or scope is not allowed."
+          },
+          "429": {
+            "description": "The client exceeded the rate limit."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "releases"
+        ]
+      }
+    },
+    "/api/organizations/{orgId}/environments": {
+      "get": {
+        "operationId": "EnvironmentsController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The Environments in the caller Organization.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "orgId": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "orgId",
+                      "name",
+                      "createdAt"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer client token was presented."
+          },
+          "403": {
+            "description": "The Organization or scope is not allowed."
+          },
+          "429": {
+            "description": "The client exceeded the rate limit."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "environments"
+        ]
+      }
+    },
+    "/api/organizations/{orgId}/deploys": {
+      "get": {
+        "operationId": "DeploysController_list",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The Deploys in the caller Organization.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "id": {
+                        "type": "string"
+                      },
+                      "orgId": {
+                        "type": "string"
+                      },
+                      "releaseId": {
+                        "type": "string"
+                      },
+                      "environmentId": {
+                        "type": "string"
+                      },
+                      "environment": {
+                        "type": "string"
+                      },
+                      "name": {
+                        "type": "string"
+                      },
+                      "dateStarted": {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                      },
+                      "dateFinished": {
+                        "nullable": true,
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                      },
+                      "url": {
+                        "nullable": true,
+                        "type": "string"
+                      },
+                      "createdAt": {
+                        "type": "string",
+                        "format": "date-time",
+                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                      },
+                      "projectIds": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "required": [
+                      "id",
+                      "orgId",
+                      "releaseId",
+                      "environmentId",
+                      "environment",
+                      "name",
+                      "dateStarted",
+                      "dateFinished",
+                      "url",
+                      "createdAt",
+                      "projectIds"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer client token was presented."
+          },
+          "403": {
+            "description": "The Organization, Project or scope is not allowed."
+          },
+          "429": {
+            "description": "The client exceeded the rate limit."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "deploys"
+        ]
+      },
+      "post": {
+        "operationId": "DeploysController_create",
+        "parameters": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDeployDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "An appended immutable Deploy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "orgId": {
+                      "type": "string"
+                    },
+                    "releaseId": {
+                      "type": "string"
+                    },
+                    "environmentId": {
+                      "type": "string"
+                    },
+                    "environment": {
+                      "type": "string"
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "dateStarted": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
+                    "dateFinished": {
+                      "nullable": true,
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
+                    "url": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "createdAt": {
+                      "type": "string",
+                      "format": "date-time",
+                      "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
+                    },
+                    "projectIds": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "orgId",
+                    "releaseId",
+                    "environmentId",
+                    "environment",
+                    "name",
+                    "dateStarted",
+                    "dateFinished",
+                    "url",
+                    "createdAt",
+                    "projectIds"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer client token was presented."
+          },
+          "403": {
+            "description": "The Organization, Project or scope is not allowed."
+          },
+          "429": {
+            "description": "The client exceeded the rate limit."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "deploys"
+        ]
+      }
+    },
     "/api/credentials": {
       "post": {
         "operationId": "CredentialsController_create",
@@ -4110,6 +4513,77 @@
       "CreateOAuthClientDto": {
         "type": "object",
         "properties": {}
+      },
+      "CreateReleaseDto": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "string",
+            "example": "v3.2.0"
+          },
+          "projects": {
+            "example": [
+              "1001",
+              "1002"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "version",
+          "projects"
+        ]
+      },
+      "CreateDeployDto": {
+        "type": "object",
+        "properties": {
+          "releaseId": {
+            "type": "string",
+            "example": "release-1"
+          },
+          "environment": {
+            "type": "string",
+            "description": "The Organization-scoped Environment name.",
+            "example": "production"
+          },
+          "name": {
+            "type": "string",
+            "example": "deploy-2026-11-22"
+          },
+          "dateStarted": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-11-22T07:00:00.000Z"
+          },
+          "dateFinished": {
+            "format": "date-time",
+            "type": "string",
+            "example": "2026-11-22T07:05:00.000Z"
+          },
+          "url": {
+            "type": "string",
+            "example": "https://ci.example.test/runs/42"
+          },
+          "projects": {
+            "description": "Project ids to target. All Release Projects are used when absent.",
+            "example": [
+              "1001"
+            ],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "releaseId",
+          "environment",
+          "name",
+          "dateStarted"
+        ]
       },
       "CreateCredentialDto": {
         "type": "object",

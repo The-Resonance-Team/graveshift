@@ -47,6 +47,17 @@ export interface paths {
   "/api/organizations/{orgId}/oauth-clients": {
     post: operations["OrganizationsController_createOAuthClient"];
   };
+  "/api/organizations/{orgId}/releases": {
+    get: operations["ReleasesController_list"];
+    post: operations["ReleasesController_create"];
+  };
+  "/api/organizations/{orgId}/environments": {
+    get: operations["EnvironmentsController_list"];
+  };
+  "/api/organizations/{orgId}/deploys": {
+    get: operations["DeploysController_list"];
+    post: operations["DeploysController_create"];
+  };
   "/api/credentials": {
     get: operations["CredentialsController_list"];
     post: operations["CredentialsController_create"];
@@ -114,6 +125,47 @@ export interface components {
     CreateProjectDto: Record<string, never>;
     AddMemberDto: Record<string, never>;
     CreateOAuthClientDto: Record<string, never>;
+    CreateReleaseDto: {
+      /** @example v3.2.0 */
+      version: string;
+      /**
+       * @example [
+       *   "1001",
+       *   "1002"
+       * ]
+       */
+      projects: string[];
+    };
+    CreateDeployDto: {
+      /** @example release-1 */
+      releaseId: string;
+      /**
+       * @description The Organization-scoped Environment name.
+       * @example production
+       */
+      environment: string;
+      /** @example deploy-2026-11-22 */
+      name: string;
+      /**
+       * Format: date-time
+       * @example 2026-11-22T07:00:00.000Z
+       */
+      dateStarted: string;
+      /**
+       * Format: date-time
+       * @example 2026-11-22T07:05:00.000Z
+       */
+      dateFinished?: string;
+      /** @example https://ci.example.test/runs/42 */
+      url?: string;
+      /**
+       * @description Project ids to target. All Release Projects are used when absent.
+       * @example [
+       *   "1001"
+       * ]
+       */
+      projects?: string[];
+    };
     CreateCredentialDto: {
       /** @enum {string} */
       kind: "mcp" | "plugin";
@@ -560,6 +612,176 @@ export interface operations {
             projectId: string;
           };
         };
+      };
+    };
+  };
+  ReleasesController_list: {
+    responses: {
+      /** @description The Releases in the caller Organization. */
+      200: {
+        content: {
+          "application/json": {
+              id: string;
+              orgId: string;
+              version: string;
+              /** Format: date-time */
+              createdAt: string;
+              projectIds: string[];
+            }[];
+        };
+      };
+      /** @description No valid bearer client token was presented. */
+      401: {
+        content: never;
+      };
+      /** @description The Organization, Project or scope is not allowed. */
+      403: {
+        content: never;
+      };
+      /** @description The client exceeded the rate limit. */
+      429: {
+        content: never;
+      };
+    };
+  };
+  ReleasesController_create: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateReleaseDto"];
+      };
+    };
+    responses: {
+      /** @description A new Release linked to its Projects. */
+      201: {
+        content: {
+          "application/json": {
+            id: string;
+            orgId: string;
+            version: string;
+            /** Format: date-time */
+            createdAt: string;
+            projectIds: string[];
+          };
+        };
+      };
+      /** @description No valid bearer client token was presented. */
+      401: {
+        content: never;
+      };
+      /** @description The Organization, Project or scope is not allowed. */
+      403: {
+        content: never;
+      };
+      /** @description The client exceeded the rate limit. */
+      429: {
+        content: never;
+      };
+    };
+  };
+  EnvironmentsController_list: {
+    responses: {
+      /** @description The Environments in the caller Organization. */
+      200: {
+        content: {
+          "application/json": {
+              id: string;
+              orgId: string;
+              name: string;
+              /** Format: date-time */
+              createdAt: string;
+            }[];
+        };
+      };
+      /** @description No valid bearer client token was presented. */
+      401: {
+        content: never;
+      };
+      /** @description The Organization or scope is not allowed. */
+      403: {
+        content: never;
+      };
+      /** @description The client exceeded the rate limit. */
+      429: {
+        content: never;
+      };
+    };
+  };
+  DeploysController_list: {
+    responses: {
+      /** @description The Deploys in the caller Organization. */
+      200: {
+        content: {
+          "application/json": ({
+              id: string;
+              orgId: string;
+              releaseId: string;
+              environmentId: string;
+              environment: string;
+              name: string;
+              /** Format: date-time */
+              dateStarted: string;
+              /** Format: date-time */
+              dateFinished: string | null;
+              url: string | null;
+              /** Format: date-time */
+              createdAt: string;
+              projectIds: string[];
+            })[];
+        };
+      };
+      /** @description No valid bearer client token was presented. */
+      401: {
+        content: never;
+      };
+      /** @description The Organization, Project or scope is not allowed. */
+      403: {
+        content: never;
+      };
+      /** @description The client exceeded the rate limit. */
+      429: {
+        content: never;
+      };
+    };
+  };
+  DeploysController_create: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateDeployDto"];
+      };
+    };
+    responses: {
+      /** @description An appended immutable Deploy. */
+      201: {
+        content: {
+          "application/json": {
+            id: string;
+            orgId: string;
+            releaseId: string;
+            environmentId: string;
+            environment: string;
+            name: string;
+            /** Format: date-time */
+            dateStarted: string;
+            /** Format: date-time */
+            dateFinished: string | null;
+            url: string | null;
+            /** Format: date-time */
+            createdAt: string;
+            projectIds: string[];
+          };
+        };
+      };
+      /** @description No valid bearer client token was presented. */
+      401: {
+        content: never;
+      };
+      /** @description The Organization, Project or scope is not allowed. */
+      403: {
+        content: never;
+      };
+      /** @description The client exceeded the rate limit. */
+      429: {
+        content: never;
       };
     };
   };

@@ -5,6 +5,8 @@ import { ThrottlerModule } from '@nestjs/throttler';
 
 import { HealthController } from './health.controller';
 import { ActionsModule } from './actions/actions.module';
+import { DeploysModule } from './deploys/deploys.module';
+import { DeployAuthModule } from './deploys/deploy-auth.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthConfigModule } from './auth/auth.config.module';
 import { envSchema } from './auth/env.schema';
@@ -25,6 +27,8 @@ import { PolicyContextService } from './internal/policy-context.service';
 import { PrismaInfraModule } from './infra/prisma.module';
 import { EventsConfigModule } from './mcp/events/events.config';
 import { GraveshiftMcpModule } from './mcp/mcp.module';
+import { EnvironmentsModule } from './environments/environments.module';
+import { ReleasesModule } from './releases/releases.module';
 import { RulesController } from './rules.controller';
 import { RulesService } from './rules.service';
 import { WorkItemsModule } from './work-items/work-items.module';
@@ -40,6 +44,10 @@ import { WorkItemsModule } from './work-items/work-items.module';
     InternalAccessModule,
     InternalHttpModule,
     IdentityModule,
+    DeployAuthModule,
+    ReleasesModule,
+    EnvironmentsModule,
+    DeploysModule,
     AuditModule,
     ActionsModule,
     HauntingsModule,
