@@ -111,7 +111,7 @@ describe('PostgreSQL credential and audit persistence', () => {
     expect(JSON.stringify(entries)).not.toContain(issued.value);
   });
 
-  test('database triggers block updates and deletes of audit entries', async () => {
+  test('a direct UPDATE on audit_entries fails and leaves the chain intact', async () => {
     const owner = principal();
     await service.issue(dto(), owner);
     await expect(
@@ -119,10 +119,45 @@ describe('PostgreSQL credential and audit persistence', () => {
         Prisma.sql`UPDATE audit_entries SET actor = 'changed' WHERE tenant_id = ${owner.tenantId}`,
       ),
     ).rejects.toThrow('append-only');
+    expect(await audit.verifyChain(owner.tenantId)).toEqual({ ok: true, length: 1 });
+  });
+
+  test('a direct DELETE on audit_entries fails and leaves the chain intact', async () => {
+    const owner = principal();
+    await service.issue(dto(), owner);
     await expect(
       first.$executeRaw(Prisma.sql`DELETE FROM audit_entries WHERE tenant_id = ${owner.tenantId}`),
     ).rejects.toThrow('append-only');
     expect(await audit.verifyChain(owner.tenantId)).toEqual({ ok: true, length: 1 });
+  });
+
+  test('an audit entry survives an API restart', async () => {
+    const owner = principal();
+    const appended = await audit.append({
+      tenantId: owner.tenantId,
+      actor: owner.clientId,
+      type: 'restart.probe',
+      payload: { note: 'before restart' },
+    });
+    // A restart drops every connection and builds a new client, as a new API process does.
+    // This proves the data is in PostgreSQL and not in client memory.
+    // It does not start a new process.
+    const restarted = new PrismaService(new ConfigService({ DATABASE_URL: url }));
+    try {
+      const reborn = new AuditRepo(restarted);
+      expect(await reborn.list(owner.tenantId)).toEqual([appended]);
+      expect(await reborn.verifyChain(owner.tenantId)).toEqual({ ok: true, length: 1 });
+      const next = await reborn.append({
+        tenantId: owner.tenantId,
+        actor: owner.clientId,
+        type: 'restart.after',
+        payload: {},
+      });
+      expect(next).toMatchObject({ seq: 2, prevHash: appended.hash });
+      expect(await reborn.verifyChain(owner.tenantId)).toEqual({ ok: true, length: 2 });
+    } finally {
+      await restarted.onModuleDestroy();
+    }
   });
 
   test('concurrent audit appends retain sequence and canonical JSON after persistence', async () => {

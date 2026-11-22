@@ -57,9 +57,9 @@ Consumed servers (GitHub, fetch, Kubernetes) are in `.kiro/settings/mcp.example.
 
 ## 7. Property-based testing
 
-`fast-check` properties run under `bun test` in the policy, redactor, actuator, fixer guard, core state machine, store audit chain, watcher, diagnoser, metrics, runtime sources and demo app test files.
+`fast-check` properties run under `bun test` in the policy, redactor, actuator, fixer guard, core state machine, watcher, diagnoser, metrics, runtime sources and demo app test files.
 
-Real counterexample found: a property test on the audit chain found that a payload with a `__proto__` key hashed differently than it read back. The fix normalises the payload through Zod before hashing (`packages/store/src/sqlite.ts`), and a regression test covers it.
+Past defect: a payload with a `__proto__` key hashed differently than it read back. The fix normalises the payload through Zod before hashing (`makeAuditEntry` in `packages/core/src/audit-chain.ts`). Example regression tests in `packages/core/src/audit-chain.test.ts` and `apps/api/src/audit/repo/audit.repo.spec.ts` cover the `__proto__` case. These are not property tests.
 
 Other counterexamples: capture pending (none are recorded in the repository).
 
@@ -77,7 +77,7 @@ Dates are from the build run on 20 Nov 2026 (ICT). "Corrected" lists fixes made 
 
 | Task | Generated | Corrected |
 | --- | --- | --- |
-| Core and store | schemas, state machine, `RuntimeSource` contract, hash-chained audit log | `__proto__` payload hash mismatch found by a property test |
+| Core | schemas, state machine, `RuntimeSource` contract, hash-chained audit log | `__proto__` payload hash mismatch, now covered by example regression tests |
 | Policy and redactor | deny-first `decide()`, mode lattice, 12 detectors, policy CLI | none recorded |
 | Runtime sources and demo | Docker, Kubernetes and Prometheus clients, Haunted Candy Shop with five faults | Docker smoke test showed four scenarios behave as designed; OOM events seen |
 | Watcher | seven rules, dedupe, PromQL poller | none recorded |

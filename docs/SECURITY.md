@@ -19,9 +19,11 @@ Graveshift is read-only toward production by default. These rules match `.kiro/s
 `apps/api/src/audit` keeps audit entries in PostgreSQL, keyed by `tenant_id` and `seq`, with `at` (UTC), `actor`, `type`, `incident_id`, `payload`, `prev_hash` and `hash`.
 
 - `hash` is SHA-256 over a canonical, key-sorted encoding of `[seq, at, actor, type, incidentId or null, payload, prevHash]`. The first `prevHash` is 64 zeros.
-- PostgreSQL triggers abort every `UPDATE` and `DELETE` on `audit_entries`.
+- Enforcement point: the database. The migration `20261121052714_init` creates the function `prevent_audit_entry_mutation()` and two row triggers on `audit_entries`: `audit_entries_no_update` (BEFORE UPDATE) and `audit_entries_no_delete` (BEFORE DELETE). Each trigger raises `audit entries are append-only`, so a direct SQL `UPDATE` or `DELETE` fails. Application code is not the only guard. Prisma does not manage these triggers; the migration SQL holds them in a marked block.
+- `AuditRepo.append` runs in a serializable transaction. It takes a per-tenant advisory lock, reads the last entry, and writes `seq + 1` with the previous hash. A serialization conflict (`P2034`) is tried up to 20 times (19 retries). Services inject `AuditRepo` and never the Prisma client. `payload` is a Prisma `Json` field (PostgreSQL `JSONB`). The core helpers `makeAuditEntry`, `verifyEntries` and `GENESIS_HASH` from `@graveshift/core` are the only chain logic.
+- The SQLite audit store (`packages/store`, Drizzle, `bun:sqlite`) is removed. No fallback store exists.
+- Limit: a database owner can drop the triggers and then change rows. `verifyChain()` detects edits, removal inside the chain and reordering. It does not detect deleted newest entries without publishing the head hash somewhere else.
 - `verifyChain()` walks all entries and returns the first broken `seq` with a reason (`sequence gap or reorder`, `prevHash mismatch` or `hash mismatch`). Tests cover edits to any field, removal and reordering, and a payload with a `__proto__` key.
-- Limit: deleting the newest entries is not detected without publishing the head hash somewhere else.
 - Credential creation, revocation and first observed expiry write an audit entry in the same PostgreSQL transaction as the credential change.
 
 ## MCP server
