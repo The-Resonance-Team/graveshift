@@ -84,19 +84,42 @@ describe('dead-letter subject', () => {
 });
 
 describe('createEnvelopeDeduplicator', () => {
-  test('deduplicates by envelope id', () => {
+  test('records an id only after markDone', () => {
     const dedupe = createEnvelopeDeduplicator();
-    expect(dedupe.isDuplicate('evt-1')).toBe(false);
-    expect(dedupe.isDuplicate('evt-1')).toBe(true);
-    expect(dedupe.isDuplicate('evt-2')).toBe(false);
-    expect(dedupe.isDuplicate('evt-2')).toBe(true);
+    expect(dedupe.has('evt-1')).toBe(false);
+    expect(dedupe.has('evt-1')).toBe(false);
+    dedupe.markDone('evt-1');
+    expect(dedupe.has('evt-1')).toBe(true);
+    expect(dedupe.has('evt-2')).toBe(false);
   });
 
-  test('bounds memory by evicting the oldest id', () => {
+  test('bounds memory by evicting the oldest completed id', () => {
     const dedupe = createEnvelopeDeduplicator(2);
-    expect(dedupe.isDuplicate('a')).toBe(false);
-    expect(dedupe.isDuplicate('b')).toBe(false);
-    expect(dedupe.isDuplicate('c')).toBe(false);
-    expect(dedupe.isDuplicate('a')).toBe(false);
+    for (const id of ['a', 'b', 'c']) {
+      expect(dedupe.has(id)).toBe(false);
+      dedupe.markDone(id);
+    }
+    expect(dedupe.has('a')).toBe(false);
+    expect(dedupe.has('b')).toBe(true);
+    expect(dedupe.has('c')).toBe(true);
+  });
+
+  test('processes a redelivery when the first handler fails', async () => {
+    const dedupe = createEnvelopeDeduplicator();
+    const handled: string[] = [];
+    let attempts = 0;
+    async function handle(id: string): Promise<void> {
+      if (dedupe.has(id)) return;
+      attempts += 1;
+      if (attempts === 1) throw new Error('transient failure');
+      handled.push(id);
+      dedupe.markDone(id);
+    }
+
+    await expect(handle('evt-1')).rejects.toThrow('transient failure');
+    await handle('evt-1');
+    expect(handled).toEqual(['evt-1']);
+    await handle('evt-1');
+    expect(handled).toEqual(['evt-1']);
   });
 });

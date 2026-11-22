@@ -41,26 +41,29 @@ export const DETECTION_CONSUMER = {
   deliver_policy: 'all',
 } as const;
 
-/** Reports whether an envelope id was already delivered; records new ids. */
+/**
+ * Deduplicate consumer deliveries by envelope id. A consumer calls `has`
+ * before it handles an envelope, and `markDone` only after the handler succeeds
+ * and the ack is sent. A failed handler leaves the id unrecorded, so JetStream
+ * redelivery is processed again and can reach the dead-letter subject.
+ */
 export interface EnvelopeDeduplicator {
-  isDuplicate(id: string): boolean;
+  has(id: string): boolean;
+  markDone(id: string): void;
 }
 
-/**
- * Deduplicate consumer deliveries by envelope id. Delivery is at least once,
- * so a replay after the duplicate window must not be handled twice.
- */
 export function createEnvelopeDeduplicator(maxSize = 100_000): EnvelopeDeduplicator {
-  const seen = new Set<string>();
+  const done = new Set<string>();
   return {
-    isDuplicate(id) {
-      if (seen.has(id)) return true;
-      seen.add(id);
-      if (seen.size > maxSize) {
-        const oldest = seen.values().next().value;
-        if (oldest !== undefined) seen.delete(oldest);
+    has(id) {
+      return done.has(id);
+    },
+    markDone(id) {
+      done.add(id);
+      if (done.size > maxSize) {
+        const oldest = done.values().next().value;
+        if (oldest !== undefined) done.delete(oldest);
       }
-      return false;
     },
   };
 }

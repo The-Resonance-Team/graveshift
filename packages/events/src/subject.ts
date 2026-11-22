@@ -28,8 +28,26 @@ export function laneFor(severity: EventEnvelope['severity']): Lane {
   return severity === 'info' ? 'telemetry' : 'detection';
 }
 
+/**
+ * Fail closed on an unvalidated caller. The primary rule is EventEnvelopeSchema
+ * in packages/core: tenantId is one token and type is a dotted list of tokens.
+ * A type keeps its dots; neither part may carry a wildcard or a wildcard-like
+ * empty token.
+ */
+function assertSafeSubjectPart(value: string, name: 'tenantId' | 'type'): void {
+  if (name === 'tenantId' && value.includes('.')) {
+    throw new Error(`Unsafe ${name} in event subject`);
+  }
+  const tokens = value.split('.');
+  if (tokens.some((token) => !safeToken.test(token))) {
+    throw new Error(`Unsafe ${name} in event subject`);
+  }
+}
+
 /** Build `graveshift.<tenantId>.<lane>.<grave>.<type>`. */
 export function publishSubject(envelope: EventEnvelope): string {
+  assertSafeSubjectPart(envelope.tenantId, 'tenantId');
+  assertSafeSubjectPart(envelope.type, 'type');
   const grave = safeSubjectToken(envelope.service);
   return `${SUBJECT_PREFIX}.${envelope.tenantId}.${laneFor(envelope.severity)}.${grave}.${envelope.type}`;
 }

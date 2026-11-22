@@ -1,4 +1,4 @@
-import type { EventEnvelope } from '@graveshift/core';
+import { EventEnvelopeSchema, type EventEnvelope } from '@graveshift/core';
 import { describe, expect, test } from 'bun:test';
 
 import { createNatsPublisher, type PublishTarget, publishSubject, safeSubjectToken } from './index';
@@ -61,6 +61,33 @@ describe('publish subject', () => {
     expect(safeSubjectToken('checkout.api')).toBe('checkout_api');
     expect(safeSubjectToken('...')).toBe('_');
     expect(safeSubjectToken(safeSubjectToken('a b'))).toBe(safeSubjectToken('a b'));
+  });
+});
+
+describe('subject part safety', () => {
+  test('publishSubject rejects an unsafe tenantId', () => {
+    for (const tenantId of ['a.b', 'a*b', 'a>b', 'a b', '']) {
+      expect(() => publishSubject({ ...envelope, tenantId })).toThrow('tenantId');
+    }
+  });
+
+  test('publishSubject rejects a wildcard or empty token in type', () => {
+    for (const type of ['signal.*', 'signal.>', 'signal..oom', '.oom', 'signal ']) {
+      expect(() => publishSubject({ ...envelope, type })).toThrow('type');
+    }
+    expect(publishSubject({ ...envelope, type: 'checkout.http.request' })).toBe(
+      'graveshift.tenant-1.telemetry.api.checkout.http.request',
+    );
+  });
+
+  test('the core schema already limits tenantId and type', () => {
+    for (const tenantId of ['a.b', 'a*b', 'a>b']) {
+      expect(() => EventEnvelopeSchema.parse({ ...envelope, tenantId })).toThrow();
+    }
+    for (const type of ['signal.*', 'signal.>']) {
+      expect(() => EventEnvelopeSchema.parse({ ...envelope, type })).toThrow();
+    }
+    expect(() => EventEnvelopeSchema.parse({ ...envelope, type: 'a.b.c' })).not.toThrow();
   });
 });
 
