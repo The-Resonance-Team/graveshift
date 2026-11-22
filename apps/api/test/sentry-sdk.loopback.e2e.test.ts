@@ -1,5 +1,4 @@
 import * as Sentry from '@sentry/node';
-import { createTransport } from '@sentry/core';
 import { afterAll, describe, expect, test } from 'bun:test';
 
 import type { CredentialVerifier, VerifiedCredential } from '../src/auth/auth.types';
@@ -37,32 +36,13 @@ describe.skipIf(process.env.CI === 'true')('Sentry SDK loopback ingest', () => {
     const address = server.address();
     if (address === null || typeof address === 'string') throw new Error('Loopback did not bind');
 
-    let responseStatus: number | undefined;
-    let responseText = '';
     Sentry.init({
       dsn: `http://${TEST_KEY}@127.0.0.1:${address.port}/12345`,
       defaultIntegrations: false,
       tracesSampleRate: 0,
-      transport: (options) =>
-        createTransport(options, async ({ body }) => {
-          const response = await fetch(options.url, {
-            method: 'POST',
-            headers: {
-              ...options.headers,
-              'content-type': 'application/x-sentry-envelope',
-            },
-            body: Buffer.from(body),
-          });
-          responseStatus = response.status;
-          responseText = await response.text();
-          return {
-            statusCode: response.status,
-            headers: {
-              'x-sentry-rate-limits': response.headers.get('x-sentry-rate-limits'),
-              'retry-after': response.headers.get('retry-after'),
-            },
-          };
-        }),
+      // makeNodeTransport sends no content type by default. Set the envelope
+      // type so the SDK's own HTTP transport reaches the raw envelope parser.
+      transportOptions: { headers: { 'content-type': 'application/x-sentry-envelope' } },
     });
     Sentry.captureEvent({
       event_id: 'fedcba9876543210fedcba9876543210',
@@ -72,7 +52,6 @@ describe.skipIf(process.env.CI === 'true')('Sentry SDK loopback ingest', () => {
     });
 
     expect(await Sentry.flush(3000)).toBe(true);
-    if (responseStatus !== 200) throw new Error(`Nest returned ${responseStatus}: ${responseText}`);
     expect(ctx.publisher.envelopes).toHaveLength(1);
     expect(ctx.publisher.envelopes[0]).toMatchObject({
       id: 'fedcba9876543210fedcba9876543210',

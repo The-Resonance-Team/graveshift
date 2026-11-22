@@ -11,7 +11,7 @@ import { createOpenApiDocument } from './openapi';
 export function configureApp<T extends INestApplication>(app: T): T {
   // Adapter boundary: the API uses Express to parse Sentry's raw envelope body.
   (app as unknown as NestExpressApplication).useBodyParser('raw', {
-    type: 'application/x-sentry-envelope',
+    type: ['application/x-sentry-envelope', 'text/plain'],
     limit: '1mb',
   });
   // Request DTO classes own validation at the boundary. Undeclared fields are 422s.

@@ -42,11 +42,12 @@ export class SentryHttpExceptionFilter implements ExceptionFilter<HttpException>
 
   catch(exception: HttpException, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<{
+      getHeader(name: string): string | number | string[] | undefined;
       setHeader(name: string, value: string): void;
       status(code: number): { json(body: unknown): void };
     }>();
     const status = exception.getStatus();
-    if (status === HttpStatus.TOO_MANY_REQUESTS) {
+    if (status === HttpStatus.TOO_MANY_REQUESTS && !response.getHeader('Retry-After')) {
       response.setHeader('Retry-After', String(Math.ceil(this.config.eventRateTtlMs / 1000)));
     }
     response.status(status).json(exception.getResponse());

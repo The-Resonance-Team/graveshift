@@ -109,6 +109,23 @@ describe('CredentialService', () => {
     ).rejects.toThrow();
   });
 
+  test('maps a duplicate Sentry project id to a 409', async () => {
+    const { service } = setup();
+    const sentry = () =>
+      dto({
+        kind: 'plugin',
+        name: 'sentry',
+        scopes: ['events:publish'],
+        service: 'api',
+        projectId: '12345',
+      });
+    await service.issue(sentry(), principal);
+    await expect(service.issue(sentry(), principal)).rejects.toMatchObject({
+      status: 409,
+      message: 'The Sentry project id is already in use',
+    });
+  });
+
   test('caps parallel issues at ten active credentials', async () => {
     const { service } = setup();
     const results = await Promise.allSettled(

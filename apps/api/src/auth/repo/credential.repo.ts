@@ -14,6 +14,13 @@ export class CredentialLimitError extends Error {
   }
 }
 
+export class CredentialConflictError extends Error {
+  constructor() {
+    super('The Sentry project id is already in use');
+    this.name = 'CredentialConflictError';
+  }
+}
+
 /** Domain verbs for the PostgreSQL credential table. */
 export abstract class CredentialRepo {
   abstract list(principal: Principal): Promise<CredentialRecord[]>;
@@ -99,7 +106,14 @@ export class PrismaCredentialRepo extends CredentialRepo {
       });
       if (active >= MAX_ACTIVE_CREDENTIALS) throw new CredentialLimitError();
 
-      await tx.credential.create({ data: credentialData(record) });
+      try {
+        await tx.credential.create({ data: credentialData(record) });
+      } catch (error) {
+        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+          throw new CredentialConflictError();
+        }
+        throw error;
+      }
       await this.audit.appendInTransaction(tx, record.tenantId, {
         actor: record.clientId,
         type: 'credential.created',
@@ -109,6 +123,7 @@ export class PrismaCredentialRepo extends CredentialRepo {
           name: record.name,
           scopes: record.scopes,
           service: record.service,
+          projectId: record.projectId,
           expiresAt: record.expiresAt,
         },
       });

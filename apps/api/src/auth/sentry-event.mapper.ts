@@ -55,7 +55,8 @@ function fingerprint(event: JsonObject, type: string): string {
   if (typeof supplied === 'string' && supplied.length > 0) return supplied.slice(0, 512);
   if (Array.isArray(supplied) && supplied.length > 0) {
     const parts = supplied.filter(
-      (part): part is string => typeof part === 'string' && part.length > 0,
+      (part): part is string =>
+        typeof part === 'string' && part.length > 0 && part !== '{{ default }}',
     );
     if (parts.length > 0) return parts.join(':').slice(0, 512);
   }
