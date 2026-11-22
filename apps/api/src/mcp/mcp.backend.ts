@@ -15,6 +15,7 @@ import {
   IncidentViewsSchema,
   LogLinesSchema,
   MetricValueSchema,
+  type ServiceView,
   ServiceViewsSchema,
 } from '@graveshift/core';
 
@@ -49,7 +50,7 @@ export class HttpMcpBackend implements McpBackend {
     }
   }
 
-  listServices(): Promise<unknown[]> {
+  listServices(): Promise<ServiceView[]> {
     return this.read('/read/services', ServiceViewsSchema);
   }
 

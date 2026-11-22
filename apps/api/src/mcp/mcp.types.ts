@@ -1,14 +1,26 @@
-import type { AuditEntry, ChainResult, CounterSnapshot, IncidentView } from '@graveshift/core';
+import type {
+  AuditEntry,
+  ChainResult,
+  CounterSnapshot,
+  IncidentView,
+  ServiceView,
+} from '@graveshift/core';
 
 export const MCP_BACKEND = Symbol('MCP_BACKEND');
 export const MCP_POLICY = Symbol('MCP_POLICY');
 export const MCP_ENV_MODE = Symbol('MCP_ENV_MODE');
 
-export type { ChainResult, CounterSnapshot, IncidentView, LimitCounters } from '@graveshift/core';
+export type {
+  ChainResult,
+  CounterSnapshot,
+  IncidentView,
+  LimitCounters,
+  ServiceView,
+} from '@graveshift/core';
 
 /** Everything the MCP tools read from the daemon. Tests inject a fake client. */
 export interface McpBackend {
-  listServices(): Promise<unknown[]>;
+  listServices(): Promise<ServiceView[]>;
   listIncidents(): Promise<IncidentView[]>;
   getIncident(id: string): Promise<IncidentView | undefined>;
   listAudit(opts: { afterSeq: number; limit: number }): Promise<AuditEntry[]>;

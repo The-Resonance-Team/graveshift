@@ -4,6 +4,7 @@ import type {
   CounterSnapshot,
   IncidentView,
   LimitCounters,
+  ServiceView,
 } from '@graveshift/core';
 
 import type { McpBackend } from '../../src/mcp/mcp.types';
@@ -42,8 +43,8 @@ export class FakeMcpBackend implements McpBackend {
     },
   ) {}
 
-  listServices(): Promise<unknown[]> {
-    return Promise.resolve([{ name: 'api' }]);
+  listServices(): Promise<ServiceView[]> {
+    return Promise.resolve([{ name: 'api', status: 'healthy' }]);
   }
 
   listIncidents(): Promise<IncidentView[]> {
