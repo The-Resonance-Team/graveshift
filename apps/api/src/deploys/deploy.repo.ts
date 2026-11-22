@@ -1,5 +1,7 @@
 import { Injectable } from '@nestjs/common';
 
+import { AuditRepo } from '../audit/repo/audit.repo';
+import { inAuditTransaction } from '../audit/audit.transaction';
 import { PrismaService } from '../infra/prisma.service';
 import { AppendOnlyDeployError, type DeployRecord } from './deploy.types';
 
@@ -37,7 +39,10 @@ const toRecord = (row: DeployRow): DeployRecord => ({
 /** Owns Deploy inserts and its Project links. No update or delete path exists. */
 @Injectable()
 export class DeployRepo {
-  constructor(private readonly db: PrismaService) {}
+  constructor(
+    private readonly db: PrismaService,
+    private readonly audit: AuditRepo,
+  ) {}
 
   async append(input: {
     orgId: string;
@@ -48,8 +53,10 @@ export class DeployRepo {
     dateFinished?: Date | undefined;
     url?: string | undefined;
     projectIds: string[];
+    actor: string;
+    auditEnvironment: boolean;
   }): Promise<DeployRecord> {
-    const row = await this.db.$transaction(async (tx) => {
+    return inAuditTransaction(this.db, async (tx) => {
       const deploy = await tx.deploy.create({
         data: {
           orgId: input.orgId,
@@ -64,17 +71,47 @@ export class DeployRepo {
       await tx.deployProject.createMany({
         data: input.projectIds.map((projectId) => ({ deployId: deploy.id, projectId })),
       });
-      return tx.deploy.findUniqueOrThrow({
+      await Promise.all(
+        input.projectIds.map(async (projectId) => {
+          if (input.auditEnvironment) {
+            await this.audit.appendInTransaction(tx, projectId, {
+              actor: input.actor,
+              type: 'environment.created',
+              payload: {
+                environmentId: input.environmentId,
+                orgId: input.orgId,
+                projectId,
+              },
+            });
+          }
+          await this.audit.appendInTransaction(tx, projectId, {
+            actor: input.actor,
+            type: 'deploy.created',
+            payload: {
+              deployId: deploy.id,
+              releaseId: input.releaseId,
+              environmentId: input.environmentId,
+              name: input.name,
+              dateStarted: deploy.dateStarted.toISOString(),
+              projectId,
+            },
+          });
+        }),
+      );
+      const row = await tx.deploy.findUniqueOrThrow({
         where: { id: deploy.id },
         include: { ...withProjects, ...withEnvironment },
       });
+      return toRecord(row);
     });
-    return toRecord(row);
   }
 
-  async list(orgId: string, releaseId?: string): Promise<DeployRecord[]> {
+  async list(orgId: string, projectId?: string): Promise<DeployRecord[]> {
     const rows = await this.db.deploy.findMany({
-      where: { orgId, ...(releaseId === undefined ? {} : { releaseId }) },
+      where: {
+        orgId,
+        ...(projectId === undefined ? {} : { projectLinks: { some: { projectId } } }),
+      },
       include: { ...withProjects, ...withEnvironment },
       orderBy: { dateStarted: 'asc' },
     });

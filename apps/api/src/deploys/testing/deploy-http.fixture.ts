@@ -33,8 +33,10 @@ export interface DeployTestContext {
   projectA2: string;
   projectB: string;
   clientA: string;
+  clientA2: string;
   clientB: string;
   ciClient: string;
+  orgCiClient: string;
 }
 
 /** Builds the real HTTP app with in-memory stores. No database or network is used. */
@@ -52,8 +54,10 @@ export async function buildDeployTestApp(): Promise<DeployTestContext> {
     await identity.addProject({ projectId: '2001', orgId: orgB, name: 'Foreign', slug: 'foreign' })
   ).projectId;
   const clientA = 'deploy-client-a';
+  const clientA2 = 'deploy-client-a2';
   const clientB = 'deploy-client-b';
   const ciClient = 'deploy-client-ci';
+  const orgCiClient = 'deploy-client-org-ci';
   await identity.addOAuthClient({
     clientId: clientA,
     secretHash: 'test-hash-only',
@@ -75,10 +79,25 @@ export async function buildDeployTestApp(): Promise<DeployTestContext> {
     projectId: projectA,
     scopes: expandScopes(['org:ci']),
   });
+  await identity.addOAuthClient({
+    clientId: clientA2,
+    secretHash: 'test-hash-only',
+    orgId: orgA,
+    projectId: projectA2,
+    scopes: expandScopes(['project:read']),
+  });
+  await identity.addOAuthClient({
+    clientId: orgCiClient,
+    secretHash: 'test-hash-only',
+    orgId: orgA,
+    projectId: projectA,
+    scopes: expandScopes(['org:read', 'org:ci', 'project:read', 'project:write']),
+  });
 
   const releases = new FakeReleaseRepo();
   const environments = new FakeEnvironmentRepo();
   const deploys = new FakeDeployRepo(environments);
+  environments.deploys = deploys;
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(BOOT_CONFIG)
     .useValue(await testBootConfig())
@@ -114,8 +133,10 @@ export async function buildDeployTestApp(): Promise<DeployTestContext> {
     projectA2,
     projectB,
     clientA,
+    clientA2,
     clientB,
     ciClient,
+    orgCiClient,
   };
 }
 

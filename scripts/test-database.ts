@@ -15,7 +15,7 @@ const compose = [
   '-p',
   `graveshift-tests-${process.pid}`,
 ];
-const env = {
+const baseEnv = {
   ...process.env,
   GRAVESHIFT_TEST_PG_PORT: port,
   GRAVESHIFT_DB_TEST: '1',
@@ -24,7 +24,17 @@ const env = {
   CI: '',
   DATABASE_URL: `postgresql://gs_test:local-test-only@127.0.0.1:${port}/graveshift_test_${runId}`,
 };
-async function run(command: string[], cwd: string = root) {
+// The v3 deploy database rules use the isolated fixture guard. They get one
+// private database per run, so they cannot touch the shared migration database.
+const runId = randomBytes(16).toString('hex');
+const isolatedDatabase = `graveshift_test_${runId}`;
+const isolatedEnv = {
+  ...baseEnv,
+  GRAVESHIFT_DB_TEST: '1',
+  GRAVESHIFT_DB_TEST_ID: runId,
+  DATABASE_URL: `postgresql://gs_test:local-test-only@127.0.0.1:${port}/${isolatedDatabase}`,
+};
+async function run(command: string[], cwd: string = root, env: NodeJS.ProcessEnv = baseEnv) {
   const child = Bun.spawn(command, { cwd, env, stdout: 'inherit', stderr: 'inherit' });
   const status = await child.exited;
   if (status !== 0)
@@ -50,6 +60,52 @@ try {
     './apps/api/src/work-items',
     './apps/daemon/src/platform.database.test.ts',
   ]);
+
+  await run([
+    ...compose,
+    'exec',
+    '-T',
+    'postgres',
+    'psql',
+    '-U',
+    'graveshift_test',
+    '-d',
+    'graveshift_test',
+    '-c',
+    `CREATE ROLE gs_test LOGIN PASSWORD 'local-test-only'`,
+  ]);
+  await run([
+    ...compose,
+    'exec',
+    '-T',
+    'postgres',
+    'psql',
+    '-U',
+    'graveshift_test',
+    '-d',
+    'graveshift_test',
+    '-c',
+    `CREATE DATABASE "${isolatedDatabase}" OWNER gs_test`,
+  ]);
+  await run(
+    ['bun', 'x', '--no-install', 'prisma', 'migrate', 'deploy'],
+    resolve(root, 'apps/api'),
+    isolatedEnv,
+  );
+  await run(
+    [
+      'bun',
+      'test',
+      '--check',
+      '--timeout',
+      '30000',
+      '--tsconfig-override',
+      'apps/api/tsconfig.json',
+      './apps/api/test/database/deploys.db.test.ts',
+    ],
+    root,
+    isolatedEnv,
+  );
 } finally {
   await run([...compose, 'down', '--volumes', '--remove-orphans']);
 }

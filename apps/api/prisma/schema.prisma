@@ -157,9 +157,9 @@ model Deploy {
   dateFinished  DateTime?       @map("date_finished")
   url           String?
   createdAt     DateTime        @default(now()) @map("created_at")
-  organization  Organization    @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  release       Release         @relation(fields: [releaseId], references: [id], onDelete: Cascade)
-  environment   Environment     @relation(fields: [environmentId], references: [id], onDelete: Cascade)
+  organization  Organization    @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  release       Release         @relation(fields: [releaseId], references: [id], onDelete: Restrict)
+  environment   Environment     @relation(fields: [environmentId], references: [id], onDelete: Restrict)
   projectLinks  DeployProject[]
 
   @@index([orgId, releaseId])
@@ -170,8 +170,8 @@ model Deploy {
 model DeployProject {
   deployId  String  @map("deploy_id")
   projectId String  @map("project_id")
-  deploy    Deploy  @relation(fields: [deployId], references: [id], onDelete: Cascade)
-  project   Project @relation(fields: [projectId], references: [projectId], onDelete: Cascade)
+  deploy    Deploy  @relation(fields: [deployId], references: [id], onDelete: Restrict)
+  project   Project @relation(fields: [projectId], references: [projectId], onDelete: Restrict)
 
   @@id([deployId, projectId])
   @@index([projectId])

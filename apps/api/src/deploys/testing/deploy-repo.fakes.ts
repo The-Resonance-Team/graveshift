@@ -10,6 +10,7 @@ export class FakeReleaseRepo {
     orgId: string;
     version: string;
     projectIds: string[];
+    actor: string;
   }): Promise<ReleaseRecord> {
     const record: ReleaseRecord = {
       id: randomUUID(),
@@ -30,20 +31,27 @@ export class FakeReleaseRepo {
     return this.rows.get(id);
   }
 
-  async list(orgId: string): Promise<ReleaseRecord[]> {
-    return [...this.rows.values()].filter((row) => row.orgId === orgId);
+  async list(orgId: string, projectId?: string): Promise<ReleaseRecord[]> {
+    return [...this.rows.values()].filter(
+      (row) =>
+        row.orgId === orgId && (projectId === undefined || row.projectIds.includes(projectId)),
+    );
   }
 }
 
 /** In-memory Environment store for HTTP tests. */
 export class FakeEnvironmentRepo {
   readonly rows = new Map<string, EnvironmentRecord>();
+  deploys?: FakeDeployRepo;
 
-  async findOrCreate(orgId: string, name: string): Promise<EnvironmentRecord> {
+  async findOrCreate(
+    orgId: string,
+    name: string,
+  ): Promise<{ record: EnvironmentRecord; created: boolean }> {
     const existing = [...this.rows.values()].find(
       (row) => row.orgId === orgId && row.name === name,
     );
-    if (existing !== undefined) return existing;
+    if (existing !== undefined) return { record: existing, created: false };
     const record: EnvironmentRecord = {
       id: randomUUID(),
       orgId,
@@ -51,11 +59,18 @@ export class FakeEnvironmentRepo {
       createdAt: new Date().toISOString(),
     };
     this.rows.set(record.id, record);
-    return record;
+    return { record, created: true };
   }
 
-  async list(orgId: string): Promise<EnvironmentRecord[]> {
-    return [...this.rows.values()].filter((row) => row.orgId === orgId);
+  async list(orgId: string, projectId?: string): Promise<EnvironmentRecord[]> {
+    return [...this.rows.values()].filter(
+      (row) =>
+        row.orgId === orgId &&
+        (projectId === undefined ||
+          [...(this.deploys?.rows.values() ?? [])].some(
+            (deploy) => deploy.environmentId === row.id && deploy.projectIds.includes(projectId),
+          )),
+    );
   }
 }
 
@@ -74,6 +89,8 @@ export class FakeDeployRepo {
     dateFinished?: Date | undefined;
     url?: string | undefined;
     projectIds: string[];
+    actor: string;
+    auditEnvironment: boolean;
   }): Promise<DeployRecord> {
     const record: DeployRecord = {
       id: randomUUID(),
@@ -94,7 +111,10 @@ export class FakeDeployRepo {
     return record;
   }
 
-  async list(orgId: string): Promise<DeployRecord[]> {
-    return [...this.rows.values()].filter((row) => row.orgId === orgId);
+  async list(orgId: string, projectId?: string): Promise<DeployRecord[]> {
+    return [...this.rows.values()].filter(
+      (row) =>
+        row.orgId === orgId && (projectId === undefined || row.projectIds.includes(projectId)),
+    );
   }
 }

@@ -1,7 +1,9 @@
 import { Injectable } from '@nestjs/common';
 
-import { PrismaService } from '../infra/prisma.service';
+import { AuditRepo } from '../audit/repo/audit.repo';
+import { inAuditTransaction } from '../audit/audit.transaction';
 import type { ReleaseRecord } from '../deploys/deploy.types';
+import { PrismaService } from '../infra/prisma.service';
 
 const withProjects = { projectLinks: { select: { projectId: true } } } as const;
 
@@ -24,23 +26,44 @@ const toRecord = (row: ReleaseRow): ReleaseRecord => ({
 /** Owns every write to the Release and ProjectRelease tables. */
 @Injectable()
 export class ReleaseRepo {
-  constructor(private readonly db: PrismaService) {}
+  constructor(
+    private readonly db: PrismaService,
+    private readonly audit: AuditRepo,
+  ) {}
 
   async create(input: {
     orgId: string;
     version: string;
     projectIds: string[];
+    actor: string;
   }): Promise<ReleaseRecord> {
-    const row = await this.db.$transaction(async (tx) => {
+    return inAuditTransaction(this.db, async (tx) => {
       const release = await tx.release.create({
         data: { orgId: input.orgId, version: input.version },
       });
       await tx.projectRelease.createMany({
         data: input.projectIds.map((projectId) => ({ projectId, releaseId: release.id })),
       });
-      return tx.release.findUniqueOrThrow({ where: { id: release.id }, include: withProjects });
+      const row = await tx.release.findUniqueOrThrow({
+        where: { id: release.id },
+        include: withProjects,
+      });
+      await Promise.all(
+        input.projectIds.map(async (projectId) =>
+          this.audit.appendInTransaction(tx, projectId, {
+            actor: input.actor,
+            type: 'release.created',
+            payload: {
+              releaseId: release.id,
+              version: release.version,
+              orgId: release.orgId,
+              projectId,
+            },
+          }),
+        ),
+      );
+      return toRecord(row);
     });
-    return toRecord(row);
   }
 
   async findByVersion(orgId: string, version: string): Promise<ReleaseRecord | undefined> {
@@ -56,9 +79,12 @@ export class ReleaseRepo {
     return row === null ? undefined : toRecord(row);
   }
 
-  async list(orgId: string): Promise<ReleaseRecord[]> {
+  async list(orgId: string, projectId?: string): Promise<ReleaseRecord[]> {
     const rows = await this.db.release.findMany({
-      where: { orgId },
+      where: {
+        orgId,
+        ...(projectId === undefined ? {} : { projectLinks: { some: { projectId } } }),
+      },
       include: withProjects,
       orderBy: { createdAt: 'asc' },
     });

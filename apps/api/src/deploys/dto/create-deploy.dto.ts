@@ -6,6 +6,7 @@ import {
   IsDate,
   IsOptional,
   IsString,
+  IsUrl,
   Matches,
   MaxLength,
   MinLength,
@@ -45,7 +46,7 @@ export class CreateDeployDto {
 
   @ApiPropertyOptional({ example: 'https://ci.example.test/runs/42' })
   @IsOptional()
-  @IsString()
+  @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
   @MaxLength(2048)
   url?: string;
 

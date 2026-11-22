@@ -1,7 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
-import { migrationOwnershipViolations, normalize } from './prisma-drift';
+import { migrationOwnershipViolations, normalize, v3DeployViolations } from './prisma-drift';
 
 // ponytail: DB-free comparison canonicalises additive migrations; upgrade when a destructive migration lands, after coordinator approval of a CI service container or external test database.
 export function canonicalLines(sql: string): string[] {
@@ -85,7 +85,10 @@ if (import.meta.main) {
   const migrationSql = migrationFiles.map((file) => readFileSync(file, 'utf8')).join('\n');
 
   // Keep the PR #97 audit trigger, function body and credentials ownership check.
-  const violations = migrationOwnershipViolations(migrationSql);
+  const violations = [
+    ...migrationOwnershipViolations(migrationSql),
+    ...v3DeployViolations(migrationSql),
+  ];
   if (violations.length > 0) {
     console.error('Prisma drift check failed: migration objects are on the wrong table.');
     for (const violation of violations) process.stderr.write(`  - ${violation}\n`);

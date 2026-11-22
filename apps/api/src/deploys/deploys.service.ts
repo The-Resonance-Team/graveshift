@@ -5,7 +5,12 @@ import { IDENTITY_REPO, type IdentityRepo } from '../identity/identity.types';
 import { ReleaseRepo } from '../releases/release.repo';
 import type { CreateDeployDto } from './dto/create-deploy.dto';
 import { DeployRepo } from './deploy.repo';
-import type { DeployPrincipal, DeployRecord } from './deploy.types';
+import {
+  assertProjectBound,
+  readProjectFilter,
+  type DeployPrincipal,
+  type DeployRecord,
+} from './deploy.types';
 
 @Injectable()
 export class DeploysService {
@@ -33,20 +38,23 @@ export class DeploysService {
         }
       }),
     );
+    assertProjectBound(principal, targets);
     const environment = await this.environments.findOrCreate(principal.orgId, dto.environment);
     return this.repo.append({
       orgId: principal.orgId,
       releaseId: release.id,
-      environmentId: environment.id,
+      environmentId: environment.record.id,
       name: dto.name,
       dateStarted: dto.dateStarted,
       dateFinished: dto.dateFinished,
       url: dto.url,
       projectIds: targets,
+      actor: principal.clientId,
+      auditEnvironment: environment.created,
     });
   }
 
   list(principal: DeployPrincipal): Promise<DeployRecord[]> {
-    return this.repo.list(principal.orgId);
+    return this.repo.list(principal.orgId, readProjectFilter(principal));
   }
 }
