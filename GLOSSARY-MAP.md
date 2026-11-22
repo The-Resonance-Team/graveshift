@@ -20,7 +20,6 @@ This file is an index. It lists each context, the terms it owns and the path to 
 | `packages/metrics` | No domain terms |
 | `packages/notifier-discord` | `packages/notifier-discord/GLOSSARY.md` |
 | `packages/patch` | `packages/patch/GLOSSARY.md` |
-| `packages/plugin-nestjs` | No domain terms |
 | `packages/policy` | No domain terms |
 | `packages/redactor` | No domain terms |
 | `packages/sources-docker` | No domain terms |

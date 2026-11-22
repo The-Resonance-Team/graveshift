@@ -56,7 +56,9 @@ export function canonicalLines(sql: string): string[] {
 export function driftMatches(migrationSql: string, generatedSql: string): boolean {
   const expected = canonicalLines(migrationSql);
   const actual = canonicalLines(generatedSql);
-  return expected.length === actual.length && expected.every((line, index) => line === actual[index]);
+  return (
+    expected.length === actual.length && expected.every((line, index) => line === actual[index])
+  );
 }
 
 if (import.meta.main) {
