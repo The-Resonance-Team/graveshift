@@ -1,0 +1,22 @@
+{
+  "name": "@graveshift/collectors",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "bun check --no-script",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@graveshift/core": "workspace:*",
+    "@graveshift/events": "workspace:*",
+    "@graveshift/integrations": "workspace:*",
+    "@graveshift/metrics": "workspace:*",
+    "@graveshift/redactor": "workspace:*",
+    "@graveshift/sources-docker": "workspace:*",
+    "@graveshift/sources-k8s": "workspace:*"
+  }
+}
