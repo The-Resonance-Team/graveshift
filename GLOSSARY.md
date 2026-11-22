@@ -45,6 +45,5 @@ This file holds system-wide domain terms only. Each area's terms live in the `GL
 
 - _Avoid_ **User** — say Account.
 - _Avoid_ **Client** for a person — say Account.
-- _Avoid_ **Tenant** — say Organization.
 - _Avoid_ **Deployment event** — say Deploy.
 - _Avoid_ **Subscription** for the event subscription term. That term lives in `apps/api/GLOSSARY.md`.

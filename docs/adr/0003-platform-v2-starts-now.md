@@ -1,6 +1,6 @@
 # Platform v2 starts now; v1 is dead
 
-Status: superseded by ADR 0023
+Status: superseded in part by ADR 0023
 Supersedes: ADR 0001
 
 > [ADR 0018](0018-project-scoped-state.md) supersedes the `tenantId` clause here. `projectId` replaces it.
