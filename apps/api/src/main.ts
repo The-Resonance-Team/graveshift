@@ -1,10 +1,12 @@
+import type { GraveshiftConfig } from '@graveshift/config';
+
 import { createApp } from './app.factory';
+import { GRAVESHIFT_CONFIG } from './config/config.provider';
 
 async function bootstrap() {
   const app = await createApp();
-  const port = Number(process.env.PORT ?? 3000);
-  const host = process.env.HOST ?? '127.0.0.1';
-  await app.listen(port, host);
+  const config = app.get<GraveshiftConfig>(GRAVESHIFT_CONFIG);
+  await app.listen(config.boot.port, config.boot.host);
 }
 
 bootstrap().catch((error: unknown) => {

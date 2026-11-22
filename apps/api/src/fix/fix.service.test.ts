@@ -5,9 +5,9 @@ import { describe, expect, test } from 'bun:test';
 import { baseItem, goodContext, repo, serviceWith } from './fix.test-helpers';
 
 describe('fix use case', () => {
-  test('auto-fix is allowed only when client config sets autoFixAllowed', async () => {
-    const { service, gatewayCalls, calls } = serviceWith();
-    const result = await service.autoFix({ ...baseItem, autoFixAllowed: true });
+  test('auto-fix starts when the boot flag is on', async () => {
+    const { service, gatewayCalls, calls } = serviceWith({ autoFixEnabled: true });
+    const result = await service.autoFix(baseItem);
     expect(result.ok).toBe(true);
     expect(result.trigger).toBe('auto_fix');
     expect(result.effect).toBe('allow');
@@ -19,8 +19,8 @@ describe('fix use case', () => {
   });
 
   test('auto-fix disabled uses Fix now', async () => {
-    const { service, gatewayCalls, calls } = serviceWith();
-    const disabled = { ...baseItem, autoFixAllowed: false };
+    const disabled = baseItem;
+    const { service, gatewayCalls, calls } = serviceWith({ autoFixEnabled: false });
     const blocked = await service.autoFix(disabled);
     expect(blocked.ok).toBe(false);
     expect(blocked.failure).toBe('auto_fix_disabled');
@@ -33,8 +33,8 @@ describe('fix use case', () => {
   });
 
   test('Fix now promotes queue priority', async () => {
+    const item = baseItem;
     const { service } = serviceWith();
-    const item = { ...baseItem, autoFixAllowed: false };
     const result = await service.fixNow(item);
     expect(result.item.fixPriority).toBe(0);
     expect(item.fixPriority).toBe(100);

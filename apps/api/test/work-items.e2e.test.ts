@@ -15,7 +15,8 @@ const AGENT_ASSIGNEE = 'needs_agent_SRE Bot';
 
 const POLICY: WorkItemPolicy = {
   agentNames: ['SRE Bot'],
-  clientConfig: { autoFixAllowed: true },
+  clientConfig: {},
+  autoFixEnabled: true,
 };
 
 interface StoreLike {
@@ -56,7 +57,6 @@ function item(id: string, overrides: Partial<WorkItem> = {}): WorkItem {
     severity: 'warning',
     service: 'api',
     diagnosisRef: `diag-${id}`,
-    autoFixAllowed: false,
     fixPriority: 100,
     draftPr: null,
     ...overrides,
@@ -122,13 +122,12 @@ describe('work items API (e2e)', () => {
     await request(app.getHttpServer()).get('/api/work-items/missing').expect(404);
   });
 
-  test('POST triage triggers auto-fix when client config allows it', async () => {
+  test('POST triage triggers auto-fix when the boot flag is on', async () => {
     const response = await request(app.getHttpServer())
       .post('/api/work-items/wi-1/triage')
       .send({ assignee: AGENT_ASSIGNEE })
       .expect(200);
     expect(response.body.item.assignee).toBe(AGENT_ASSIGNEE);
-    expect(response.body.item.autoFixAllowed).toBe(true);
     expect(response.body.item.draftPr).toMatchObject({ number: 7 });
     expect(response.body.autoFix).toMatchObject({ ok: true, effect: 'allow', failure: 'none' });
     expect(fixCalls().some((call) => call.method === 'createPullRequest')).toBe(true);

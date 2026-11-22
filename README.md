@@ -71,7 +71,7 @@ The Kubernetes runtime source (`packages/sources-k8s`) is tested against fixture
 
 ## Configuration
 
-See `policy.example.yaml` for policy and `agents.example.yaml` for Agent config. Each Agent names its model, provider and key environment variable. See `.env.example` for the key names used by the example Agents.
+See the root `graveshift.config.yaml` for the one committed config. It holds the `boot`, `agents`, `policy` and `fix` blocks. Each Agent names its model, provider and key environment variable. No secret value is stored in the file. See `.env.example` for the key names.
 
 ## Built with Kiro
 

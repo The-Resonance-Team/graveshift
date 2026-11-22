@@ -1,6 +1,7 @@
 import { type WorkItem } from '@graveshift/core';
 import { Module } from '@nestjs/common';
 
+import { GRAVESHIFT_CONFIG } from '../config/config.provider';
 import { createFixDeps } from '../fix/fix.deps';
 import { FixService } from '../fix/fix.service';
 import { FIX_DEPS } from '../fix/fix.types';
@@ -14,14 +15,14 @@ import { WorkItemsController } from './work-items.controller';
   providers: [
     WorkItemStore,
     FixService,
-    { provide: FIX_DEPS, useFactory: createFixDeps },
+    { provide: FIX_DEPS, useFactory: createFixDeps, inject: [GRAVESHIFT_CONFIG] },
     {
       provide: WORK_ITEM_SEED,
       // No demo data in production. An explicit flag is the only way to seed the store.
       useFactory: (): readonly WorkItem[] =>
         process.env.GRAVESHIFT_WORK_ITEM_DEMO === 'true' ? DEMO_WORK_ITEMS : [],
     },
-    { provide: WORK_ITEM_POLICY, useFactory: createWorkItemPolicy },
+    { provide: WORK_ITEM_POLICY, useFactory: createWorkItemPolicy, inject: [GRAVESHIFT_CONFIG] },
   ],
 })
 export class WorkItemsModule {}

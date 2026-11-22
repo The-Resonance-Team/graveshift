@@ -12,6 +12,7 @@
     "start": "bun src/main.ts"
   },
   "dependencies": {
+    "@graveshift/config": "workspace:*",
     "@graveshift/core": "workspace:*",
     "@graveshift/policy": "workspace:*",
     "@kubernetes/client-node": "^2.0.2",

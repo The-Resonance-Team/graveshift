@@ -1,9 +1,21 @@
 import type { INestApplication } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Test } from '@nestjs/testing';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import request from 'supertest';
 
-import { createApp } from '../src/app.factory';
+import { AppModule } from '../src/app.module';
+import { configureApp, createApp } from '../src/app.factory';
 import { createOpenApiDocument } from '../src/openapi';
+
+// Set the parsed config value on the app instance before configureApp runs.
+// The test owns this setup; production code has no test-only hook.
+async function appWithNodeEnv(value: string): Promise<INestApplication> {
+  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
+  const instance = moduleRef.createNestApplication({ logger: false });
+  instance.get(ConfigService).set('NODE_ENV', value);
+  return configureApp(instance);
+}
 
 describe('OpenAPI document (e2e)', () => {
   let app!: INestApplication;
@@ -39,17 +51,22 @@ describe('OpenAPI document (e2e)', () => {
   });
 
   test('hides the Swagger UI at /docs when NODE_ENV is production', async () => {
-    const previous = process.env.NODE_ENV;
-    process.env.NODE_ENV = 'production';
-    let prodApp: INestApplication | undefined;
+    const prodApp = await appWithNodeEnv('production');
     try {
-      prodApp = await createApp();
       await prodApp.init();
       await request(prodApp.getHttpServer()).get('/docs').expect(404);
     } finally {
-      await prodApp?.close();
-      if (previous === undefined) delete process.env.NODE_ENV;
-      else process.env.NODE_ENV = previous;
+      await prodApp.close();
+    }
+  });
+
+  test('hides the Swagger UI at /docs when NODE_ENV is a non-lowercase production value', async () => {
+    const prodApp = await appWithNodeEnv('Production');
+    try {
+      await prodApp.init();
+      await request(prodApp.getHttpServer()).get('/docs').expect(404);
+    } finally {
+      await prodApp.close();
     }
   });
 });

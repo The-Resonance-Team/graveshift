@@ -1,4 +1,5 @@
 import { wrapUntrusted } from '@graveshift/agents/untrusted';
+import { renderFixPrompt } from '@graveshift/config';
 import {
   type Diagnosis,
   type Incident,
@@ -73,6 +74,26 @@ const rulesFrom = (repo: FixDeps['repo']): RepoRules => ({
   forbiddenPaths: repo.forbiddenPaths,
 });
 
+function systemFrom(deps: FixDeps, repo: FixDeps['repo'], diagnosis: string): string {
+  const rules = rulesFrom(repo);
+  return renderFixPrompt(deps.promptTemplate, {
+    AGENT_NAME: deps.agentMeta.name,
+    AGENT_ROLE: deps.agentMeta.role,
+    AGENT_DESCRIPTION: deps.agentMeta.description,
+    AGENT_PROMPT: deps.agentMeta.prompt,
+    MODEL: deps.agentMeta.model,
+    PROVIDER: deps.agentMeta.provider,
+    DAILY_BUDGET_USD: deps.agentMeta.dailyBudgetUsd,
+    DIAGNOSIS: wrapUntrusted('diagnosis', diagnosis),
+    RULES: [
+      `maxFilesChanged=${rules.maxFilesChanged}`,
+      `maxLinesChanged=${rules.maxLinesChanged}`,
+      `allowedPaths=${JSON.stringify(rules.allowedPaths)}`,
+      `forbiddenPaths=${JSON.stringify(rules.forbiddenPaths)}`,
+    ].join('\n'),
+  });
+}
+
 // Both triggers enter here. The policy gate runs before the patch call and before
 // any GitHub client call. Model output never grants permission.
 @Injectable()
@@ -80,7 +101,7 @@ export class FixService {
   constructor(@Inject(FIX_DEPS) private readonly deps: FixDeps) {}
 
   async autoFix(item: WorkItem, note?: string): Promise<FixResult> {
-    if (!item.autoFixAllowed) {
+    if (!this.deps.autoFixEnabled) {
       return {
         item,
         trigger: 'auto_fix',
@@ -133,11 +154,13 @@ export class FixService {
       return blocked(decision.effect, decision.reason, 'policy_denied');
     }
 
+    const diagnosisText = item.description || item.title;
     const generated = await generatePatch({
       gateway,
       agent,
+      system: systemFrom(this.deps, repo, diagnosisText),
       rules: rulesFrom(repo),
-      diagnosis: item.description || item.title,
+      diagnosis: diagnosisText,
     });
     if (!generated.ok) {
       return blocked(decision.effect, generated.error.message, 'patch_rejected');

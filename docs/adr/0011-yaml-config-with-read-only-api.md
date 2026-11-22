@@ -1,6 +1,6 @@
 # YAML is the config source of truth with a read-only API view
 
-Status: accepted
+Status: superseded by ADR 0015
 
 On 2026-11-21 the owner chose YAML as the source of truth for agent and policy config in v2. The loaders validated the config at boot. Invalid config stopped boot. The owner kept no hot reload in v2. A config change needed a file edit and a restart.
 

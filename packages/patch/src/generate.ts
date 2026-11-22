@@ -7,15 +7,9 @@ import { type Patch, PatchSchema, type RepoRules } from './schemas';
 
 export const PATCH_TASK = 'generate_patch';
 
-// Everything from the diagnosis is data. The model cannot grant a permission here.
-export const PATCH_SYSTEM = [
-  'You are Exorcist. Propose a code patch for a work item.',
-  UNTRUSTED_SYSTEM_NOTE,
-  'Answer with one JSON object: {"files":[{"path","content","linesChanged"}]}.',
-  'content is the full file text, or null to delete the file.',
-  'linesChanged is a non-negative integer count of changed lines.',
-  'Use only paths inside allowedPaths. Never change policy, deploy or workflow files.',
-].join('\n');
+// The system prompt is rendered from fix.promptTemplate before this call. No role
+// or persona is hard-coded in this package. UNTRUSTED_SYSTEM_NOTE still travels
+// with the rendered template so wrapped values keep their meaning to the model.
 
 // The gateway is injected. Tests use a fake run; no network and no key are used here.
 export interface PatchGateway {
@@ -25,6 +19,8 @@ export interface PatchGateway {
 export interface GeneratePatchOptions {
   gateway: PatchGateway;
   agent: string;
+  // Rendered from the one prompt template in the committed config.
+  system: string;
   rules: RepoRules;
   diagnosis: string;
   task?: string;
@@ -40,7 +36,8 @@ const rejection = (reason: string): GeneratePatchResult => ({
 });
 
 export async function generatePatch(options: GeneratePatchOptions): Promise<GeneratePatchResult> {
-  const { gateway, agent, rules, diagnosis, task = PATCH_TASK } = options;
+  const { gateway, agent, system, rules, diagnosis, task = PATCH_TASK } = options;
+  const fullSystem = `${system}\n${UNTRUSTED_SYSTEM_NOTE}`;
   const prompt = [
     'Repository rules:',
     `maxFilesChanged=${rules.maxFilesChanged}`,
@@ -56,7 +53,7 @@ export async function generatePatch(options: GeneratePatchOptions): Promise<Gene
     result = await gateway.run({
       agent,
       task,
-      system: PATCH_SYSTEM,
+      system: fullSystem,
       prompt,
       schema: PatchSchema,
       validate: (candidate) => {

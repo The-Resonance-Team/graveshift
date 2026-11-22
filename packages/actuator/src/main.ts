@@ -1,4 +1,4 @@
-import { loadPolicy } from '@graveshift/policy';
+import { loadGraveshiftConfig } from '@graveshift/config';
 
 import { createDockerRestarter, createKubeWriter } from './backends';
 import { createActuator } from './execute';
@@ -32,7 +32,7 @@ const kube: KubeWriter = env.KUBERNETES_SERVICE_HOST
 
 const actuator = createActuator({
   secret,
-  policy: await loadPolicy(env.POLICY_PATH ?? 'policy.yaml'),
+  policy: (await loadGraveshiftConfig()).policy,
   namespace: env.TARGET_NAMESPACE ?? 'candy-shop',
   docker: env.DOCKER_PROXY_URL
     ? createDockerRestarter(env.DOCKER_PROXY_URL)

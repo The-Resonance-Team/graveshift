@@ -1,14 +1,9 @@
 import { lstatSync, mkdirSync, realpathSync } from 'node:fs';
 import { dirname, sep } from 'node:path';
 
+import { loadGraveshiftConfig } from '@graveshift/config';
 import { type Patch, guardPatch, PatchSchema, type RepoRules } from '@graveshift/patch';
-import {
-  type Policy,
-  type PolicyContext,
-  type PolicyDecision,
-  decide,
-  loadPolicy,
-} from '@graveshift/policy';
+import { type Policy, type PolicyContext, type PolicyDecision, decide } from '@graveshift/policy';
 import { redact } from '@graveshift/redactor';
 
 import { type DecisionBinding, verifyPolicySignature } from './policy-signature';
@@ -148,7 +143,7 @@ export interface OneShotPolicy {
 }
 
 export async function loadOneShotPolicy(): Promise<OneShotPolicy> {
-  const policy = await loadPolicy(process.env.POLICY_PATH ?? 'policy.example.yaml');
+  const policy = (await loadGraveshiftConfig()).policy;
   const repo = policy.github.repos.find((entry) => entry.repo === process.env.GITHUB_REPOSITORY);
   if (repo === undefined)
     throw new OneShotPolicyError(

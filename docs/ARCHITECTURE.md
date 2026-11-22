@@ -9,6 +9,7 @@ The daemon at `apps/daemon` is an Effect v4 skeleton on Bun. ADR 0009 removed th
 | Component | Path | Role |
 | --- | --- | --- |
 | API | `apps/api` | NestJS app. The only external surface. Serves `GET /healthz`, the OpenAPI document, the Swagger UI, credential routes, native event ingest, Sentry envelope ingest and MCP at `/mcp`. |
+| Config | `packages/config` and root `graveshift.config.yaml` | One committed config file with `boot`, `agents`, `policy` and `fix` blocks. Validated once at boot. |
 | Credentials | `apps/api/src/auth` | One component that issues, hashes, verifies, lists and revokes MCP credentials and event keys. Values are lowercase hex; PostgreSQL stores one-way hashes. |
 | API contract | `packages/api-contract` | Publishes generated TypeScript types and a version marker from the OpenAPI document. |
 | Daemon | `apps/daemon` | Effect v4 skeleton on Bun. Serves `GET /healthz` only. |
@@ -93,25 +94,31 @@ Every HTTP request boundary uses `class-validator` DTO classes. The global `Vali
 
 CI compares the SQL generated from `apps/api/prisma/schema.prisma` with the committed migration SQL using `bun run migrate:drift:check`. This is a DB-free alternative to the ticket's literal `prisma migrate diff --from-migrations ... --to-schema ... --exit-code` command. It works only while migrations are additive. When a second or destructive migration lands, move to a shadow-database drift check and ask the coordinator to approve a CI Postgres service or an external test database. The local shadow-database command is `bun run migrate:drift:local`; it needs `DATABASE_URL`, `SHADOW_DATABASE_URL` and Docker Postgres.
 
+## Configuration
+
+One committed root file, `graveshift.config.yaml`, is the config source of truth. It has four blocks: `boot` (host and port), `agents` (the strict Agent file shape), `policy` (the policy schema) and `fix`. The `fix` block holds the boot flag `enabled`, the Agent name, the one patch `promptTemplate`, the gateway budget and price table, and the GitHub App identity names. `packages/config` owns `GraveshiftConfigSchema` and the loader. The API, the actuator and the one-shot scripts load the same file. A missing or invalid file stops boot. No route reads a YAML file per request.
+
+The file holds no secret value. `apiKeyEnv`, `appIdEnv` and `privateKeyEnv` name environment variables. `DATABASE_URL` and the MCP token stay in the environment. The merge of Agent and policy config removes the old split inputs and is recorded in ADR 0015.
+
 ## Work items
 
 A **work item** is created after a haunting is defined and verified. `packages/core` owns `WorkItemSchema`. The generated types in `packages/api-contract` are the wire contract. The frontend consumes these types. The frontend engineer owns the visual design of the table and the detail sheet. The images in the decision report are references only.
 
-A work item carries a title, description, success criteria, subtasks with a completed count, status, priority, assignee, reporter, start date, due date, sprint, parent, labels, team, watchers, severity, service, a diagnosis ref and the `autoFixAllowed` flag. Incident states in `packages/core` stay unchanged. `needs_human` and `needs_agent_<name>` are assignee values, not new incident states. The agent name comes from agent config in `packages/agents`.
+A work item carries a title, description, success criteria, subtasks with a completed count, status, priority, assignee, reporter, start date, due date, sprint, parent, labels, team, watchers, severity, service, a diagnosis ref, `fixPriority` and a draft pull request ref. Incident states in `packages/core` stay unchanged. `needs_human` and `needs_agent_<name>` are assignee values, not new incident states. The Agent name comes from the committed config file.
 
-`GET /api/work-items` returns a paged list for the table. `GET /api/work-items/:id` returns one work item for the detail sheet. `POST /api/work-items/:id/triage` accepts an assignee of `needs_human` or an existing `needs_agent_<name>`, validates it and writes the result to the in-memory store. Any other assignee returns 400. A work item in a terminal status returns 409 and does not change. The pure helpers `triageToHuman`, `triageToAgent`, `parseAssignee` and `assertTriageAllowed` in `packages/core` make no model call and change no shared state. They set `autoFixAllowed` from client config. The generated assignee type is `needs_human | needs_agent_${string}`. A work item also carries `fixPriority`: a lower number sits nearer the front of the fix queue. Audit for triage is deferred with the audit chain: no audit event is emitted here.
+`GET /api/work-items` returns a paged list for the table. `GET /api/work-items/:id` returns one work item for the detail sheet. `POST /api/work-items/:id/triage` accepts an assignee of `needs_human` or an existing `needs_agent_<name>`, validates it and writes the result to the in-memory store. Any other assignee returns 400. A work item in a terminal status returns 409 and does not change. The pure helpers `triageToHuman`, `triageToAgent`, `parseAssignee` and `assertTriageAllowed` in `packages/core` make no model call and change no shared state. They do not decide whether a fix starts; the `fix.enabled` boot flag does. The generated assignee type is `needs_human | needs_agent_${string}`. A work item also carries `fixPriority`: a lower number sits nearer the front of the fix queue. Audit for triage is deferred with the audit chain: no audit event is emitted here.
 
-The API reads agent names from `AGENTS_PATH` (default `agents.example.yaml`) and the client auto-fix switch from `GRAVESHIFT_AUTO_FIX` (default false). A missing or invalid `AGENTS_PATH` fails boot with a `WORK_ITEM_POLICY_INVALID` error. The store seed is injectable. It is empty by default, so production serves no demo data. Set `GRAVESHIFT_WORK_ITEM_DEMO=true` to load three demo work items for a local demo. E2E tests override the seed, the store, the policy and the fix deps with `Test.createTestingModule()`, so they read no agent file and use no demo data. Persistence is deferred: no database and no event-bus consumer are wired.
+The API reads Agent names, policy and the `fix.enabled` flag from the one root `graveshift.config.yaml`. The `GraveshiftConfigSchema` nests the strict Agent schema and the policy schema. A missing or invalid file stops boot. The three old inputs `GRAVESHIFT_AUTO_FIX`, `AGENTS_PATH` and `POLICY_PATH` are gone. The store seed is injectable. It is empty by default, so production serves no demo data. Set `GRAVESHIFT_WORK_ITEM_DEMO=true` to load three demo work items for a local demo. E2E tests override the seed, the store, the policy and the fix deps with `Test.createTestingModule()`, so they read no agent file and use no demo data. Persistence is deferred: no database and no event-bus consumer are wired.
 
 ## Patches
 
-`packages/patch` holds the patch path. A configured **Agent** proposes a Patch for a **Work item**. The model call goes through `packages/gateway` and is injected. `PatchSchema` parses the model output. The guard then checks the Patch: no empty Patch, no file count over the limit, no line count over the limit, no negative or non-integer line count, no unsafe path, no duplicate path, no forbidden path and no path outside `allowedPaths`. Forbidden paths match without case sensitivity. `allowedPaths` keep case sensitivity. `guardPatch` raises one `PatchRejectedError` with all reasons. `generatePatch` returns a typed rejection when the model gives no Patch or an invalid Patch. The guard runs before the caller sees a successful result.
+`packages/patch` holds the patch path. A configured **Agent** proposes a Patch for a **Work item**. The model call goes through `packages/gateway` and is injected. The fix path renders `fix.promptTemplate` from the config into the system prompt. The patch package holds no hard-coded role or persona. `PatchSchema` parses the model output. The guard then checks the Patch: no empty Patch, no file count over the limit, no line count over the limit, no negative or non-integer line count, no unsafe path, no duplicate path, no forbidden path and no path outside `allowedPaths`. Forbidden paths match without case sensitivity. `allowedPaths` keep case sensitivity. `guardPatch` raises one `PatchRejectedError` with all reasons. `generatePatch` returns a typed rejection when the model gives no Patch or an invalid Patch. The guard runs before the caller sees a successful result.
 
 A valid Patch grants no permission and runs no fix. The fix path below uses it.
 
 ## Fix paths
 
-A **Work item** enters the fix path in two ways. When the client config sets `autoFixAllowed`, the fix starts without a click: this is auto-fix. When the client turns auto-fix off, a person uses **Fix now**. **Fix now** also moves the Work item to the front of the fix queue. `POST /api/work-items/:id/fix-now` is the **Fix now** route. Its Zod body may carry a short note. Both ways use one use case in `apps/api/src/fix`. Auto-fix runs only when `autoFixAllowed` is true.
+A **Work item** enters the fix path in two ways. When the boot config sets `fix.enabled: true`, triage starts the fix without a click: this is **Auto-fix**. A person uses **Fix now** in every case, including when the flag is false. **Fix now** also moves the Work item to the front of the fix queue on success. `POST /api/work-items/:id/fix-now` is the **Fix now** route. Its Zod body may carry a short note. Both ways use one use case in `apps/api/src/fix`.
 
 The use case reads the diagnosis confidence, category, signals and counters from an injected context provider. Missing or malformed values fail closed. It calls `decide()` from `packages/policy` with those values and needs `effect === 'allow'`. If the policy gives `deny`, no Patch is made and no pull request is opened. The **Exorcist** only proposes a Patch through `packages/patch` and `packages/gateway`. The model output cannot grant permission. A human note and the root cause are wrapped as untrusted data only in the PR body. The title, commit subject and branch slug use clean redacted text. The incident id joins the diagnosis ref and the Work item id, so two Work items with one diagnosis get different branches.
 
@@ -119,13 +126,13 @@ The use case reads the diagnosis confidence, category, signals and counters from
 
 **Fix now** promotes `fixPriority` to the front of the queue only after a successful fix. A denial, a rejected Patch or a failed PR call leaves `fixPriority` unchanged. The fix result carries the policy effect, a failure code and the PR ref, so a client can tell a denial from a started fix. Triage saves its state first and returns the auto-fix outcome, including any failure reason, even when the auto-fix throws. A done Work item cannot be fixed. Audit events for policy decisions and fix outcomes are deferred with the audit chain: no audit sink is wired here, so the denial reason is surfaced in the API result instead.
 
-In production wiring there is no diagnosis context provider and no model gateway: the context load fails closed, so **Fix now** and auto-fix never open a pull request today. The e2e tests replace those collaborators with fakes and run the real use case, so they exercise the PR path that production cannot reach yet.
+The model gateway and the GitHub client are real. `createFixDeps` builds them from the validated config and they call the official provider and GitHub APIs. The diagnosis context provider is still closed: no daemon read exists, so the context load fails closed and no fix opens a pull request today. Ticket #59 owns the daemon read and the source-to-PR sandbox. The CI e2e suite injects emulator URLs at the gateway and client seams, so it runs the real use case offline.
 
 ## MCP endpoint
 
 The official `@nestjs/mcp` module serves `graveshift-mcp` at `/mcp` from the API. The HTTP route guard and the MCP token verifier both call `CredentialService.verify(token, 'mcp')` from `apps/api/src/auth`. An MCP token is issued with `POST /api/credentials` and kind `mcp`; the old static `GRAVESHIFT_MCP_TOKEN` is no longer read. No OAuth resource or authorization server is advertised on this route. A scope floor checks every MCP HTTP method, including tools, prompts and resources, and denies a method without a scope mapping; `incidents:read` maps to the incident reads, `fix:propose` to `propose_fix`, and the other scopes to their tools. The stdio launcher has no authentication by design.
 
-MCP loads the policy in a provider factory, so a bad `POLICY_PATH` stops the API at boot. The nine tools, two prompts and the postmortem resource are injectable providers in `apps/api/src/mcp/`. Every reply passes through the redactor. `propose_fix` returns a policy decision and never executes an action.
+MCP takes the validated policy from the one boot config provider, so a bad config file stops the API at boot. The nine tools, two prompts and the postmortem resource are injectable providers in `apps/api/src/mcp/`. Every reply passes through the redactor. `propose_fix` returns a policy decision and never executes an action.
 
 The v2 daemon serves only `/healthz`, so backend reads return empty or unavailable results. No counters are available: the `propose_fix` reply states that rate and budget limits are not enforced. Tests inject a fake backend.
 
@@ -201,7 +208,7 @@ The audit event for Rule override detection is deferred with the rest of the aud
 
 An **Agent** is a configured Ghost. Its config block holds a name, slug, role, description with trigger keywords, prompt, params, provider package, model, `baseUrl`, `apiKeyEnv`, allowed tools, daily budget and escalation target. `packages/agents` owns the Zod schemas and pure helpers. The schema is strict: an unknown key, including a key value, fails validation. `baseUrl` must use https and carry no URL credentials. `apiKeyEnv` must be `GRAVESHIFT_*` or end with `_API_KEY`. This is a naming guard only; it does not check which secret the variable holds. The gateway in ticket #26 enforces the credential allowlist.
 
-`agents.example.yaml` holds a `system` list with two Agent templates: an SRE Bot and a DevOps Bot. Each one names a model, a `baseUrl` and an `apiKeyEnv`. `PROVIDER_PACKAGES` accepts every first-party `@ai-sdk/*` connector package: text, image, audio, video, embedding, gateway and OpenAI-compatible connectors. Core, UI and tooling packages such as `@ai-sdk/react` and `@ai-sdk/provider` are rejected. `packages/agents` installs no provider package; the model call stays injected. The `client` list replaces a whole system Agent with the same name; it does not merge fields. `mergeAgentTemplates` applies this client override: the client block wins and the other system Agents stay. `name` is the display label. `slug` is the stable lower-case reference used by `escalateTo`; it is not the display name. Duplicate names or slugs in either list and an `escalateTo` that does not reference an existing slug fail validation.
+The root `graveshift.config.yaml` holds the `agents.system` list with three named Agents: an Exorcist, an SRE Agent and a DevOps Agent. Each one names a model, a `baseUrl` and an `apiKeyEnv`. The Exorcist is the Agent that owns patches; `fix.agent` names it. `PROVIDER_PACKAGES` accepts every first-party `@ai-sdk/*` connector package: text, image, audio, video, embedding, gateway and OpenAI-compatible connectors. Core, UI and tooling packages such as `@ai-sdk/react` and `@ai-sdk/provider` are rejected. `packages/agents` installs no provider package; the model call stays injected. The `client` list replaces a whole system Agent with the same name; it does not merge fields. `mergeAgentTemplates` applies this client override: the client block wins and the other system Agents stay. `name` is the display label. `slug` is the stable lower-case reference used by `escalateTo`; it is not the display name. Duplicate names or slugs in either list and an `escalateTo` that does not reference an existing slug fail validation.
 
 Each param is one key-value map. Its key is a `{{PARAM}}` placeholder in the prompt. The YAML value is a **default**: the routing agent uses it when the request has no value for that param. An empty value means there is no default. Params and placeholders must declare each other, and param names must be unique. A missing param without a default leads to one question to the user. If the param is still missing, the result is `needs_human` with a reason.
 
@@ -250,4 +257,22 @@ The `open-pr` job checks out the requested base into a separate data directory. 
 
 ## Decisions
 
-See `docs/adr/0001-full-scope-for-kiroween.md`, `docs/adr/0002-single-ai-sdk-provider.md` (superseded by `docs/adr/0007-configurable-agents-and-providers.md`), `docs/adr/0003-platform-v2-starts-now.md`, `docs/adr/0004-effect-v4-daemon-on-bun.md`, `docs/adr/0005-event-backbone-nats.md`, `docs/adr/0006-nestjs-api-and-mcp.md` and `docs/adr/0007-configurable-agents-and-providers.md`.
+The system-wide decisions are in `docs/adr/`, in this order:
+
+- `0001-full-scope-for-kiroween.md`
+- `0002-single-ai-sdk-provider.md` (superseded by 0007)
+- `0003-platform-v2-starts-now.md`
+- `0004-effect-v4-daemon-on-bun.md`
+- `0005-event-backbone-nats.md`
+- `0006-nestjs-api-and-mcp.md`
+- `0007-configurable-agents-and-providers.md`
+- `0008-fix-paths-and-safety.md`
+- `0009-remove-v1-daemon-and-diagnosis-model-path.md`
+- `0010-mcp-events-extension-beta.md`
+- `0011-yaml-config-with-read-only-api.md` (superseded by 0015)
+- `0012-postgresql-durable-store.md`
+- `0013-credentials-in-database.md`
+- `0014-official-sentry-sdks-for-supported-frameworks.md`
+- `0015-one-config-file-at-boot.md`
+- `0016` is reserved for #59.
+- `0017-deployment-topology.md`

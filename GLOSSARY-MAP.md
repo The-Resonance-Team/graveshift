@@ -30,13 +30,13 @@ This file is an index. It lists each context, the terms it owns and the path to 
 
 Owner areas: `packages/core` and `apps/api`.
 
-Terms owned: Work item, Diagnosis, Triage, assignee, `needs_agent_<name>`, `needs_human`, auto-fix, Fix now, `fixPriority`, draft pull request.
+Terms owned: Work item, Diagnosis, Triage, assignee, `needs_agent_<name>`, `needs_human`, Auto-fix, Fix now, `fixPriority`, draft pull request.
 
 Glossary path: `packages/core/GLOSSARY.md`. The definitions live there.
 
 ### States a work item moves through
 
-Work item → Diagnosis → Triage (assignee: `needs_human` or `needs_agent_<name>`) → auto-fix or Fix now → draft pull request. `fixPriority` orders the fix queue.
+Work item → Diagnosis → Triage (assignee: `needs_human` or `needs_agent_<name>`) → Auto-fix or Fix now → draft pull request. `fixPriority` orders the fix queue.
 
 ## Events terms
 

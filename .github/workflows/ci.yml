@@ -39,7 +39,7 @@ jobs:
               - 'examples/**'
               - 'scripts/**'
               - 'tests/**'
-              - 'policy.example.yaml'
+              - 'graveshift.config.yaml'
               - 'deploy/**'
               - '.github/**'
               - 'package.json'

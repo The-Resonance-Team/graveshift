@@ -38,12 +38,11 @@ const workItem: WorkItem = {
   severity: 'critical',
   service: 'api',
   diagnosisRef: 'diag-1',
-  autoFixAllowed: false,
   fixPriority: 100,
   draftPr: null,
 };
 
-const clientConfig = WorkItemClientConfigSchema.parse({ autoFixAllowed: true });
+const clientConfig = WorkItemClientConfigSchema.parse({});
 
 describe('work item schema', () => {
   test('accepts a complete work item and rejects a wrong subtask count', () => {
@@ -72,12 +71,10 @@ describe('work item schema', () => {
 });
 
 describe('triage helpers', () => {
-  test('assigns to needs_human and marks autoFixAllowed from client config', () => {
+  test('assigns to needs_human without changing the work item flag set', () => {
     const next = triageToHuman(workItem, clientConfig);
     expect(next.assignee).toBe(NEEDS_HUMAN);
-    expect(next.autoFixAllowed).toBe(true);
     expect(workItem.assignee).toBe(agentAssignee('SRE Bot'));
-    expect(workItem.autoFixAllowed).toBe(false);
   });
 
   test('assigns to a known agent and rejects an unknown agent', () => {

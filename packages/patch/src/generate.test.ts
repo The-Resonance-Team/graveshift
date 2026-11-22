@@ -5,7 +5,6 @@ import {
   generatePatch,
   type GeneratePatchOptions,
   type PatchGateway,
-  PATCH_SYSTEM,
   PATCH_TASK,
 } from './generate';
 import { PatchRejectedError } from './guard';
@@ -41,9 +40,13 @@ function fakeGateway(result: GatewayResult<Patch>) {
   };
 }
 
+// The real system prompt is rendered from the config template by the fix path.
+const TEST_SYSTEM = 'Propose a guarded patch for the work item.';
+
 const options = (gateway: PatchGateway, diagnosis = 'null price') => ({
   gateway,
-  agent: 'SRE Bot',
+  agent: 'Exorcist',
+  system: TEST_SYSTEM,
   rules,
   diagnosis,
 });
@@ -56,9 +59,10 @@ describe('generatePatch', () => {
     if (result.ok) expect(result.patch).toEqual(patch);
     expect(fake.tasks).toHaveLength(1);
     const task = fake.tasks[0]!;
-    expect(task.agent).toBe('SRE Bot');
+    expect(task.agent).toBe('Exorcist');
     expect(task.task).toBe(PATCH_TASK);
-    expect(task.system).toBe(PATCH_SYSTEM);
+    expect(task.system).toContain(TEST_SYSTEM);
+    expect(task.system).not.toContain('You are Exorcist');
     expect(task.schema).toBe(PatchSchema);
   });
 
