@@ -11,8 +11,6 @@ import type { RootEnv } from './env.schema';
 export const BOOT_CONFIG = Symbol('BOOT_CONFIG');
 
 export interface RootBootConfig {
-  readonly host: string;
-  readonly port: number;
   readonly databaseUrl: string;
   readonly natsUrl?: string;
   readonly natsStream: string;
@@ -22,7 +20,6 @@ export interface RootBootConfig {
   readonly apiUrl: string;
   readonly daemonUrl: string;
   readonly agents: readonly AgentConfig[];
-  readonly agentsFile: GraveshiftConfig['agents'];
   readonly policy: Policy;
   readonly gateway: GatewayConfig;
   readonly mode?: string;
@@ -46,8 +43,6 @@ export async function loadBootConfig(
   const natsUrl = config.get('GRAVESHIFT_NATS_URL', { infer: true });
   const mode = config.get('GRAVESHIFT_MODE', { infer: true });
   return freezeConfig({
-    host: config.getOrThrow('HOST', { infer: true }),
-    port: config.getOrThrow('PORT', { infer: true }),
     databaseUrl: config.getOrThrow('DATABASE_URL'),
     ...(natsUrl === undefined ? {} : { natsUrl }),
     natsStream: config.getOrThrow('GRAVESHIFT_NATS_STREAM'),
@@ -57,7 +52,6 @@ export async function loadBootConfig(
     apiUrl: config.getOrThrow('GRAVESHIFT_API_URL'),
     daemonUrl: config.getOrThrow('GRAVESHIFT_DAEMON_URL'),
     agents: resolveAgents(graveshift.agents),
-    agentsFile: graveshift.agents,
     policy: graveshift.policy,
     gateway: config.getOrThrow('GRAVESHIFT_GATEWAY_CONFIG', { infer: true }),
     ...(mode === undefined ? {} : { mode }),
