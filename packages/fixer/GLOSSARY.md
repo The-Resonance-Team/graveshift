@@ -1,1 +1,11 @@
-See `GLOSSARY-MAP.md` at the repo root for this area's context and glossary index.
+# Fixer
+
+Exorcist prepares a fix as a draft pull request.
+
+## Language
+
+**Exorcist**:
+The ghost that prepares a fix as a draft pull request.
+
+**Exorcism**:
+A draft pull request that fixes the cause of a haunting.
