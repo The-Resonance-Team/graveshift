@@ -11,7 +11,7 @@ const V3_DEPLOY_BLOCK =
 const AUDIT_FUNCTION =
   /CREATE FUNCTION\s+([A-Za-z0-9_]+)\s*\(\s*\)\s+RETURNS\s+trigger[\s\S]*?AS\s+\$\$([\s\S]*?)\$\$/;
 const TRIGGER =
-  /CREATE TRIGGER\s+([A-Za-z0-9_]+)\s+BEFORE\s+([A-Z]+)\s+ON\s+"([^"]+)"[^;]*?FOR EACH ROW\s+EXECUTE (?:FUNCTION|PROCEDURE)\s+([A-Za-z0-9_]+)\s*\(\s*\)\s*;/g;
+  /CREATE TRIGGER\s+([A-Za-z0-9_]+)\s+BEFORE\s+([A-Z]+)\s+ON\s+"([^"]+)"[^;]*?FOR EACH ROW(?:\s+WHEN\s*\([^;]*?\))?\s+EXECUTE (?:FUNCTION|PROCEDURE)\s+([A-Za-z0-9_]+)\s*\(\s*\)\s*;/g;
 const APPEND_ONLY_BODY = /RAISE EXCEPTION\s+'[^']*append-only[^']*'/i;
 const FUNCTION_NAME = 'prevent_audit_entry_mutation';
 const CREDENTIALS_TABLE = /CREATE\s+TABLE\s+"credentials"\s*\(/;
@@ -150,9 +150,17 @@ const V3_TRIGGERS = [
   { name: 'deploys_org_consistency', event: 'INSERT', table: 'deploys' },
   { name: 'project_releases_org_consistency', event: 'INSERT', table: 'project_releases' },
   { name: 'deploy_projects_org_consistency', event: 'INSERT', table: 'deploy_projects' },
+  { name: 'releases_org_immutable', event: 'UPDATE', table: 'releases' },
+  { name: 'environments_org_immutable', event: 'UPDATE', table: 'environments' },
+  { name: 'project_releases_project_immutable', event: 'UPDATE', table: 'project_releases' },
+  { name: 'projects_org_link_guard', event: 'UPDATE', table: 'projects' },
 ] as const;
 
 const V3_RESTRICT_CONSTRAINTS = [
+  'releases_org_id_fkey',
+  'project_releases_project_id_fkey',
+  'project_releases_release_id_fkey',
+  'environments_org_id_fkey',
   'deploys_org_id_fkey',
   'deploys_release_id_fkey',
   'deploys_environment_id_fkey',
@@ -191,6 +199,13 @@ export function v3DeployViolations(sql: string): string[] {
     );
     if (!pattern.test(sql))
       violations.push(`foreign key ${constraint} must use ON DELETE RESTRICT`);
+  }
+  if (
+    !/ADD CONSTRAINT "deploys_url_http_check"\s+CHECK \("url" IS NULL OR "url" ~\* '\^https\?:\/\/'\)/.test(
+      sql,
+    )
+  ) {
+    violations.push('deploys url CHECK constraint is missing');
   }
   return violations;
 }

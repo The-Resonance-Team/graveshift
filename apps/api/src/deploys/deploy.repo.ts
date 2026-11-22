@@ -54,7 +54,6 @@ export class DeployRepo {
     url?: string | undefined;
     projectIds: string[];
     actor: string;
-    auditEnvironment: boolean;
   }): Promise<DeployRecord> {
     return inAuditTransaction(this.db, async (tx) => {
       const deploy = await tx.deploy.create({
@@ -73,7 +72,17 @@ export class DeployRepo {
       });
       await Promise.all(
         input.projectIds.map(async (projectId) => {
-          if (input.auditEnvironment) {
+          // Derive the flag from the durable chain inside this transaction. A
+          // retry after a failed Deploy must not lose the Environment audit.
+          const environmentEntry = await tx.auditEntry.findFirst({
+            where: {
+              projectId,
+              type: 'environment.created',
+              payload: { path: ['environmentId'], equals: input.environmentId },
+            },
+            select: { seq: true },
+          });
+          if (environmentEntry === null) {
             await this.audit.appendInTransaction(tx, projectId, {
               actor: input.actor,
               type: 'environment.created',

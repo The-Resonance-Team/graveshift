@@ -90,7 +90,6 @@ export class FakeDeployRepo {
     url?: string | undefined;
     projectIds: string[];
     actor: string;
-    auditEnvironment: boolean;
   }): Promise<DeployRecord> {
     const record: DeployRecord = {
       id: randomUUID(),

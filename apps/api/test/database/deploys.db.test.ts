@@ -1,3 +1,4 @@
+import { ConflictException } from '@nestjs/common';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 
 import { AuditRepo } from '../../src/audit/repo/audit.repo';
@@ -87,19 +88,39 @@ describe.skipIf(!dbTestEnabled)('v3 deploy database rules', () => {
     expect(await db.deploy.count()).toBe(1);
   });
 
+  test('a Project linked to a Release or Deploy cannot be deleted', async () => {
+    await seed();
+    await expect(db.project.delete({ where: { projectId: '1001' } })).rejects.toThrow();
+    expect(await db.project.count()).toBe(3);
+  });
+
   test('organization consistency triggers reject cross-Organization links', async () => {
-    const { orgB, release, environment, deploy } = await seed();
+    const { orgA, orgB, release, deploy } = await seed();
+    const foreignEnvironment = await db.environment.create({
+      data: { orgId: orgB.id, name: 'foreign-env' },
+    });
     await expect(
       db.deploy.create({
         data: {
           orgId: orgB.id,
           releaseId: release.id,
-          environmentId: environment.id,
+          environmentId: foreignEnvironment.id,
           name: 'foreign',
           dateStarted: new Date(),
         },
       }),
-    ).rejects.toThrow(/another organization/);
+    ).rejects.toThrow(/deploy release belongs to another organization/);
+    await expect(
+      db.deploy.create({
+        data: {
+          orgId: orgA.id,
+          releaseId: release.id,
+          environmentId: foreignEnvironment.id,
+          name: 'foreign',
+          dateStarted: new Date(),
+        },
+      }),
+    ).rejects.toThrow(/deploy environment belongs to another organization/);
     await expect(
       db.projectRelease.create({ data: { releaseId: release.id, projectId: '2001' } }),
     ).rejects.toThrow(/another organization/);
@@ -108,14 +129,39 @@ describe.skipIf(!dbTestEnabled)('v3 deploy database rules', () => {
     ).rejects.toThrow(/another organization/);
   });
 
-  test('concurrent creation of the same Environment yields one row', async () => {
+  test('organization scope columns and links are immutable on update', async () => {
+    const { orgB, release, environment } = await seed();
+    await expect(
+      db.release.update({ where: { id: release.id }, data: { orgId: orgB.id } }),
+    ).rejects.toThrow(/immutable/);
+    await expect(
+      db.environment.update({ where: { id: environment.id }, data: { orgId: orgB.id } }),
+    ).rejects.toThrow(/immutable/);
+    await expect(
+      db.projectRelease.update({
+        where: { projectId_releaseId: { projectId: '1001', releaseId: release.id } },
+        data: { projectId: '1002' },
+      }),
+    ).rejects.toThrow(/immutable/);
+    await expect(
+      db.project.update({ where: { projectId: '1001' }, data: { orgId: orgB.id } }),
+    ).rejects.toThrow(/immutable while linked/);
+  });
+
+  test('an Environment race maps one caller to 409', async () => {
     const { orgA } = await seed();
     const repo = new EnvironmentRepo(db);
-    const results = await Promise.all(
+    const results = await Promise.allSettled(
       Array.from({ length: 8 }, () => repo.findOrCreate(orgA.id, 'staging')),
     );
-    expect(new Set(results.map((result) => result.record.id)).size).toBe(1);
-    expect(results.filter((result) => result.created)).toHaveLength(1);
+    expect(results.some((result) => result.status === 'fulfilled')).toBe(true);
+    const failures = results.filter((result) => result.status === 'rejected');
+    expect(failures.length).toBeGreaterThan(0);
+    expect(
+      failures.every(
+        (result) => result.status === 'rejected' && result.reason instanceof ConflictException,
+      ),
+    ).toBe(true);
     expect(await db.environment.count({ where: { orgId: orgA.id, name: 'staging' } })).toBe(1);
   });
 
@@ -124,6 +170,22 @@ describe.skipIf(!dbTestEnabled)('v3 deploy database rules', () => {
     await expect(
       db.release.create({ data: { orgId: orgA.id, version: 'v1' } }),
     ).rejects.toHaveProperty('code', 'P2002');
+  });
+
+  test('a non-http Deploy URL is rejected by the database', async () => {
+    const { orgA, release, environment } = await seed();
+    await expect(
+      db.deploy.create({
+        data: {
+          orgId: orgA.id,
+          releaseId: release.id,
+          environmentId: environment.id,
+          name: 'bad-url',
+          dateStarted: new Date(),
+          url: 'javascript:alert(1)',
+        },
+      }),
+    ).rejects.toThrow();
   });
 
   test('writes append audit entries keyed by each affected Project', async () => {
@@ -143,15 +205,41 @@ describe.skipIf(!dbTestEnabled)('v3 deploy database rules', () => {
       dateStarted: new Date(),
       projectIds: ['1001'],
       actor: 'test-client',
-      auditEnvironment: false,
     });
     const entries = await db.auditEntry.findMany({ orderBy: { seq: 'asc' } });
     expect(entries.map((entry) => [entry.projectId, entry.type])).toEqual([
       ['1001', 'release.created'],
       ['1002', 'release.created'],
+      ['1001', 'environment.created'],
       ['1001', 'deploy.created'],
     ]);
     expect(created.version).toBe('v2');
+  });
+
+  test('a failed Deploy keeps the Environment audited on retry', async () => {
+    const { orgA, release } = await seed();
+    const { record: environment } = await new EnvironmentRepo(db).findOrCreate(orgA.id, 'staging');
+    const failing = {
+      appendInTransaction: async () => {
+        throw new Error('audit unavailable');
+      },
+    } as unknown as AuditRepo;
+    const input = {
+      orgId: orgA.id,
+      releaseId: release.id,
+      environmentId: environment.id,
+      name: 'deploy-2',
+      dateStarted: new Date(),
+      projectIds: ['1001'],
+      actor: 'test-client',
+    };
+    await expect(new DeployRepo(db, failing).append(input)).rejects.toThrow('audit unavailable');
+    expect(await db.deploy.count()).toBe(1);
+
+    await new DeployRepo(db, audit).append(input);
+    const entries = await db.auditEntry.findMany({ orderBy: { seq: 'asc' } });
+    expect(entries.map((entry) => entry.type)).toEqual(['environment.created', 'deploy.created']);
+    expect(await db.deploy.count()).toBe(2);
   });
 
   test('an audit append failure rolls back the deploy write', async () => {
@@ -161,9 +249,8 @@ describe.skipIf(!dbTestEnabled)('v3 deploy database rules', () => {
         throw new Error('audit unavailable');
       },
     } as unknown as AuditRepo;
-    const deploys = new DeployRepo(db, failing);
     await expect(
-      deploys.append({
+      new DeployRepo(db, failing).append({
         orgId: orgA.id,
         releaseId: release.id,
         environmentId: environment.id,
@@ -171,7 +258,6 @@ describe.skipIf(!dbTestEnabled)('v3 deploy database rules', () => {
         dateStarted: new Date(),
         projectIds: ['1001'],
         actor: 'test-client',
-        auditEnvironment: false,
       }),
     ).rejects.toThrow('audit unavailable');
     expect(await db.deploy.count()).toBe(1);

@@ -39,18 +39,20 @@ export class DeploysService {
       }),
     );
     assertProjectBound(principal, targets);
-    const environment = await this.environments.findOrCreate(principal.orgId, dto.environment);
+    const { record: environment } = await this.environments.findOrCreate(
+      principal.orgId,
+      dto.environment,
+    );
     return this.repo.append({
       orgId: principal.orgId,
       releaseId: release.id,
-      environmentId: environment.record.id,
+      environmentId: environment.id,
       name: dto.name,
       dateStarted: dto.dateStarted,
       dateFinished: dto.dateFinished,
       url: dto.url,
       projectIds: targets,
       actor: principal.clientId,
-      auditEnvironment: environment.created,
     });
   }
 

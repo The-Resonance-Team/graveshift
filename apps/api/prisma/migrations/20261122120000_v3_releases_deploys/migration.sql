@@ -74,16 +74,16 @@ CREATE INDEX "deploys_environment_id_idx" ON "deploys"("environment_id");
 CREATE INDEX "deploy_projects_project_id_idx" ON "deploy_projects"("project_id");
 
 -- AddForeignKey
-ALTER TABLE "releases" ADD CONSTRAINT "releases_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "releases" ADD CONSTRAINT "releases_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "organizations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "project_releases" ADD CONSTRAINT "project_releases_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects"("project_id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "project_releases" ADD CONSTRAINT "project_releases_project_id_fkey" FOREIGN KEY ("project_id") REFERENCES "projects"("project_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "project_releases" ADD CONSTRAINT "project_releases_release_id_fkey" FOREIGN KEY ("release_id") REFERENCES "releases"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "project_releases" ADD CONSTRAINT "project_releases_release_id_fkey" FOREIGN KEY ("release_id") REFERENCES "releases"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "environments" ADD CONSTRAINT "environments_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "organizations"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "environments" ADD CONSTRAINT "environments_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "organizations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "deploys" ADD CONSTRAINT "deploys_org_id_fkey" FOREIGN KEY ("org_id") REFERENCES "organizations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -194,4 +194,51 @@ $$;
 CREATE TRIGGER deploy_projects_org_consistency
 BEFORE INSERT ON "deploy_projects"
 FOR EACH ROW EXECUTE FUNCTION enforce_deploy_project_organization();
+
+CREATE FUNCTION prevent_v3_org_move() RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  RAISE EXCEPTION 'v3 organization scope is immutable';
+END;
+$$;
+
+CREATE TRIGGER releases_org_immutable
+BEFORE UPDATE ON "releases"
+FOR EACH ROW WHEN (NEW."org_id" IS DISTINCT FROM OLD."org_id")
+EXECUTE FUNCTION prevent_v3_org_move();
+
+CREATE TRIGGER environments_org_immutable
+BEFORE UPDATE ON "environments"
+FOR EACH ROW WHEN (NEW."org_id" IS DISTINCT FROM OLD."org_id")
+EXECUTE FUNCTION prevent_v3_org_move();
+
+CREATE TRIGGER project_releases_project_immutable
+BEFORE UPDATE ON "project_releases"
+FOR EACH ROW WHEN (
+  NEW."project_id" IS DISTINCT FROM OLD."project_id"
+  OR NEW."release_id" IS DISTINCT FROM OLD."release_id"
+)
+EXECUTE FUNCTION prevent_v3_org_move();
+
+CREATE FUNCTION prevent_linked_project_org_move() RETURNS trigger
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  IF NEW."org_id" IS DISTINCT FROM OLD."org_id" AND (
+    EXISTS (SELECT 1 FROM "project_releases" WHERE "project_id" = NEW."project_id")
+    OR EXISTS (SELECT 1 FROM "deploy_projects" WHERE "project_id" = NEW."project_id")
+  ) THEN
+    RAISE EXCEPTION 'project organization is immutable while linked to a Release or Deploy';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+CREATE TRIGGER projects_org_link_guard
+BEFORE UPDATE ON "projects"
+FOR EACH ROW EXECUTE FUNCTION prevent_linked_project_org_move();
+
+ALTER TABLE "deploys" ADD CONSTRAINT "deploys_url_http_check"
+CHECK ("url" IS NULL OR "url" ~* '^https?://');
 -- END unmanaged v3 deploy enforcement.

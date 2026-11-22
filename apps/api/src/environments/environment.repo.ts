@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ConflictException, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 import type { EnvironmentRecord } from '../deploys/deploy.types';
@@ -32,10 +32,7 @@ export class EnvironmentRepo {
       return { record: toRecord(row), created: true };
     } catch (error) {
       if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        const winner = await this.db.environment.findUniqueOrThrow({
-          where: { orgId_name: { orgId, name } },
-        });
-        return { record: toRecord(winner), created: false };
+        throw new ConflictException('The Environment name is already used in this Organization');
       }
       throw error;
     }

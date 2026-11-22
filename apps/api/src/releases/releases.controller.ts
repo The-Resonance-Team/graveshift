@@ -41,7 +41,7 @@ export class ReleasesController {
   }
 
   @Post('releases')
-  @RequireScopes('project:write')
+  @RequireScopes('project:write', 'org:ci')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreatedResponse({
     description: 'A new Release linked to its Projects.',

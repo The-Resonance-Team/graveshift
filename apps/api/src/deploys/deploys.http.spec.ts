@@ -136,12 +136,37 @@ describe('deploy routes (HTTP)', () => {
       .expect(401);
   });
 
-  test('an invalid url is refused at the request boundary', async () => {
-    const result = await create(await ciToken(), context.orgA, {
-      environment: 'production',
-      url: 'not-a-url',
-    }).expect(422);
-    expect(result.body.statusCode).toBe(422);
+  test('invalid urls are refused at the request boundary', async () => {
+    const token = await ciToken();
+    const urls = ['not-a-url', 'javascript:alert(1)', 'ftp://example.test/file'];
+    const responses = await Promise.all(
+      urls.map(async (url) =>
+        create(token, context.orgA, { environment: 'production', url }).expect(422),
+      ),
+    );
+    expect(responses.every((response) => response.body.statusCode === 422)).toBe(true);
+  });
+
+  test('an org:ci-only client creates both a Release and a Deploy', async () => {
+    const token = await clientToken(context, context.ciClient, context.projectA, ['org:ci']);
+    const created = await http(context)
+      .post(`/api/organizations/${context.orgA}/releases`)
+      .set(bearer(token))
+      .send({ version: 'v3.ci.1', projects: [context.projectA] })
+      .expect(201);
+    const deployed = await http(context)
+      .post(`/api/organizations/${context.orgA}/deploys`)
+      .set(bearer(token))
+      .send({
+        releaseId: created.body.id,
+        name: 'ci-deploy',
+        dateStarted: STARTED,
+        environment: 'ci',
+        projects: [context.projectA],
+      })
+      .expect(201);
+    expect(deployed.body.releaseId).toBe(created.body.id);
+    expect(deployed.body.projectIds).toEqual([context.projectA]);
   });
 
   test('anonymous request is 401 before any store access', async () => {
@@ -154,7 +179,7 @@ describe('deploy routes (HTTP)', () => {
         .get(`/api/organizations/${context.orgA}/deploys`)
         .expect(401);
       expect(result.body.statusCode).toBe(401);
-      expect(context.deploys.rows.size).toBe(4);
+      expect(context.deploys.rows.size).toBe(5);
     } finally {
       context.identity.findOAuthClient = original;
     }
@@ -167,7 +192,7 @@ describe('deploy routes (HTTP)', () => {
       .set(bearer(orgToken))
       .expect(200);
     const names = orgResult.body.map((row: { name: string }) => row.name);
-    expect(names).toEqual(['production', 'staging', 'bound', 'canary']);
+    expect(names).toEqual(['production', 'staging', 'bound', 'canary', 'ci']);
 
     const projectToken = await clientToken(context, context.clientA2, context.projectA2, [
       'project:read',

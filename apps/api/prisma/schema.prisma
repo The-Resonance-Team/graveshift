@@ -114,7 +114,7 @@ model Release {
   orgId        String           @map("org_id")
   version      String
   createdAt    DateTime         @default(now()) @map("created_at")
-  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Restrict)
   projectLinks ProjectRelease[]
   deploys      Deploy[]
 
@@ -126,8 +126,8 @@ model Release {
 model ProjectRelease {
   projectId String  @map("project_id")
   releaseId String  @map("release_id")
-  project   Project @relation(fields: [projectId], references: [projectId], onDelete: Cascade)
-  release   Release @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  project   Project @relation(fields: [projectId], references: [projectId], onDelete: Restrict)
+  release   Release @relation(fields: [releaseId], references: [id], onDelete: Restrict)
 
   @@id([projectId, releaseId])
   @@index([releaseId])
@@ -139,7 +139,7 @@ model Environment {
   orgId        String       @map("org_id")
   name         String
   createdAt    DateTime     @default(now()) @map("created_at")
-  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
   deploys      Deploy[]
 
   @@unique([orgId, name])
