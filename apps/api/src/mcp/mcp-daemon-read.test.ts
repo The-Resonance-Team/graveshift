@@ -1,0 +1,166 @@
+import { getHttpClientToken, HttpNetworkError, HttpResponseError } from '@nestjs/http-client';
+import { Test } from '@nestjs/testing';
+import { parsePolicy } from '@graveshift/policy';
+import { describe, expect, test } from 'bun:test';
+
+import { HttpMcpBackend } from './mcp.backend';
+import { DaemonUnavailableError } from './mcp.errors';
+import { McpTools } from './mcp.tools';
+import {
+  MCP_BACKEND,
+  MCP_ENV_MODE,
+  MCP_POLICY,
+  type IncidentView,
+  type LimitCounters,
+} from './mcp.types';
+
+const DAEMON_CLIENT = getHttpClientToken('daemon-read');
+
+const ZERO_COUNTERS: LimitCounters = {
+  openPrsLastHour: 0,
+  actionsLast10Min: 0,
+  diagnosisLoops: 0,
+  llmSpentTodayUsd: 0,
+};
+
+const incident: IncidentView = {
+  incident: {
+    id: 'inc-1',
+    service: 'api',
+    state: 'diagnosed',
+    openedAt: '2026-01-01T00:00:00.000Z',
+    diagnosis: { confidence: 0.8 },
+  },
+  severity: 'critical',
+  detections: [{ rule: 'crash_loop' }],
+};
+
+const policy = parsePolicy({
+  version: 1,
+  mode: 'propose',
+  approvers: { discordUserIds: [], discordRoleIds: [] },
+  limits: {
+    maxOpenPrsPerHour: 1,
+    maxActionsPerServicePer10Min: 2,
+    maxDiagnosisLoops: 5,
+    llmDailyBudgetUsd: 2,
+  },
+  llm: { minConfidenceForPr: 0.5, minConfidenceForAction: 0.5 },
+  github: { repos: [] },
+  rules: [{ id: 'allow-pr', action: 'open_pr', effect: 'allow' }],
+  default: 'deny',
+});
+
+const fakeDaemon = (counters: LimitCounters = ZERO_COUNTERS) => {
+  const calls: string[] = [];
+  const replies: Record<string, unknown> = {
+    '/read/services': [{ name: 'api', status: 'haunting' }],
+    '/read/incidents': [incident, incident],
+    '/read/counters': counters,
+  };
+  return {
+    calls,
+    client: {
+      get: async (url: string) => {
+        calls.push(url);
+        if (url.startsWith('/read/incidents/')) return { data: incident };
+        if (url === '/read/logs') return { data: ['line one', 'line two'] };
+        if (url === '/read/metrics') return { data: { value: 1 } };
+        if (url === '/read/audit/verify') return { data: { ok: true, length: 0 } };
+        if (url === '/read/audit') return { data: [] };
+        const data = replies[url];
+        if (data === undefined) throw new Error(`unexpected path ${url}`);
+        return { data };
+      },
+    },
+  };
+};
+
+const build = async (client: unknown) => {
+  const moduleRef = await Test.createTestingModule({
+    providers: [
+      HttpMcpBackend,
+      McpTools,
+      { provide: MCP_BACKEND, useClass: HttpMcpBackend },
+      { provide: DAEMON_CLIENT, useValue: client },
+      { provide: MCP_POLICY, useValue: policy },
+      { provide: MCP_ENV_MODE, useValue: 'production' },
+    ],
+  }).compile();
+  return {
+    backend: moduleRef.get(HttpMcpBackend),
+    tools: moduleRef.get(McpTools),
+  };
+};
+
+describe('HTTP MCP backend with a fake daemon', () => {
+  test('a tool read returns daemon data, not an empty result', async () => {
+    const daemon = fakeDaemon();
+    const { tools } = await build(daemon.client);
+    expect(await tools.listIncidents({ limit: 20 })).toEqual([incident, incident]);
+    expect(await tools.listServices()).toEqual([{ name: 'api', status: 'haunting' }]);
+    expect(daemon.calls).toContain('/read/incidents');
+  });
+
+  test('propose_fix reports the real limit status from the fake daemon', async () => {
+    const counters: LimitCounters = {
+      openPrsLastHour: 0,
+      actionsLast10Min: 0,
+      diagnosisLoops: 1,
+      llmSpentTodayUsd: 0.25,
+    };
+    const { tools } = await build(fakeDaemon(counters).client);
+    const result = (await tools.proposeFix({ incidentId: 'inc-1', action: 'open_pr' })) as {
+      limits: { enforced: boolean; counters: LimitCounters };
+      decision: { reason: string };
+    };
+    expect(result.limits.enforced).toBe(true);
+    expect(result.limits.counters).toEqual(counters);
+    expect(result.decision.reason).toBe('rule:allow-pr');
+  });
+
+  test('a limit reached in the daemon blocks the fix', async () => {
+    const counters: LimitCounters = {
+      openPrsLastHour: 1,
+      actionsLast10Min: 0,
+      diagnosisLoops: 0,
+      llmSpentTodayUsd: 0,
+    };
+    const { tools } = await build(fakeDaemon(counters).client);
+    const result = (await tools.proposeFix({ incidentId: 'inc-1', action: 'open_pr' })) as {
+      decision: { reason: string };
+    };
+    expect(result.decision.reason).toBe('rate_limited');
+  });
+
+  test('a missing incident is not an availability error', async () => {
+    const { backend } = await build(fakeDaemon().client);
+    const client = {
+      get: async () => {
+        throw new HttpResponseError({ method: 'GET', url: '/read/incidents/nope', status: 404 });
+      },
+    };
+    const missing = await build(client);
+    expect(await missing.backend.getIncident('nope')).toBeUndefined();
+    expect(await backend.getIncident('inc-1')).toEqual(incident);
+  });
+
+  test('the unavailable path fails closed when the daemon is down', async () => {
+    const down = {
+      get: async () => {
+        throw new HttpNetworkError({
+          method: 'GET',
+          url: '/read/services',
+          cause: new Error('ECONNREFUSED'),
+        });
+      },
+    };
+    const { backend, tools } = await build(down);
+    expect(backend.listServices()).rejects.toThrow(DaemonUnavailableError);
+    expect(backend.listIncidents()).rejects.toThrow(DaemonUnavailableError);
+    expect(backend.getCounters()).rejects.toThrow(DaemonUnavailableError);
+    expect(tools.proposeFix({ incidentId: 'inc-1', action: 'open_pr' })).rejects.toThrow(
+      DaemonUnavailableError,
+    );
+  });
+});

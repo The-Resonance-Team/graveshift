@@ -9,12 +9,6 @@ import { PromqlSchema } from './mcp.promql';
 import { MCP_BACKEND, MCP_ENV_MODE, MCP_POLICY, type McpBackend } from './mcp.types';
 
 const idSchema = z.string().min(1).max(128);
-const ZERO_COUNTERS = {
-  openPrsLastHour: 0,
-  actionsLast10Min: 0,
-  diagnosisLoops: 0,
-  llmSpentTodayUsd: 0,
-};
 
 const need = <T>(value: T | undefined, message: string): T => {
   if (value === undefined) throw new NotFoundException(message);
@@ -101,6 +95,8 @@ export class McpTools {
     replicas?: number | undefined;
   }): Promise<unknown> {
     const view = need(await this.backend.getIncident(args.incidentId), 'incident not found');
+    // A daemon failure rejects the tool call. Zero counters are never assumed.
+    const counters = await this.backend.getCounters();
     const action: PolicyAction = {
       name: args.action,
       ...(args.replicas === undefined ? {} : { params: { replicas: args.replicas } }),
@@ -111,8 +107,7 @@ export class McpTools {
       signals: (view.detections ?? []).map((x) => x.rule),
       confidence: view.incident.diagnosis?.confidence ?? 0,
       ...(this.envMode === undefined ? {} : { envMode: this.envMode }),
-      // ponytail: counters stay zero because the daemon exposes none; upgrade when it serves them
-      counters: ZERO_COUNTERS,
+      counters,
     };
     const decision = decide(this.policy, ctx, action);
     // ponytail: the decision is not written to the audit log (daemon has no append endpoint), upgrade when it does
@@ -120,7 +115,7 @@ export class McpTools {
       decision,
       audit: toAuditEvent(decision, ctx, action),
       executed: false,
-      caveat: 'Counters are unavailable, so rate and budget limits are not enforced.',
+      limits: { enforced: true, counters, configured: this.policy.limits },
     });
   }
 

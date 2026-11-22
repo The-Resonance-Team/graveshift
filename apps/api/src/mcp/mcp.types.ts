@@ -18,7 +18,15 @@ export interface IncidentView {
   timeline?: Array<{ at: string; type: string; detail: string }>;
 }
 
-/** Everything the MCP tools read. Tests inject a fake; production has no read API yet. */
+/** Rate and budget counters owned by the daemon. */
+export interface LimitCounters {
+  openPrsLastHour: number;
+  actionsLast10Min: number;
+  diagnosisLoops: number;
+  llmSpentTodayUsd: number;
+}
+
+/** Everything the MCP tools read from the daemon. Tests inject a fake client. */
 export interface McpBackend {
   listServices(): Promise<unknown[]>;
   listIncidents(): Promise<IncidentView[]>;
@@ -27,4 +35,5 @@ export interface McpBackend {
   verifyChain(): Promise<unknown>;
   tailLogs(service: string, lines: number): Promise<string[]>;
   queryMetric(promql: string): Promise<number | null>;
+  getCounters(): Promise<LimitCounters>;
 }

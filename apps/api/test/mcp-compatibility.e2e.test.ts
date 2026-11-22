@@ -6,7 +6,6 @@ import { parsePolicy } from '@graveshift/policy';
 import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
 
 import { AppModule } from '../src/app.module';
-import { UnavailableMcpBackend } from '../src/mcp/mcp.backend';
 import { MCP_BACKEND, MCP_ENV_MODE, MCP_POLICY } from '../src/mcp/mcp.types';
 import { FakeMcpBackend, SECRET } from './fakes/fake-mcp-backend';
 
@@ -125,7 +124,7 @@ describe('MCP server (in-memory client)', () => {
       expect(JSON.parse(toolText(pr))).toMatchObject({
         executed: false,
         decision: { effect: 'allow' },
-        caveat: expect.stringContaining('limits are not enforced'),
+        limits: { enforced: true, counters: expect.any(Object) },
       });
 
       const restart = await client.callTool({
@@ -155,12 +154,5 @@ describe('MCP server (in-memory client)', () => {
       .catch((error: unknown) => error);
     expect(resource).toBeInstanceOf(Error);
     expect(String((resource as Error).message)).toContain('not found');
-  });
-});
-
-describe('production MCP backend', () => {
-  test('reports the audit chain as explicitly unavailable', async () => {
-    const result = await new UnavailableMcpBackend().verifyChain();
-    expect(result).toMatchObject({ ok: false, unavailable: true });
   });
 });

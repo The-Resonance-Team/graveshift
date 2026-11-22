@@ -1,39 +1,67 @@
 import { Injectable } from '@nestjs/common';
+import {
+  InjectHttpClient,
+  type HttpQuery,
+  type HttpClient,
+  HttpResponseError,
+} from '@nestjs/http-client';
 import type { AuditEntry } from '@graveshift/core';
 
-import type { IncidentView, McpBackend } from './mcp.types';
+import { DaemonUnavailableError } from './mcp.errors';
+import type { IncidentView, LimitCounters, McpBackend } from './mcp.types';
 
-/**
- * ponytail: the v2 daemon serves only /healthz, so the v1 read endpoints are gone and every verb returns an empty
- * result. Upgrade this provider with HTTP reads when the daemon exposes a read API.
- */
+/** The one client of the daemon read surface. A read failure never becomes empty data. */
 @Injectable()
-export class UnavailableMcpBackend implements McpBackend {
-  async listServices(): Promise<unknown[]> {
-    return [];
+export class HttpMcpBackend implements McpBackend {
+  constructor(@InjectHttpClient('daemon-read') private readonly http: HttpClient) {}
+
+  private async read<T>(path: string, query?: HttpQuery): Promise<T> {
+    try {
+      const { data } = await this.http.get<T>(path, query === undefined ? {} : { query });
+      return data;
+    } catch (error) {
+      throw new DaemonUnavailableError(error);
+    }
   }
 
-  async listIncidents(): Promise<IncidentView[]> {
-    return [];
+  listServices(): Promise<unknown[]> {
+    return this.read<unknown[]>('/read/services');
   }
 
-  async getIncident(_id: string): Promise<IncidentView | undefined> {
-    return undefined;
+  listIncidents(): Promise<IncidentView[]> {
+    return this.read<IncidentView[]>('/read/incidents');
   }
 
-  async listAudit(_opts: { afterSeq: number; limit: number }): Promise<AuditEntry[]> {
-    return [];
+  async getIncident(id: string): Promise<IncidentView | undefined> {
+    try {
+      const { data } = await this.http.get<IncidentView>('/read/incidents/:id', {
+        params: { id },
+      });
+      return data;
+    } catch (error) {
+      if (error instanceof HttpResponseError && error.status === 404) return undefined;
+      throw new DaemonUnavailableError(error);
+    }
   }
 
-  async verifyChain(): Promise<unknown> {
-    return { ok: false, unavailable: true, reason: 'the daemon exposes no audit read API' };
+  listAudit(opts: { afterSeq: number; limit: number }): Promise<AuditEntry[]> {
+    return this.read<AuditEntry[]>('/read/audit', opts);
   }
 
-  async tailLogs(_service: string, _lines: number): Promise<string[]> {
-    return [];
+  verifyChain(): Promise<unknown> {
+    return this.read<unknown>('/read/audit/verify');
   }
 
-  async queryMetric(_promql: string): Promise<number | null> {
-    return null;
+  tailLogs(service: string, lines: number): Promise<string[]> {
+    return this.read<string[]>('/read/logs', { service, lines });
+  }
+
+  async queryMetric(promql: string): Promise<number | null> {
+    const data = await this.read<{ value: number | null }>('/read/metrics', { promql });
+    return data.value;
+  }
+
+  getCounters(): Promise<LimitCounters> {
+    return this.read<LimitCounters>('/read/counters');
   }
 }

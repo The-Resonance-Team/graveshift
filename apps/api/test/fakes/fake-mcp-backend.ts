@@ -1,6 +1,6 @@
 import type { AuditEntry } from '@graveshift/core';
 
-import type { IncidentView, McpBackend } from '../../src/mcp/mcp.types';
+import type { IncidentView, LimitCounters, McpBackend } from '../../src/mcp/mcp.types';
 
 export const SECRET = 'AKIAIOSFODNN7EXAMPLE';
 
@@ -26,6 +26,15 @@ export class FakeMcpBackend implements McpBackend {
   readonly execute = async (_action: string): Promise<void> => {
     throw new Error('propose_fix must never execute an action');
   };
+
+  constructor(
+    private readonly counters: LimitCounters = {
+      openPrsLastHour: 0,
+      actionsLast10Min: 0,
+      diagnosisLoops: 0,
+      llmSpentTodayUsd: 0,
+    },
+  ) {}
 
   listServices(): Promise<unknown[]> {
     return Promise.resolve([{ name: 'api' }]);
@@ -53,5 +62,9 @@ export class FakeMcpBackend implements McpBackend {
 
   queryMetric(_promql: string): Promise<number | null> {
     return Promise.resolve(1);
+  }
+
+  getCounters(): Promise<LimitCounters> {
+    return Promise.resolve(this.counters);
   }
 }

@@ -5,11 +5,12 @@ import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { loadPolicy, parsePolicy, type Policy } from '@graveshift/policy';
 
 import { AuthModule } from '../auth/auth.module';
+import { DaemonReadClientModule, DaemonReadConfigModule } from './daemon-read.config';
 import { EventsBridge } from './events/events.bridge';
 import { EventPollService } from './events/events.service';
 import { NatsEventSource } from './events/events.source';
 import { MCP_EVENT_SOURCE } from './events/events.types';
-import { UnavailableMcpBackend } from './mcp.backend';
+import { HttpMcpBackend } from './mcp.backend';
 import { McpPrompts } from './mcp.prompts';
 import { McpResources } from './mcp.resources';
 import { McpHttpScopeGuard } from './mcp-http-scope.guard';
@@ -35,7 +36,7 @@ const DEFAULT_POLICY: Policy = parsePolicy({
 
 /** The MCP primitives. Kept separate so tests can override the backend and policy. */
 @Module({
-  imports: [AuthModule, ThrottlerModule],
+  imports: [AuthModule, ThrottlerModule, DaemonReadConfigModule, DaemonReadClientModule],
   providers: [
     McpTools,
     McpPrompts,
@@ -45,7 +46,7 @@ const DEFAULT_POLICY: Policy = parsePolicy({
     EventPollService,
     EventsBridge,
     { provide: MCP_EVENT_SOURCE, useClass: NatsEventSource },
-    { provide: MCP_BACKEND, useClass: UnavailableMcpBackend },
+    { provide: MCP_BACKEND, useClass: HttpMcpBackend },
     {
       provide: MCP_POLICY,
       useFactory: async (): Promise<Policy> => {
