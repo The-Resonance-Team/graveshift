@@ -21,7 +21,9 @@ hop. Unblock #48.
   `GET /healthz` on `127.0.0.1:2602`. `apps/api/src/mcp/mcp.backend.ts` returns
   empty results. `apps/api/src/mcp/mcp.types.ts` defines the seven reads that
   MCP needs. `deploy/compose/graveshift.compose.yml` runs support services and
-  no daemon. No ADR 0015, 0016 or 0017 exists on any branch.
+  no daemon. ADR 0015 exists only on the unmerged
+  `xirothedev/autofix-config-v2` branch. ADR 0016 is reserved for ticket #59.
+  ADR 0017 is this decision.
 
 ## Result
 
