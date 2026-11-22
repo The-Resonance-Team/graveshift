@@ -1,129 +1,77 @@
-import { describe, expect, test } from 'bun:test';
-import type { MetricsClient } from '@graveshift/metrics';
+import { expect, test } from 'bun:test';
 import fc from 'fast-check';
 
-import { createDedupe } from './pipeline';
-import { createPoller } from './poller';
-import { at, harness, signal, T0 } from './test-helpers';
-import type { Detection } from './types';
+import { at, harness, signal } from './test-helpers';
 
-describe('poller', () => {
-  const client = (values: Record<string, number | null>, fail = false): MetricsClient => ({
-    query: async () => null,
-    watcher: async (name) => {
-      if (fail) throw new Error('prometheus down');
-      return values[name] ?? null;
-    },
-  });
+const sequence = fc
+  .array(
+    fc.record({
+      projectId: fc.constantFrom('project-1', 'project-2'),
+      service: fc.constantFrom('api', 'worker', 'db'),
+      seconds: fc.integer({ min: 0, max: 5000 }),
+    }),
+    { maxLength: 40 },
+  )
+  .map((items) => items.sort((a, b) => a.seconds - b.seconds));
 
-  test('feeds PromQL samples into the metric rules', async () => {
-    const h = harness();
-    let now = T0;
-    const poller = createPoller({
-      client: client({ errorRate5xx: 0.3, p95LatencySeconds: 2 }),
-      watcher: h.watcher,
-      targets: [{ service: 'api', job: 'demo-api' }],
-      now: () => new Date(now),
-    });
-    await [0, 1, 2, 3, 4].reduce(
-      (previous) =>
-        previous.then(async () => {
-          await poller.pollOnce();
-          now += 15_000;
-        }),
-      Promise.resolve(),
-    );
-    expect(h.accepted('metric.p95-latency')).toHaveLength(1);
-    expect(h.accepted('metric.5xx-rate')).toHaveLength(1);
-  });
-
-  test('a failing query warns and never throws', async () => {
-    const warnings: string[] = [];
-    const h = harness();
-    const poller = createPoller({
-      client: client({}, true),
-      watcher: h.watcher,
-      targets: [{ service: 'api', job: 'demo-api' }],
-      warn: (m) => warnings.push(m),
-    });
-    await poller.pollOnce();
-    expect(warnings).toHaveLength(1);
-    expect(h.outcomes).toHaveLength(0);
-  });
+test('public ingest keeps one Haunting per project and Grave and attaches each accepted detection once', () => {
+  fc.assert(
+    fc.property(sequence, (items) => {
+      const captured = harness();
+      for (const item of items)
+        captured.watcher.ingest(signal('oom', item.seconds, item.service, item.projectId));
+      const open = captured.watcher.openIncidents();
+      const keys = open.map((entry) => JSON.stringify([entry.projectId, entry.incident.service]));
+      expect(new Set(keys).size).toBe(keys.length);
+      const attached = open.flatMap((entry) => entry.incident.signalIds);
+      expect(new Set(attached).size).toBe(attached.length);
+      expect(attached).toHaveLength(captured.accepted().length);
+    }),
+  );
 });
 
-describe('properties', () => {
-  const detection = (service: string, seconds: number): Detection => ({
-    id: `d-${service}-${seconds}`,
-    rule: 'runtime.oom',
-    service,
-    severity: 'critical',
-    fingerprint: `${service}:runtime.oom`,
-    message: 'oom',
-    observedAt: at(seconds),
-  });
-  const sequence = fc
-    .array(
-      fc.record({
-        service: fc.constantFrom('api', 'worker', 'db'),
-        seconds: fc.integer({ min: 0, max: 5000 }),
-      }),
-      { maxLength: 40 },
-    )
-    .map((items) =>
-      items.sort((a, b) => a.seconds - b.seconds).map((i) => detection(i.service, i.seconds)),
-    );
-
-  const run = (items: Detection[]) => {
-    const dedupe = createDedupe();
-    return items.filter((d) => dedupe.accept(d));
-  };
-
-  test('dedupe is stable: idempotent, spaced by the window, and keeps the first of every fingerprint', () => {
-    fc.assert(
-      fc.property(sequence, (items) => {
-        const kept = run(items);
-        expect(run(kept)).toEqual(kept);
-        const byFingerprint = Map.groupBy(kept, (d) => d.fingerprint);
-        for (const group of byFingerprint.values()) {
-          for (let i = 1; i < group.length; i++) {
-            expect(
-              Date.parse(group[i]!.observedAt) - Date.parse(group[i - 1]!.observedAt),
-            ).toBeGreaterThanOrEqual(600_000);
-          }
+test('accepted fingerprints are spaced by the dedupe window within each project and Grave', () => {
+  fc.assert(
+    fc.property(sequence, (items) => {
+      const captured = harness();
+      for (const item of items)
+        captured.watcher.ingest(signal('oom', item.seconds, item.service, item.projectId));
+      const groups = Map.groupBy(captured.accepted(), (outcome) =>
+        JSON.stringify([
+          outcome.detection.projectId,
+          outcome.detection.service,
+          outcome.detection.fingerprint,
+        ]),
+      );
+      for (const group of groups.values()) {
+        for (let index = 1; index < group.length; index += 1) {
+          expect(
+            Date.parse(group[index]!.detection.observedAt) -
+              Date.parse(group[index - 1]!.detection.observedAt),
+          ).toBeGreaterThanOrEqual(600_000);
         }
-        for (const [fp, first] of Map.groupBy(items, (d) => d.fingerprint)) {
-          expect(byFingerprint.get(fp)?.[0]).toEqual(first[0]);
-        }
-      }),
-    );
-  });
+      }
+    }),
+  );
+});
 
-  test('grouping: exactly one open incident per service and every accepted signal id is attached once', () => {
-    fc.assert(
-      fc.property(sequence, (items) => {
-        const h = harness();
-        for (const d of items) {
-          h.watcher.ingest(signal('oom', (Date.parse(d.observedAt) - T0) / 1000, d.service));
-        }
-        const open = h.watcher.openIncidents();
-        expect(new Set(open.map((o) => o.incident.service)).size).toBe(open.length);
-        const attached = open.flatMap((o) => o.incident.signalIds);
-        expect(new Set(attached).size).toBe(attached.length);
-        expect(attached.length).toBe(h.accepted().length);
-      }),
-    );
-  });
-
-  test('silenced detections never become incidents', () => {
-    fc.assert(
-      fc.property(sequence, (items) => {
-        const h = harness();
-        h.watcher.silence({ service: 'api', from: at(0), until: at(10_000) });
-        for (const d of items)
-          h.watcher.ingest(signal('oom', (Date.parse(d.observedAt) - T0) / 1000, d.service));
-        expect(h.watcher.openIncidents().some((o) => o.incident.service === 'api')).toBe(false);
-      }),
-    );
-  });
+test('Salt line detections never open a Haunting for the selected project and Grave', () => {
+  fc.assert(
+    fc.property(sequence, (items) => {
+      const captured = harness();
+      captured.watcher.silence({
+        projectId: 'project-1',
+        service: 'api',
+        from: at(0),
+        until: at(10_000),
+      });
+      for (const item of items)
+        captured.watcher.ingest(signal('oom', item.seconds, item.service, item.projectId));
+      expect(
+        captured.watcher
+          .openIncidents()
+          .some((entry) => entry.projectId === 'project-1' && entry.incident.service === 'api'),
+      ).toBe(false);
+    }),
+  );
 });

@@ -67,10 +67,12 @@
     "@ai-sdk/voyage": "2.0.85",
     "@ai-sdk/xai": "5.0.48",
     "@ai-sdk/zai": "3.0.57",
+    "@date-fns/tz": "1.5.0",
     "@graveshift/agents": "workspace:*",
     "@graveshift/core": "workspace:*",
     "@graveshift/redactor": "workspace:*",
     "ai": "7.0.177",
+    "date-fns": "4.4.0",
     "zod": "^4.6.7"
   }
 }

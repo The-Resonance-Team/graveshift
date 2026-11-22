@@ -146,6 +146,7 @@ describe('config response document', () => {
             apiKeyEnv: 'GRAVESHIFT_TEST_AGENT_API_KEY',
             allowedTools: ['query_metric'],
             dailyBudgetUsd: 1,
+            autoFix: false,
           },
         ],
         client: [],

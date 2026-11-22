@@ -1,18 +1,45 @@
-import { AppsV1Api, CoreV1Api, type CoreV1Event, KubeConfig, Watch } from '@kubernetes/client-node';
+import { AppsV1Api, CoreV1Api, KubeConfig, Watch } from '@kubernetes/client-node';
+import { z } from 'zod';
 
 import { type DeploymentInfo, type K8sEvent, type KubeApi, WatchExpiredError } from './types';
 
-const toEvent = (e: CoreV1Event): K8sEvent => ({
-  uid: e.metadata?.uid ?? '',
-  reason: e.reason ?? '',
-  message: e.message ?? '',
-  type: e.type ?? '',
-  namespace: e.metadata?.namespace ?? '',
-  involvedKind: e.involvedObject.kind ?? '',
-  involvedName: e.involvedObject.name ?? '',
-  resourceVersion: e.metadata?.resourceVersion ?? '',
-  at: (e.lastTimestamp ?? e.eventTime ?? e.metadata?.creationTimestamp ?? new Date()).toISOString(),
+const timestamp = z.union([z.iso.datetime(), z.date().transform((date) => date.toISOString())]);
+const eventSchema = z.object({
+  metadata: z.object({
+    uid: z.string().min(1),
+    namespace: z.string().default(''),
+    resourceVersion: z.string().min(1),
+    creationTimestamp: timestamp.nullish(),
+  }),
+  involvedObject: z.object({ kind: z.string(), name: z.string() }),
+  reason: z.string().default(''),
+  message: z.string().default(''),
+  type: z.string().default(''),
+  lastTimestamp: timestamp.nullish(),
+  eventTime: timestamp.nullish(),
 });
+const expiredSchema = z.object({ code: z.literal(410) });
+
+function toEvent(input: unknown): K8sEvent | undefined {
+  const parsed = eventSchema.safeParse(input);
+  if (!parsed.success) return;
+  const event = parsed.data;
+  return {
+    uid: event.metadata.uid,
+    reason: event.reason,
+    message: event.message,
+    type: event.type,
+    namespace: event.metadata.namespace,
+    involvedKind: event.involvedObject.kind,
+    involvedName: event.involvedObject.name,
+    resourceVersion: event.metadata.resourceVersion,
+    at:
+      event.lastTimestamp ??
+      event.eventTime ??
+      event.metadata.creationTimestamp ??
+      new Date().toISOString(),
+  };
+}
 
 const labelSelector = (selector: Record<string, string>) =>
   Object.entries(selector)
@@ -61,29 +88,55 @@ export function createKubeApi(kc: KubeConfig = inCluster()): KubeApi {
     },
 
     async watchEvents(resourceVersion, onEvent, signal, onOpen) {
+      if (signal.aborted) return;
       const done = Promise.withResolvers<void>();
-      const controller = await watch.watch(
-        '/api/v1/events',
-        { resourceVersion, allowWatchBookmarks: true },
-        (phase, obj: CoreV1Event) => {
-          if (phase === 'ADDED' || phase === 'MODIFIED') onEvent(toEvent(obj));
-        },
-        (error: { statusCode?: number; code?: number; message?: string } | null) => {
-          const expired =
-            error?.statusCode === 410 ||
-            error?.code === 410 ||
-            /410|too old/i.test(error?.message ?? '');
-          if (expired) done.reject(new WatchExpiredError());
-          else if (error)
-            done.reject(
-              error instanceof Error ? error : new Error(error.message ?? 'watch failed'),
-            );
-          else done.resolve();
-        },
-      );
-      onOpen();
-      signal.addEventListener('abort', () => controller.abort(), { once: true });
-      await done.promise;
+      void done.promise.catch(() => {});
+      let controller: AbortController | undefined;
+      const abort = () => {
+        controller?.abort();
+        done.resolve();
+      };
+      signal.addEventListener('abort', abort, { once: true });
+      try {
+        controller = await watch.watch(
+          '/api/v1/events',
+          { resourceVersion, allowWatchBookmarks: true },
+          (phase, obj: unknown) => {
+            if (signal.aborted) return;
+            if (phase === 'ERROR') {
+              done.reject(
+                expiredSchema.safeParse(obj).success
+                  ? new WatchExpiredError()
+                  : new Error('Kubernetes watch error'),
+              );
+            } else if (phase === 'ADDED' || phase === 'MODIFIED') {
+              const event = toEvent(obj);
+              if (event) onEvent(event);
+            }
+          },
+          (error: { statusCode?: number; code?: number; message?: string } | null) => {
+            const expired =
+              error?.statusCode === 410 ||
+              error?.code === 410 ||
+              /410|too old/i.test(error?.message ?? '');
+            if (expired) done.reject(new WatchExpiredError());
+            else if (error)
+              done.reject(
+                error instanceof Error ? error : new Error(error.message ?? 'watch failed'),
+              );
+            else done.resolve();
+          },
+        );
+        if (signal.aborted) {
+          controller.abort();
+          return;
+        }
+        onOpen();
+        await done.promise;
+      } finally {
+        signal.removeEventListener('abort', abort);
+        controller?.abort();
+      }
     },
   };
 }

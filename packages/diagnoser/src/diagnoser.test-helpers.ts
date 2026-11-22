@@ -21,6 +21,7 @@ const incidentAgent: AgentBinding['agent'] = {
   apiKeyEnv: 'GRAVESHIFT_TEST_KEY',
   allowedTools: [],
   dailyBudgetUsd: 100,
+  autoFix: false,
 };
 
 export const otherAgent = {
@@ -72,7 +73,10 @@ export function replayAdapter(
       },
       ...config,
     },
-    onAudit: (event) => events.push(event),
+    onAudit: async (event) => {
+      events.push(event);
+      return { callId: event.callId };
+    },
   });
   return { gateway, requests, events };
 }

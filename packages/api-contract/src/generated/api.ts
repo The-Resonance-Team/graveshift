@@ -4,6 +4,11 @@
  */
 
 
+/** OneOf type helpers */
+type Without<T, U> = { [P in Exclude<keyof T, keyof U>]?: never };
+type XOR<T, U> = (T | U) extends object ? (Without<T, U> & U) | (Without<U, T> & T) : T | U;
+type OneOf<T extends unknown[]> = T extends [infer Only] ? Only : T extends [infer A, infer B, ...infer Rest] ? OneOf<[XOR<A, B>, ...Rest]> : never;
+
 export interface paths {
   "/healthz": {
     get: operations["HealthController_getHealth"];
@@ -36,11 +41,17 @@ export interface paths {
   "/api/work-items/{id}": {
     get: operations["WorkItemsController_get"];
   };
+  "/api/work-items/{id}/routing": {
+    get: operations["WorkItemsController_routing"];
+  };
   "/api/work-items/{id}/triage": {
     post: operations["WorkItemsController_triage"];
   };
   "/api/work-items/{id}/fix-now": {
     post: operations["WorkItemsController_fixNow"];
+  };
+  "/api/work-items/{id}/answer": {
+    post: operations["WorkItemsController_answer"];
   };
 }
 
@@ -107,6 +118,13 @@ export interface components {
     };
     FixNowRequestDto: {
       note?: string;
+    };
+    AnswerRequestDto: {
+      attemptId: string;
+      questionId: string;
+      params: {
+        [key: string]: string;
+      };
     };
   };
   responses: never;
@@ -197,6 +215,8 @@ export interface operations {
                   apiKeyEnv: string;
                   allowedTools: string[];
                   dailyBudgetUsd: number;
+                  /** @default false */
+                  autoFix: boolean;
                   escalateTo?: string;
                 })[];
               /** @default [] */
@@ -218,6 +238,8 @@ export interface operations {
                   apiKeyEnv: string;
                   allowedTools: string[];
                   dailyBudgetUsd: number;
+                  /** @default false */
+                  autoFix: boolean;
                   escalateTo?: string;
                 })[];
             };
@@ -502,10 +524,15 @@ export interface operations {
       query?: {
         offset?: number;
         limit?: number;
+        status?: "todo" | "in_progress" | "in_review" | "done";
+        priority?: "low" | "medium" | "high" | "critical";
+        severity?: "info" | "warning" | "critical";
+        assignee?: string;
+        service?: string;
       };
     };
     responses: {
-      /** @description A page of work items for the table. */
+      /** @description Work items ordered by fix priority, title, and ID. */
       200: {
         content: {
           "application/json": {
@@ -556,6 +583,10 @@ export interface operations {
           };
         };
       };
+      /** @description A management access token is required. */
+      401: {
+        content: never;
+      };
     };
   };
   WorkItemsController_get: {
@@ -565,7 +596,7 @@ export interface operations {
       };
     };
     responses: {
-      /** @description One work item for the detail sheet. */
+      /** @description One Work item. */
       200: {
         content: {
           "application/json": {
@@ -611,7 +642,46 @@ export interface operations {
           };
         };
       };
-      /** @description No work item has this id. */
+      /** @description A management access token is required. */
+      401: {
+        content: never;
+      };
+      /** @description The Work item does not exist in this project. */
+      404: {
+        content: never;
+      };
+    };
+  };
+  WorkItemsController_routing: {
+    parameters: {
+      path: {
+        id: string;
+      };
+    };
+    responses: {
+      /** @description Safe active Fix attempt summary. Recover a saved question after a lost response or restart. No request text or Agent params are returned. */
+      200: {
+        content: {
+          "application/json": {
+            routing: ({
+              attemptId: string;
+              questionId: string | null;
+              question: string | null;
+              missing: string[];
+              agent: string;
+              /** @enum {string} */
+              trigger: "auto_fix" | "fix_now";
+              /** @enum {string} */
+              state: "claimed" | "awaiting_answer" | "running" | "publishing" | "completed" | "failed" | "needs_human" | "uncertain";
+            }) | null;
+          };
+        };
+      };
+      /** @description A management access token is required. */
+      401: {
+        content: never;
+      };
+      /** @description The Work item does not exist in this project. */
       404: {
         content: never;
       };
@@ -619,6 +689,10 @@ export interface operations {
   };
   WorkItemsController_triage: {
     parameters: {
+      header?: {
+        /** @description Reuse this ID to replay the recorded result after a connection failure. */
+        "Idempotency-Key"?: string;
+      };
       path: {
         id: string;
       };
@@ -629,8 +703,12 @@ export interface operations {
       };
     };
     responses: {
-      /** @description The triaged work item and its auto-fix outcome. */
+      /** @description Saved assignment and auto-fix outcome. Human assignment is manual. The selected Agent autoFix setting controls the trigger. */
       200: {
+        headers: {
+          /** @description The supplied or generated command ID. Reuse it for retries. */
+          "Idempotency-Key"?: string;
+        };
         content: {
           "application/json": {
             item: {
@@ -680,20 +758,49 @@ export interface operations {
               effect: "allow" | "deny" | "require_approval" | "dry_run";
               reason: string | null;
               /** @enum {string} */
-              failure: "none" | "auto_fix_disabled" | "context_unavailable" | "invalid_context" | "policy_denied" | "patch_rejected" | "pr_failed" | "fix_error" | "already_fixed";
+              failure: "none" | "auto_fix_disabled" | "context_unavailable" | "invalid_context" | "policy_denied" | "patch_rejected" | "pr_failed" | "fix_error" | "already_fixed" | "awaiting_answer" | "needs_human" | "routing_failed" | "audit_failed" | "publication_uncertain";
+              routing: OneOf<[{
+                /** @enum {string} */
+                kind: "routed";
+                agent: {
+                  name: string;
+                  slug: string;
+                };
+              }, {
+                /** @enum {string} */
+                kind: "ask";
+                agent: {
+                  name: string;
+                  slug: string;
+                };
+                questionId: string;
+                question: string;
+                missing: string[];
+              }, {
+                /** @enum {string} */
+                kind: "needs_human";
+                agent: string;
+                reason: string;
+                missing: string[];
+              }, null]>;
+              attemptId: string | null;
             }) | null;
           };
         };
       };
-      /** @description No work item has this id. */
+      /** @description A management access token is required. */
+      401: {
+        content: never;
+      };
+      /** @description The Work item does not exist in this project. */
       404: {
         content: never;
       };
-      /** @description The work item is in a terminal status. */
+      /** @description The Work item is complete, has an active attempt, or the command ID conflicts. */
       409: {
         content: never;
       };
-      /** @description The assignee is not valid. */
+      /** @description The assignee is invalid or the Agent is unknown. */
       422: {
         content: never;
       };
@@ -701,6 +808,10 @@ export interface operations {
   };
   WorkItemsController_fixNow: {
     parameters: {
+      header?: {
+        /** @description Reuse this ID to replay the recorded result after a connection failure. */
+        "Idempotency-Key"?: string;
+      };
       path: {
         id: string;
       };
@@ -711,8 +822,12 @@ export interface operations {
       };
     };
     responses: {
-      /** @description The fix result with the work item, the policy effect and the draft PR ref. */
+      /** @description Waits for the Fix attempt outcome. Missing Agent params return one saved question and its attempt ID. */
       200: {
+        headers: {
+          /** @description The supplied or generated command ID. Reuse it for retries. */
+          "Idempotency-Key"?: string;
+        };
         content: {
           "application/json": {
             item: {
@@ -770,19 +885,178 @@ export interface operations {
             } | null;
             reason: string | null;
             /** @enum {string} */
-            failure: "none" | "auto_fix_disabled" | "context_unavailable" | "invalid_context" | "policy_denied" | "patch_rejected" | "pr_failed" | "fix_error" | "already_fixed";
+            failure: "none" | "auto_fix_disabled" | "context_unavailable" | "invalid_context" | "policy_denied" | "patch_rejected" | "pr_failed" | "fix_error" | "already_fixed" | "awaiting_answer" | "needs_human" | "routing_failed" | "audit_failed" | "publication_uncertain";
+            routing: OneOf<[{
+              /** @enum {string} */
+              kind: "routed";
+              agent: {
+                name: string;
+                slug: string;
+              };
+            }, {
+              /** @enum {string} */
+              kind: "ask";
+              agent: {
+                name: string;
+                slug: string;
+              };
+              questionId: string;
+              question: string;
+              missing: string[];
+            }, {
+              /** @enum {string} */
+              kind: "needs_human";
+              agent: string;
+              reason: string;
+              missing: string[];
+            }, null]>;
+            attemptId: string | null;
           };
         };
       };
-      /** @description No work item has this id. */
+      /** @description A management access token is required. */
+      401: {
+        content: never;
+      };
+      /** @description Human assignments have no Fix now action. Agent autoFix must be disabled for Fix now. */
+      403: {
+        content: never;
+      };
+      /** @description The Work item does not exist in this project. */
       404: {
         content: never;
       };
-      /** @description The work item is in a terminal status. */
+      /** @description The Work item is complete, has an active attempt, or the command ID conflicts. */
       409: {
         content: never;
       };
-      /** @description The request body is not valid. */
+      /** @description The request body is invalid. */
+      422: {
+        content: never;
+      };
+    };
+  };
+  WorkItemsController_answer: {
+    parameters: {
+      header?: {
+        /** @description Reuse this ID to replay the recorded result after a connection failure. */
+        "Idempotency-Key"?: string;
+      };
+      path: {
+        id: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AnswerRequestDto"];
+      };
+    };
+    responses: {
+      /** @description A complete answer resumes the same Fix attempt and trigger. An incomplete answer assigns the Work item to a person for manual work. */
+      200: {
+        headers: {
+          /** @description The supplied or generated command ID. Reuse it for retries. */
+          "Idempotency-Key"?: string;
+        };
+        content: {
+          "application/json": {
+            item: {
+              id: string;
+              title: string;
+              description: string;
+              successCriteria: string[];
+              subtasks: {
+                items: {
+                    id: string;
+                    title: string;
+                    done: boolean;
+                  }[];
+                completed: number;
+              };
+              /** @enum {string} */
+              status: "todo" | "in_progress" | "in_review" | "done";
+              /** @enum {string} */
+              priority: "low" | "medium" | "high" | "critical";
+              assignee: "needs_human" | `needs_agent_${string}`;
+              reporter: string;
+              /** Format: date */
+              startDate: string | null;
+              /** Format: date */
+              dueDate: string | null;
+              sprint: string | null;
+              parent: string | null;
+              labels: string[];
+              team: string;
+              watchers: string[];
+              /** @enum {string} */
+              severity: "info" | "warning" | "critical";
+              service: string;
+              diagnosisRef: string;
+              fixPriority: number;
+              draftPr: {
+                repo: string;
+                number: number;
+                url: string;
+                branch: string;
+                headSha: string;
+              } | null;
+            };
+            /** @enum {string} */
+            trigger: "auto_fix" | "fix_now";
+            /** @enum {string} */
+            effect: "allow" | "deny" | "require_approval" | "dry_run";
+            ok: boolean;
+            pr: {
+              repo: string;
+              number: number;
+              url: string;
+              branch: string;
+              headSha: string;
+            } | null;
+            reason: string | null;
+            /** @enum {string} */
+            failure: "none" | "auto_fix_disabled" | "context_unavailable" | "invalid_context" | "policy_denied" | "patch_rejected" | "pr_failed" | "fix_error" | "already_fixed" | "awaiting_answer" | "needs_human" | "routing_failed" | "audit_failed" | "publication_uncertain";
+            routing: OneOf<[{
+              /** @enum {string} */
+              kind: "routed";
+              agent: {
+                name: string;
+                slug: string;
+              };
+            }, {
+              /** @enum {string} */
+              kind: "ask";
+              agent: {
+                name: string;
+                slug: string;
+              };
+              questionId: string;
+              question: string;
+              missing: string[];
+            }, {
+              /** @enum {string} */
+              kind: "needs_human";
+              agent: string;
+              reason: string;
+              missing: string[];
+            }, null]>;
+            attemptId: string | null;
+          };
+        };
+      };
+      /** @description A management access token is required. */
+      401: {
+        content: never;
+      };
+      /** @description The Work item does not exist in this project. */
+      404: {
+        content: never;
+      };
+      /** @description The question is no longer pending or the command ID conflicts. */
+      409: {
+        content: never;
+      };
+      /** @description The answer contains invalid or undeclared params. */
       422: {
         content: never;
       };

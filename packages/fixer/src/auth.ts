@@ -34,6 +34,7 @@ export interface AppAuthOptions {
   installations: Record<string, number>;
   fetch?: typeof fetch;
   now?: () => number;
+  timeoutMs?: number;
 }
 
 export function createAppAuth({
@@ -42,30 +43,91 @@ export function createAppAuth({
   installations,
   fetch: fetchFn = fetch,
   now = Date.now,
+  timeoutMs = 30_000,
 }: AppAuthOptions): GitHubAppAuth {
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 30_000) {
+    throw new GitHubAuthError('invalid installation token timeout');
+  }
   const cache = new Map<string, { token: string; expiresAt: number }>();
+  const pending = new Map<string, Promise<string>>();
+
+  async function requestToken(installation: number, signal: AbortSignal) {
+    const response = await fetchFn(
+      `https://api.github.com/app/installations/${installation}/access_tokens`,
+      {
+        method: 'POST',
+        signal,
+        redirect: 'error',
+        headers: {
+          authorization: `Bearer ${appJwt(appId, privateKeyPem, now())}`,
+          accept: 'application/vnd.github+json',
+        },
+      },
+    );
+    if (signal.aborted || !response.ok || response.body === null) {
+      void response.body?.cancel().catch(() => {});
+      signal.throwIfAborted();
+      throw new GitHubAuthError(`installation token request failed with ${response.status}`);
+    }
+    const chunks: Uint8Array[] = [];
+    let bytes = 0;
+    await response.body.pipeTo(
+      new WritableStream<Uint8Array>({
+        write(chunk) {
+          bytes += chunk.byteLength;
+          if (bytes > 64 * 1024)
+            throw new GitHubAuthError('installation token response exceeds limit');
+          chunks.push(chunk);
+        },
+      }),
+      { signal },
+    );
+    signal.throwIfAborted();
+    const parsed = TokenResponse.parse(JSON.parse(Buffer.concat(chunks).toString('utf8')));
+    const expiresAt = Date.parse(parsed.expires_at);
+    if (!Number.isFinite(expiresAt) || expiresAt <= now()) {
+      throw new GitHubAuthError('installation token response has an invalid expiry');
+    }
+    return { token: parsed.token, expiresAt };
+  }
+
   return {
     async installationToken(repo) {
       const installation = installations[repo];
       if (installation === undefined) throw new GitHubAuthError(`app is not installed on ${repo}`);
       const cached = cache.get(repo);
       if (cached && cached.expiresAt - now() > 60_000) return cached.token;
-      const res = await fetchFn(
-        `https://api.github.com/app/installations/${installation}/access_tokens`,
-        {
-          method: 'POST',
-          headers: {
-            authorization: `Bearer ${appJwt(appId, privateKeyPem, now())}`,
-            accept: 'application/vnd.github+json',
-          },
-        },
-      );
-      // never include the response body: it may carry the token
-      if (!res.ok)
-        throw new GitHubAuthError(`installation token request failed with ${res.status}`);
-      const parsed = TokenResponse.parse(await res.json());
-      cache.set(repo, { token: parsed.token, expiresAt: Date.parse(parsed.expires_at) });
-      return parsed.token;
+      const active = pending.get(repo);
+      if (active) return active;
+      const refresh = (async () => {
+        const signal = AbortSignal.timeout(timeoutMs);
+        const expired = Promise.withResolvers<never>();
+        const abort = () =>
+          expired.reject(new GitHubAuthError('installation token request timed out'));
+        signal.addEventListener('abort', abort, { once: true });
+        try {
+          // Race the complete read as an injected transport may ignore cancellation.
+          const token = await Promise.race([requestToken(installation, signal), expired.promise]);
+          signal.throwIfAborted();
+          cache.set(repo, token);
+          return token.token;
+        } catch (error) {
+          if (error instanceof GitHubAuthError) throw error;
+          throw new GitHubAuthError(
+            signal.aborted
+              ? 'installation token request timed out'
+              : 'installation token response could not be read',
+          );
+        } finally {
+          signal.removeEventListener('abort', abort);
+        }
+      })();
+      pending.set(repo, refresh);
+      try {
+        return await refresh;
+      } finally {
+        pending.delete(repo);
+      }
     },
   };
 }

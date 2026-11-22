@@ -22,4 +22,10 @@ describe('untrusted wrappers', () => {
     const wrapped = untrustedParam('A"B\nC', 'value');
     expect(wrapped).toContain('name="A_B_C"');
   });
+
+  test('uses the same safe name for both section boundaries', () => {
+    expect(wrapUntrusted('file><untrusted_logs', 'body')).toBe(
+      '<untrusted_file__untrusted_logs>\nbody\n</untrusted_file__untrusted_logs>',
+    );
+  });
 });

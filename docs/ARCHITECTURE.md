@@ -1,12 +1,12 @@
 # Architecture
 
-This describes the code as it exists. Items that are not built are marked **not built**.
+Graveshift v2 uses one external NestJS process, one Effect v4 daemon and NATS JetStream on the same host. PostgreSQL holds durable state. A separate actuator handles privileged runtime actions. [ADRs 0004–0022](adr/) record these decisions.
 
 The daemon at `apps/daemon` is an Effect v4 skeleton on Bun. ADR 0009 removed the reference daemon and the separate diagnosis gateway.
 
-## Components
+## Ownership
 
-| Component | Path | Role |
+| Module | Owner | Responsibility |
 | --- | --- | --- |
 | API | `apps/api` | NestJS app. The only external surface. Serves `GET /healthz`, the OpenAPI document, the Swagger UI, the one scoped config export endpoint (bearer credential with `config:export`), credential routes, native event ingest, Sentry envelope ingest and MCP at `/mcp`. |
 | Config | `packages/config` and root `graveshift.config.yaml` | One committed config file with `boot`, `agents`, `policy` and `fix` blocks. Validated once at boot. |
@@ -31,41 +31,54 @@ The daemon at `apps/daemon` is an Effect v4 skeleton on Bun. ADR 0009 removed th
 | MCP | `apps/api/src/mcp` | `graveshift-mcp` through the official `@nestjs/mcp` module: Streamable HTTP at `/mcp` with a bearer token, plus a stdio launcher. |
 | MCP client SDK | `packages/mcp-client` | `@graveshift/mcp-client`: the one typed client for the MCP endpoint. Streamable HTTP and stdio transports, bounded retry, typed errors and typed wrappers for the nine tools, two prompts and the postmortem resource. It adds no server and stores no secret; the caller passes the credential per call. `bun run --filter @graveshift/mcp-client drift:check` fails when the catalog and the endpoint drift. |
 | Banshee | `packages/notifier-discord` | **Not built.** Package exports only its name. |
+| External access | `apps/api` | Authentication, rate limits, OpenAPI, Work item routes and MCP |
+| Orchestration | `apps/daemon` | Wraith intake, Medium, Routing agent and Fix attempts |
+| Durable operations | `apps/api` | PostgreSQL schema, migrations, Work items, Hauntings, Credentials, runtime claims and Audit chain |
+| Pure domain | `packages/core`, `packages/work`, `packages/policy` | Schemas, complete domain decisions and typed private contracts |
+| Event envelope | `packages/events`, `packages/integrations` | Canonical preparation, publisher adapters and integration lifetime |
+| Model execution | `packages/gateway` | Provider capability, budgets, retry, validation and durable audit acknowledgement |
+| Exorcism | `packages/patch`, `packages/fixer` | Canonical Patch validity, source reads, sandbox verification and draft publication |
+| Privileged action | `packages/actuator` | Blessing verification, durable admission and runtime adapter execution |
 
-## Incident flow
+External clients call only the API. Each private HTTP hop carries its own internal bearer credential and the configured project. The daemon/actuator presents `GRAVESHIFT_API_INTERNAL_TOKEN` to the API; the API presents `GRAVESHIFT_DAEMON_INTERNAL_TOKEN` to the daemon. The values must differ. The daemon binds to loopback. The API checks the project again for every private operation. Internal routes are excluded from OpenAPI.
+
+The API owns transactions. The daemon requests domain operations through `WorkRuntime`; it never receives a transaction handle. Transactions finish before model, private HTTP or GitHub calls. Claims and revisions fence stale workers.
+
+## Observation path
 
 ```text
-runtime events / logs / Prometheus
-        -> Wraith: detection (dedupe 10 min, one incident per service)
-        -> incident `detected`
-        -> Medium: diagnosis (Agent through the gateway, else rules-only)
-        -> policy decide(open_pr)
-        -> Exorcist: draft PR (patch generator: built; daemon wiring: not built)
-        -> Banshee: Discord blessing (not built)
-        -> Actuator: signed, single-use action (nothing in the daemon requests one yet)
+Plugin / Collector (or runtime events / logs / Prometheus)
+  -> prepared Event envelope
+  -> NATS JetStream
+  -> Wraith: detection (dedupe 10 min, one incident per service)
+  -> recorded Haunting / incident `detected`
+  -> Medium through the shared gateway: diagnosis (Agent, else rules-only)
+  -> recorded Diagnosis
+  -> Work item
+  -> policy decide(open_pr)
+  -> Exorcist: verified Patch and draft PR (patch generator: built; daemon wiring: not built)
+  -> Banshee: Discord blessing (not built)
+  -> Actuator: signed, single-use action (nothing in the daemon requests one yet)
 every step -> audit log
 ```
 
-The state machine lives in `packages/core/src/state.ts`. Incident states: see `INCIDENT_STATES` in `packages/core/src/schemas.ts`. The incident registry is in memory and is lost on restart; the audit log persists.
+`EventEnvelopeSchema` is the wire shape. `prepareEnvelope` owns valid JSON, metadata privacy, free-text redaction and final validation. Approved event IDs, trace relationships, fingerprints and authorized routing remain stable. Recognized secrets in identity or routing are rejected. Sensitive payload fields are removed without renaming surviving keys. Publication returns acceptance only after acknowledgement.
 
-## Compose mode
+NATS subjects use `graveshift.<projectId>.<lane>.<type>`. Info events use `telemetry`; warning and critical events use `detection`. `msgID` is the preserved event ID. Broker duplicate detection has a bounded window, so consumers still handle redelivery. Cursor values use stream positions.
 
-`deploy/compose/graveshift.compose.yml` runs support services. It does not start a daemon.
+The daemon creates or verifies its durable pull consumer and acknowledges a delivery after its owned durable writes. Invalid or foreign envelopes are terminated. Processing failure requests redelivery. The same event cannot create a second Haunting or Work item on replay.
 
-- `socket-proxy`: `tecnativa/docker-socket-proxy`, read-only (`POST=0`).
-- `socket-proxy-actuator`: allows container restart only, on an internal network used by the actuator.
-- `actuator` (port 2603, not published). It exits at startup if `ACTUATOR_HMAC_SECRET` is shorter than 32 characters.
-- `prometheus`, scraping the demo app jobs.
+Docker and Kubernetes retain different protocol adapters and narrow inventory/log/health reads. Their shared integration lifetime owns acquisition, retry, delivery and stop. Kubernetes Grave names include the configured Collector, namespace and deployment. Prometheus owns query scheduling, observation time and envelope publication.
 
-`docker.sock` is mounted into the two proxies and nowhere else.
+The NestJS Plugin registers observers once. Start and stop control active capture generations. An in-flight request retains its generation, so an old request cannot emit after restart. Request and error envelopes share a trace. Individual telemetry failures do not break host requests.
 
-## Kubernetes mode
+Wraith takes only Event envelopes. The pure Rule override engine remains distinct from temporal threshold detection. Wraith owns Salt lines, dedupe and Haunting grouping, with project scope. Silence is checked before dedupe. Crew output and Collector connection notices do not feed back into detection.
 
-`deploy/k8s` holds RBAC and a network policy only. The reader ClusterRole allows get/list/watch (including `pods/log`). The actuator has a namespaced Role limited to patching `api` and `worker` deployments and scaling `worker`. The network policy is a skeleton that allows all egress. There are no Deployments, no kind overlay and no working bootstrap script: **not built** (issue #14). RBAC changes require a change to `.kiro/specs/k8s-deploy`.
+## Config and Agents
 
-## External API
+`RootConfigModule` validates environment settings once and loads Agent and policy YAML at boot. Invalid settings or unreadable YAML stop runtime startup. There is no hot reload or config write route.
 
-The API in `apps/api` is the only external surface. A client calls this API, never the daemon.
+`resolveAgents` replaces whole Agents by name, then validates effective slugs and escalation targets. Replacement preserves order. Agent config contains an `apiKeyEnv` name, never its resolved value. `autoFix` defaults to false for each Agent assignment trigger.
 
 | Route | Returns |
 | --- | --- |
@@ -85,8 +98,12 @@ The API in `apps/api` is the only external surface. A client calls this API, nev
 | `POST /api/events` | Accepts a native `EventEnvelope` and publishes it. Returns 202. |
 | `POST /api/:projectId/envelope/` | Accepts Sentry event items and publishes `EventEnvelope` records. Returns `{ "id": "..." }`. |
 | `POST /mcp` | Streamable HTTP MCP endpoint. Requires `Authorization: Bearer <issued MCP token>`. |
+| `GET /api/config/agents` | The validated source Agent configuration for management clients. |
+| `GET /api/config/policy` | The validated source policy for management clients. |
 
-The API listens on 127.0.0.1 by default. Set `HOST` to change the bind address. Set `PORT` to change the port from 3000. Keep the localhost bind unless the MCP bearer token is configured and the endpoint is exposed deliberately.
+`GET /api/config/agents` and `GET /api/config/policy` expose the validated source configuration to management clients. The private config view supplies the daemon with effective Agents, policy and gateway settings. It omits credentials and resolved environment values.
+
+## Work items and Routing
 
 Structured logging is deferred to the production ticket.
 
@@ -179,52 +196,90 @@ Two lanes carry envelopes:
 
 | Lane | Severity | Use |
 | --- | --- | --- |
-| `telemetry` | `info` | Baselines and charts. |
-| `detection` | `warning`, `critical` | Detection by the Wraith. |
+| `telemetry` | `info` | Observability and health events. |
+| `detection` | `warning`, `critical` | Incident detection events. |
+
+Work item assignment controls the fix trigger:
+
+| Assignment | Agent trigger setting | Result |
+| --- | --- | --- |
+| `needs_human` | Either | A person fixes the Work item manually; no auto-fix or Fix now |
+| `needs_agent_<name>` | `autoFix: true` | The assigned Agent starts automatically |
+| `needs_agent_<name>` | `autoFix: false` | The assigned Agent waits for Fix now |
 
 `packages/events` owns the `Publisher` interface, `createNatsPublisher`, `createHttpPublisher` and an in-memory fake under `./testing`. Subjects have the form `graveshift.<projectId>.<lane>.<type>`. The NATS publisher uses the official NATS client packages `@nats-io/transport-node` and `@nats-io/jetstream`, and sends the envelope `id` as the `msgID` option. The NATS connection code is under `./nats`; it is not loaded when a caller imports only `Publisher`, the HTTP publisher or the fake. The HTTP publisher posts an envelope to `/api/events` with a bearer plugin key. The API publishes the envelope to JetStream after validation and redaction.
 
-The JetStream stream is `GRAVESHIFT_EVENTS`. It filters subjects with `graveshift.>`. JetStream detects duplicate publishes by `msgID` inside `duplicate_window`. The default `duplicate_window` is two minutes. Redelivery after that window is not idempotent: a consumer must still handle a repeated envelope `id`.
+Assignment selects the exact Agent. Keyword routing cannot replace an explicit assignment. The Routing agent fills that Agent's params. Missing params produce one durably saved question. A complete answer resumes the same attempt and original trigger. An incomplete answer assigns the Work item to a person.
 
-The daemon wiring is still deferred. The rule engine is in `packages/core`, and the API only validates rule overrides.
+Triage commits before external work. An auto-fix failure does not undo assignment. Work item and attempt revisions, the active claim and command identity prevent competing transitions. Repeated command identities return saved progress or results; changed input is a conflict.
 
-## Plugins and Collectors
+Fix now waits for the attempt outcome. Its result keeps `item`, `trigger`, `effect`, `ok`, `pr`, `reason` and `failure`, and adds routing and attempt information. Admission and queue priority precede execution. A saved publication intent blocks another attempt until recovery establishes what happened.
+
+## Fix path
 
 A **Plugin** is an in-process integration shipped into a client framework. A **Collector** is a daemon-side integration that reads infrastructure or cloud state. Both implement the `Integration` contract in `packages/integrations`: a name, a kind, `start()` and `stop()`. The host gives each one a `Context` with a `Publisher`, a `projectId` and a `service`. The `service` names the **Grave** under watch. The contract also builds a valid **Event envelope** from `packages/core` with a `traceId`, `fingerprint` and severity. Its entry point imports no NATS client.
 
 Official Sentry SDKs replace framework-specific host plugins. The host changes the DSN host to the API and sets the numeric project id from its Credential. The API adapter verifies the key, resolves the Grave from the Credential's service binding, redacts the event, and publishes a canonical envelope. The host does not import a Graveshift plugin or hold a NATS credential.
 
-A Collector example lives in the contract tests: a fake source that publishes one envelope when started. Docker, Kubernetes, Prometheus and cloud Collectors are out of scope. Rule evaluation stays in the daemon. No Plugin or Collector evaluates a rule.
+```text
+Eligible Agent assignment
+  -> durable admission
+  -> recorded Diagnosis and real policy counters
+  -> decide(open_pr) and durable decision audit
+  -> assigned Agent params
+  -> source snapshot at a base SHA
+  -> Patch generation through the gateway
+  -> isolated apply and checks
+  -> durable publication intent
+  -> verified draft PR
+  -> durable known reference and result
+```
 
-## Rule engine
+Policy must return `allow` before source or model work. Missing context, unknown repository mapping or incomplete counters fail closed. MCP proposals use the same understood facts but remain read-only.
+
+The Patch module owns the sole shape and guard algorithm. Generation, direct publication and separate-process intake retain their validation checkpoints. Schema, path, size and collision failures share the gateway's one correction attempt. Policy, context, audit and sandbox failures are not correctable model output.
+
+Source reads preserve exact text, blob hashes, modes, tree and base identity. Allowed paths and size bounds limit the snapshot. Verification applies the Patch in a private workspace, computes the real diff and checks it again. Check commands use argv arrays, a timeout, no inherited credentials and no network. Verification fails closed when the platform sandbox cannot enforce isolation. Workspaces are removed before a verification receipt returns.
+
+Publication checks current base and blob identity before writes. It owns safe outbound text and branch identity derived from the full attempt identity. A created draft reference survives label failure. Lost remote responses retain an uncertain intent; recovery looks up the existing draft before another write. There is no merge method and no Fix path to the actuator.
+
+## Model execution
+
+`Gateway.run` is the only model path for Medium, Patch generation and Routing. Official adapters prove structured-language capability before use. Connector catalog membership alone does not establish task support. SDK retries are disabled.
 
 One engine evaluates every **Event envelope**. The engine lives in `packages/core/src/rules.ts`. `RuleSchema` defines an `id`, `enabled`, an explicit `priority`, a `match` object and an `action`: `detect`, `suppress`, `escalate` or `telemetry`. The match object filters by severities, services, event types and `projectId`. Each filter is optional. `evaluateEnvelope` sorts rules by priority, then by id. The engine calls no model and writes no data.
 
-Two layers feed the one engine. System rules give defaults. Client rules override a system rule with the same `id`. This is a **Rule override**. `mergeRules` keeps system rules when the client has no entry for that id. `detectRuleOverrides` returns the ids that would be overridden and a ready-to-display warning. The config warns the user before save and needs explicit confirmation when a Rule override exists.
+The gateway owns input redaction, cancellation, transport retry, one correction retry, Agent/global UTC budgets and terminal audit. Accounting retains known usage before pricing or validation can fail. Unknown cost stays explicit. Read-only snapshots replace mutable budget objects.
+
+One terminal result is chosen before one awaited audit handoff. A rejected acknowledgement returns an audit failure with usage and no model value. It does not trigger another model call, fallback or terminal audit attempt.
 
 `POST /api/rules/validate` validates system and client rule arrays with `ValidateRulesDto`. It returns the override ids and warning. It rejects a Rule override unless the body sets `confirmOverrides: true`. The route stores no rule and evaluates no event. Rule evaluation stays in the daemon. It never runs in a **Plugin** or a **Collector**.
 
 When no rule matches, `info` returns `telemetry`; `warning` and `critical` return `detect`. A rule may suppress an info event, but an info event cannot enter detection through a `detect` or `escalate` action.
 
-The audit event for Rule override detection is deferred with the rest of the audit work.
+Medium prepares one safe evidence collection. Prompt labels, citation validation and deterministic fallback use those records. Fallback does not reconstruct raw text from the original input. Shared untrusted framing protects task text and correction reasons.
 
-## Agent config
+## PostgreSQL and Audit chain
 
-An **Agent** is a configured Ghost. Its config block holds a name, slug, role, description with trigger keywords, prompt, params, provider package, model, `baseUrl`, `apiKeyEnv`, allowed tools, daily budget and escalation target. `packages/agents` owns the Zod schemas and pure helpers. The schema is strict: an unknown key, including a key value, fails validation. `baseUrl` must use https and carry no URL credentials. `apiKeyEnv` must be `GRAVESHIFT_*` or end with `_API_KEY`. This is a naming guard only; it does not check which secret the variable holds. The gateway in ticket #26 enforces the credential allowlist.
+PostgreSQL is the only durable store. Work items, attempts, command receipts, recorded Hauntings, Credentials, action claims and audit entries carry project scope. The former file, process-lifetime and SQLite stores are removed.
+
+Repositories expose domain verbs and own their query shapes. Expected-state updates prevent two claims from succeeding. A Credential issue/revoke/expiry change and its audit append share one transaction. The active Credential cap is enforced across instances.
 
 The root `graveshift.config.yaml` holds the `agents.system` list with three named Agents: an Exorcist, an SRE Agent and a DevOps Agent. Each one names a model, a `baseUrl` and an `apiKeyEnv`. The Exorcist is the Agent that owns patches; `fix.agent` names it. `PROVIDER_PACKAGES` accepts every first-party `@ai-sdk/*` connector package: text, image, audio, video, embedding, gateway and OpenAI-compatible connectors. Core, UI and tooling packages such as `@ai-sdk/react` and `@ai-sdk/provider` are rejected. `packages/agents` installs no provider package; the model call stays injected. The `client` list replaces a whole system Agent with the same name; it does not merge fields. `mergeAgentTemplates` applies this client override: the client block wins and the other system Agents stay. `name` is the display label. `slug` is the stable lower-case reference used by `escalateTo`; it is not the display name. Duplicate names or slugs in either list and an `escalateTo` that does not reference an existing slug fail validation.
 
-Each param is one key-value map. Its key is a `{{PARAM}}` placeholder in the prompt. The YAML value is a **default**: the routing agent uses it when the request has no value for that param. An empty value means there is no default. Params and placeholders must declare each other, and param names must be unique. A missing param without a default leads to one question to the user. If the param is still missing, the result is `needs_human` with a reason.
+Audit append owns canonical payload encoding, project-scoped sequence assignment, previous hash and SHA-256. PostgreSQL triggers reject UPDATE and DELETE. A stable producer key makes exact append retries idempotent; changed facts under that key conflict. The private acknowledgement follows commit. A database transaction does not include GitHub or runtime effects.
 
-The **Routing agent** is a built-in role. It reads a request and selects a target Agent by the trigger keywords in the description. When two Agents score the same, the first Agent in the list wins. Request text and filled param values are wrapped as `<untrusted_*>` data before they enter any prompt, using the same convention as the diagnoser. The question is written through an injected `RoutingModel` interface. This package imports no provider package and makes no model call.
+The foundation PR merged during this effort. Its initial migration remains byte-for-byte unchanged. A frozen historical schema describes the merged baseline. `generate-migration.ts` writes only the architecture follow-up from that schema to the runtime schema plus `prisma/append-only.sql`. The database-free drift check verifies the immutable baseline and exact follow-up artifact. Local Docker tests replay both migrations. An unregistered third migration fails the check until the history registry is extended; merged SQL remains immutable.
 
-## Gateway
+## MCP
 
-The gateway in `packages/gateway` makes every model call for an **Agent**. No other package calls a model for an Agent. One call uses one thin adapter for the provider package named in the Agent config. The adapter uses an official `@ai-sdk/*` package. There is no hand-written HTTP adapter and no vendor chain.
+One `/mcp` endpoint serves tools, prompts, Autopsy and the Events extension. HTTP and protocol adapters share permission facts, including modern discovery and Event type scopes. Unknown methods deny by default. The older-client compatibility test remains. Stdio trusts its local process.
 
-The gateway reads the API key from the process environment variable named by `apiKeyEnv`. It never reads a key from YAML. An unset key or a placeholder value rejects the adapter.
+Events are poll-only. The catalog owns advertised schemas, argument validation, matching, scope and privacy-safe occurrence projection. Poll owns Cursor progress, bounds and sparse scanning. NATS reading owns one pending connection, recovery after acquisition failure and close-once shutdown.
 
-Every call applies these controls:
+Recorded reads return understood Diagnosis, Detection and timeline facts. Autopsy formatting consumes those facts without rewriting identity. `propose_fix` records its decision and returns `executed: false`.
+
+## Verification and retained limits
 
 - Redaction of the system prompt, the prompt and any untrusted content before the model.
 - A daily budget in UTC, checked for the Agent and for Graveshift as a whole.
@@ -233,7 +288,9 @@ Every call applies these controls:
 - At most one validation retry. The validation reason is redacted before the model sees it again.
 - Evidence validation and a deterministic rules-only fallback. This fallback runs when the output is invalid, the provider is unavailable or the budget is used up.
 
-Model output cannot grant a permission. The gateway runs no tool and returns no permission grant. A Ghost gets its permission from policy.
+Run `bun run verify`, `bun run generate:check`, `bun run migrate:drift:check` and `bun run test:database`. The database command creates an isolated Docker Postgres with no shared volumes, applies migrations, runs the local suite and removes the container. One fixture model registry drives reset and count checks. CI remains database-free.
+
+Model/provider, GitHub, NATS, Docker and Kubernetes tests use controlled adapters. The sandbox has real local process tests. Linux verification requires bubblewrap; failure to establish isolation blocks publication.
 
 Diagnosis and patch generation both use the selected Agent through `packages/gateway`.
 
@@ -280,3 +337,10 @@ The system-wide decisions are in `docs/adr/`, in this order:
 - `0015-one-config-file-at-boot.md`
 - `0016` is reserved for #59.
 - `0017-deployment-topology.md`
+- `0018-project-scoped-state.md`
+- `0019-event-identity-and-privacy.md`
+- `0020-local-daemon-transport.md`
+- `0021-work-item-routing-and-assignment.md`
+- `0022-durable-model-audit.md`
+
+Gateway budget counters remain process-local with a documented reservation/persistence upgrade trigger. Temporal detection assumes ordered observations per Grave. Kubernetes watch expiry can leave a source gap. Banshee, push/webhook delivery, separate-host deployment and the dashboard remain outside this v2 architecture effort.

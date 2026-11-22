@@ -14,6 +14,7 @@ import {
   loadOneShotPolicy,
   redactPatch,
   validatePatch,
+  assertPatchBase,
 } from './one-shot';
 
 const git = async (args: readonly string[], env: Record<string, string>): Promise<string> => {
@@ -58,10 +59,23 @@ try {
     policy,
   );
   const patch = validatePatch(await Bun.file('patch.json').text(), rules);
+  // The artifact on disk must be the redacted, signed payload: an altered file
+  // list must never reach the workspace.
   const expectedPatch = redactPatch(validatePatch(payload, rules));
   if (JSON.stringify(patch) !== JSON.stringify(expectedPatch)) {
     throw new Error('patch artifact does not match the signed payload');
   }
+  // Bind the artifact to the checked-out base before any workspace write.
+  const resolved = Bun.spawnSync(
+    ['git', 'rev-parse', '--verify', `${assertBaseRef(process.env.BASE_REF)}^{commit}`],
+    {
+      cwd: process.cwd(),
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+  );
+  if (resolved.exitCode !== 0) throw new Error('base_ref does not resolve to a commit');
+  assertPatchBase(patch, resolved.stdout.toString().trim());
 
   const encoded = Buffer.from(`x-access-token:${token}`).toString('base64');
   process.stdout.write(`::add-mask::${encoded}\n`);

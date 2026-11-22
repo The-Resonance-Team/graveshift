@@ -265,6 +265,10 @@
                                 "type": "number",
                                 "minimum": 0
                               },
+                              "autoFix": {
+                                "default": false,
+                                "type": "boolean"
+                              },
                               "escalateTo": {
                                 "type": "string",
                                 "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
@@ -282,7 +286,8 @@
                               "baseUrl",
                               "apiKeyEnv",
                               "allowedTools",
-                              "dailyBudgetUsd"
+                              "dailyBudgetUsd",
+                              "autoFix"
                             ],
                             "additionalProperties": false
                           }
@@ -402,6 +407,10 @@
                                 "type": "number",
                                 "minimum": 0
                               },
+                              "autoFix": {
+                                "default": false,
+                                "type": "boolean"
+                              },
                               "escalateTo": {
                                 "type": "string",
                                 "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
@@ -419,7 +428,8 @@
                               "baseUrl",
                               "apiKeyEnv",
                               "allowedTools",
-                              "dailyBudgetUsd"
+                              "dailyBudgetUsd",
+                              "autoFix"
                             ],
                             "additionalProperties": false
                           }
@@ -1260,11 +1270,68 @@
               "default": 20,
               "type": "number"
             }
+          },
+          {
+            "name": "status",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "todo",
+                "in_progress",
+                "in_review",
+                "done"
+              ]
+            }
+          },
+          {
+            "name": "priority",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "critical"
+              ]
+            }
+          },
+          {
+            "name": "severity",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "info",
+                "warning",
+                "critical"
+              ]
+            }
+          },
+          {
+            "name": "assignee",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "service",
+            "required": false,
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "responses": {
           "200": {
-            "description": "A page of work items for the table.",
+            "description": "Work items ordered by fix priority, title, and ID.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1518,6 +1585,9 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "A management access token is required."
           }
         },
         "tags": [
@@ -1541,7 +1611,7 @@
         ],
         "responses": {
           "200": {
-            "description": "One work item for the detail sheet.",
+            "description": "One Work item.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1766,8 +1836,115 @@
               }
             }
           },
+          "401": {
+            "description": "A management access token is required."
+          },
           "404": {
-            "description": "No work item has this id."
+            "description": "The Work item does not exist in this project."
+          }
+        },
+        "tags": [
+          "work-items"
+        ]
+      }
+    },
+    "/api/work-items/{id}/routing": {
+      "get": {
+        "operationId": "WorkItemsController_routing",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Safe active Fix attempt summary. Recover a saved question after a lost response or restart. No request text or Agent params are returned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "routing": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "attemptId": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "questionId": {
+                          "nullable": true,
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "question": {
+                          "nullable": true,
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "missing": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "agent": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "trigger": {
+                          "type": "string",
+                          "enum": [
+                            "auto_fix",
+                            "fix_now"
+                          ]
+                        },
+                        "state": {
+                          "type": "string",
+                          "enum": [
+                            "claimed",
+                            "awaiting_answer",
+                            "running",
+                            "publishing",
+                            "completed",
+                            "failed",
+                            "needs_human",
+                            "uncertain"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "attemptId",
+                        "questionId",
+                        "question",
+                        "missing",
+                        "agent",
+                        "trigger",
+                        "state"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "routing"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A management access token is required."
+          },
+          "404": {
+            "description": "The Work item does not exist in this project."
           }
         },
         "tags": [
@@ -1787,6 +1964,15 @@
               "minLength": 1,
               "type": "string"
             }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Reuse this ID to replay the recorded result after a connection failure.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -1801,7 +1987,16 @@
         },
         "responses": {
           "200": {
-            "description": "The triaged work item and its auto-fix outcome.",
+            "description": "Saved assignment and auto-fix outcome. Human assignment is manual. The selected Agent autoFix setting controls the trigger.",
+            "headers": {
+              "Idempotency-Key": {
+                "description": "The supplied or generated command ID. Reuse it for retries.",
+                "schema": {
+                  "type": "string",
+                  "maxLength": 100
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -2057,15 +2252,152 @@
                             "patch_rejected",
                             "pr_failed",
                             "fix_error",
-                            "already_fixed"
+                            "already_fixed",
+                            "awaiting_answer",
+                            "needs_human",
+                            "routing_failed",
+                            "audit_failed",
+                            "publication_uncertain"
                           ]
+                        },
+                        "routing": {
+                          "nullable": true,
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "routed"
+                                  ]
+                                },
+                                "agent": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "slug": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "slug"
+                                  ],
+                                  "additionalProperties": false
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "agent"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "ask"
+                                  ]
+                                },
+                                "agent": {
+                                  "type": "object",
+                                  "properties": {
+                                    "name": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    },
+                                    "slug": {
+                                      "type": "string",
+                                      "minLength": 1
+                                    }
+                                  },
+                                  "required": [
+                                    "name",
+                                    "slug"
+                                  ],
+                                  "additionalProperties": false
+                                },
+                                "questionId": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "question": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "missing": {
+                                  "minItems": 1,
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  }
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "agent",
+                                "questionId",
+                                "question",
+                                "missing"
+                              ],
+                              "additionalProperties": false
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "kind": {
+                                  "type": "string",
+                                  "enum": [
+                                    "needs_human"
+                                  ]
+                                },
+                                "agent": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "reason": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "missing": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  }
+                                }
+                              },
+                              "required": [
+                                "kind",
+                                "agent",
+                                "reason",
+                                "missing"
+                              ],
+                              "additionalProperties": false
+                            }
+                          ]
+                        },
+                        "attemptId": {
+                          "nullable": true,
+                          "type": "string",
+                          "minLength": 1
                         }
                       },
                       "required": [
                         "ok",
                         "effect",
                         "reason",
-                        "failure"
+                        "failure",
+                        "routing",
+                        "attemptId"
                       ],
                       "additionalProperties": false
                     }
@@ -2079,14 +2411,17 @@
               }
             }
           },
+          "401": {
+            "description": "A management access token is required."
+          },
           "404": {
-            "description": "No work item has this id."
+            "description": "The Work item does not exist in this project."
           },
           "409": {
-            "description": "The work item is in a terminal status."
+            "description": "The Work item is complete, has an active attempt, or the command ID conflicts."
           },
           "422": {
-            "description": "The assignee is not valid."
+            "description": "The assignee is invalid or the Agent is unknown."
           }
         },
         "tags": [
@@ -2106,6 +2441,15 @@
               "minLength": 1,
               "type": "string"
             }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Reuse this ID to replay the recorded result after a connection failure.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -2120,7 +2464,16 @@
         },
         "responses": {
           "200": {
-            "description": "The fix result with the work item, the policy effect and the draft PR ref.",
+            "description": "Waits for the Fix attempt outcome. Missing Agent params return one saved question and its attempt ID.",
+            "headers": {
+              "Idempotency-Key": {
+                "description": "The supplied or generated command ID. Reuse it for retries.",
+                "schema": {
+                  "type": "string",
+                  "maxLength": 100
+                }
+              }
+            },
             "content": {
               "application/json": {
                 "schema": {
@@ -2414,8 +2767,143 @@
                         "patch_rejected",
                         "pr_failed",
                         "fix_error",
-                        "already_fixed"
+                        "already_fixed",
+                        "awaiting_answer",
+                        "needs_human",
+                        "routing_failed",
+                        "audit_failed",
+                        "publication_uncertain"
                       ]
+                    },
+                    "routing": {
+                      "nullable": true,
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "routed"
+                              ]
+                            },
+                            "agent": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "slug": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "slug"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "agent"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "ask"
+                              ]
+                            },
+                            "agent": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "slug": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "slug"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "questionId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "question": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "missing": {
+                              "minItems": 1,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "agent",
+                            "questionId",
+                            "question",
+                            "missing"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "needs_human"
+                              ]
+                            },
+                            "agent": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "reason": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "missing": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "agent",
+                            "reason",
+                            "missing"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "attemptId": {
+                      "nullable": true,
+                      "type": "string",
+                      "minLength": 1
                     }
                   },
                   "required": [
@@ -2425,21 +2913,540 @@
                     "ok",
                     "pr",
                     "reason",
-                    "failure"
+                    "failure",
+                    "routing",
+                    "attemptId"
                   ],
                   "additionalProperties": false
                 }
               }
             }
           },
+          "401": {
+            "description": "A management access token is required."
+          },
+          "403": {
+            "description": "Human assignments have no Fix now action. Agent autoFix must be disabled for Fix now."
+          },
           "404": {
-            "description": "No work item has this id."
+            "description": "The Work item does not exist in this project."
           },
           "409": {
-            "description": "The work item is in a terminal status."
+            "description": "The Work item is complete, has an active attempt, or the command ID conflicts."
           },
           "422": {
-            "description": "The request body is not valid."
+            "description": "The request body is invalid."
+          }
+        },
+        "tags": [
+          "work-items"
+        ]
+      }
+    },
+    "/api/work-items/{id}/answer": {
+      "post": {
+        "operationId": "WorkItemsController_answer",
+        "parameters": [
+          {
+            "name": "id",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          {
+            "name": "Idempotency-Key",
+            "in": "header",
+            "description": "Reuse this ID to replay the recorded result after a connection failure.",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AnswerRequestDto"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A complete answer resumes the same Fix attempt and trigger. An incomplete answer assigns the Work item to a person for manual work.",
+            "headers": {
+              "Idempotency-Key": {
+                "description": "The supplied or generated command ID. Reuse it for retries.",
+                "schema": {
+                  "type": "string",
+                  "maxLength": 100
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "item": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "title": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "description": {
+                          "type": "string"
+                        },
+                        "successCriteria": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "subtasks": {
+                          "type": "object",
+                          "properties": {
+                            "items": {
+                              "type": "array",
+                              "items": {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "title": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  },
+                                  "done": {
+                                    "type": "boolean"
+                                  }
+                                },
+                                "required": [
+                                  "id",
+                                  "title",
+                                  "done"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "completed": {
+                              "type": "integer",
+                              "minimum": 0,
+                              "maximum": 9007199254740991
+                            }
+                          },
+                          "required": [
+                            "items",
+                            "completed"
+                          ],
+                          "additionalProperties": false
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "todo",
+                            "in_progress",
+                            "in_review",
+                            "done"
+                          ]
+                        },
+                        "priority": {
+                          "type": "string",
+                          "enum": [
+                            "low",
+                            "medium",
+                            "high",
+                            "critical"
+                          ]
+                        },
+                        "assignee": {
+                          "anyOf": [
+                            {
+                              "type": "string",
+                              "enum": [
+                                "needs_human"
+                              ]
+                            },
+                            {
+                              "type": "string",
+                              "pattern": "^(needs_agent_)[\\s\\S]{0,}$"
+                            }
+                          ]
+                        },
+                        "reporter": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "startDate": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                        },
+                        "dueDate": {
+                          "nullable": true,
+                          "type": "string",
+                          "format": "date",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))$"
+                        },
+                        "sprint": {
+                          "nullable": true,
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "parent": {
+                          "nullable": true,
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "labels": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "team": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "watchers": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "minLength": 1
+                          }
+                        },
+                        "severity": {
+                          "type": "string",
+                          "enum": [
+                            "info",
+                            "warning",
+                            "critical"
+                          ]
+                        },
+                        "service": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "diagnosisRef": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "fixPriority": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "draftPr": {
+                          "nullable": true,
+                          "type": "object",
+                          "properties": {
+                            "repo": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "number": {
+                              "type": "integer",
+                              "minimum": 1,
+                              "maximum": 9007199254740991
+                            },
+                            "url": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "branch": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "headSha": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "required": [
+                            "repo",
+                            "number",
+                            "url",
+                            "branch",
+                            "headSha"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "title",
+                        "description",
+                        "successCriteria",
+                        "subtasks",
+                        "status",
+                        "priority",
+                        "assignee",
+                        "reporter",
+                        "startDate",
+                        "dueDate",
+                        "sprint",
+                        "parent",
+                        "labels",
+                        "team",
+                        "watchers",
+                        "severity",
+                        "service",
+                        "diagnosisRef",
+                        "fixPriority",
+                        "draftPr"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "trigger": {
+                      "type": "string",
+                      "enum": [
+                        "auto_fix",
+                        "fix_now"
+                      ]
+                    },
+                    "effect": {
+                      "type": "string",
+                      "enum": [
+                        "allow",
+                        "deny",
+                        "require_approval",
+                        "dry_run"
+                      ]
+                    },
+                    "ok": {
+                      "type": "boolean"
+                    },
+                    "pr": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "repo": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "number": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "url": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "branch": {
+                          "type": "string",
+                          "minLength": 1
+                        },
+                        "headSha": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "required": [
+                        "repo",
+                        "number",
+                        "url",
+                        "branch",
+                        "headSha"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "reason": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "failure": {
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "auto_fix_disabled",
+                        "context_unavailable",
+                        "invalid_context",
+                        "policy_denied",
+                        "patch_rejected",
+                        "pr_failed",
+                        "fix_error",
+                        "already_fixed",
+                        "awaiting_answer",
+                        "needs_human",
+                        "routing_failed",
+                        "audit_failed",
+                        "publication_uncertain"
+                      ]
+                    },
+                    "routing": {
+                      "nullable": true,
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "routed"
+                              ]
+                            },
+                            "agent": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "slug": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "slug"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "agent"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "ask"
+                              ]
+                            },
+                            "agent": {
+                              "type": "object",
+                              "properties": {
+                                "name": {
+                                  "type": "string",
+                                  "minLength": 1
+                                },
+                                "slug": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "name",
+                                "slug"
+                              ],
+                              "additionalProperties": false
+                            },
+                            "questionId": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "question": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "missing": {
+                              "minItems": 1,
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "agent",
+                            "questionId",
+                            "question",
+                            "missing"
+                          ],
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "properties": {
+                            "kind": {
+                              "type": "string",
+                              "enum": [
+                                "needs_human"
+                              ]
+                            },
+                            "agent": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "reason": {
+                              "type": "string",
+                              "minLength": 1
+                            },
+                            "missing": {
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "minLength": 1
+                              }
+                            }
+                          },
+                          "required": [
+                            "kind",
+                            "agent",
+                            "reason",
+                            "missing"
+                          ],
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "attemptId": {
+                      "nullable": true,
+                      "type": "string",
+                      "minLength": 1
+                    }
+                  },
+                  "required": [
+                    "item",
+                    "trigger",
+                    "effect",
+                    "ok",
+                    "pr",
+                    "reason",
+                    "failure",
+                    "routing",
+                    "attemptId"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "A management access token is required."
+          },
+          "404": {
+            "description": "The Work item does not exist in this project."
+          },
+          "409": {
+            "description": "The question is no longer pending or the command ID conflicts."
+          },
+          "422": {
+            "description": "The answer contains invalid or undeclared params."
           }
         },
         "tags": [
@@ -2713,6 +3720,31 @@
             "maxLength": 500
           }
         }
+      },
+      "AnswerRequestDto": {
+        "type": "object",
+        "properties": {
+          "attemptId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "questionId": {
+            "type": "string",
+            "minLength": 1
+          },
+          "params": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 10000
+            }
+          }
+        },
+        "required": [
+          "attemptId",
+          "questionId",
+          "params"
+        ]
       }
     }
   }

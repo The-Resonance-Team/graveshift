@@ -40,6 +40,18 @@ const policy = parsePolicy({
 
 const TOKEN = 'sdk-e2e-token-not-a-secret';
 
+/**
+ * The fixture backend still supplies the daemon's GraveInfo shape (`runtime`),
+ * but the API's wire contract for `list_services` is `@graveshift/core`'s
+ * ServiceView (`status`), which the SDK catalog validates. Keep the seam honest
+ * by adapting only this tool reply; every other method stays the real fixture.
+ */
+const backend = Object.assign(new FakeMcpBackend(), {
+  listServices: async (): Promise<Array<{ name: string; status: string }>> => [
+    { name: 'api', status: 'healthy' },
+  ],
+});
+
 /** Route the SDK's fetch to the real endpoint handler, as `@nestjs/mcp/testing` does. */
 function endpointFetch(http: McpHttpService): FetchLike {
   return async (input, init) => {
@@ -64,7 +76,7 @@ describe('MCP client SDK against the real API endpoint (in-memory)', () => {
   beforeAll(async () => {
     moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(MCP_BACKEND)
-      .useValue(new FakeMcpBackend())
+      .useValue(backend)
       .overrideProvider(MCP_POLICY)
       .useValue(policy)
       .overrideProvider(MCP_ENV_MODE)
@@ -115,10 +127,17 @@ describe('MCP client SDK against the real API endpoint (in-memory)', () => {
     const stdioEntry = fileURLToPath(new URL('../src/stdio.ts', import.meta.url));
     const apiDir = fileURLToPath(new URL('../', import.meta.url));
     // Only PATH and the test-only boot vars from `test/setup.ts` reach the
-    // child. No other variable, and no secret of the host, is forwarded.
+    // child. No other variable, and no secret of the host, is forwarded. The
+    // remaining boot settings (host, ports, URLs, NATS stream, gateway) have
+    // schema defaults, and agents/policy come from the committed config file;
+    // no AGENTS_PATH or POLICY_PATH exists.
     const env: Record<string, string> = {};
     for (const name of [
       'PATH',
+      'DATABASE_URL',
+      'GRAVESHIFT_PROJECT_ID',
+      'GRAVESHIFT_API_INTERNAL_TOKEN',
+      'GRAVESHIFT_DAEMON_INTERNAL_TOKEN',
       'GRAVESHIFT_OAUTH_JWT_SECRET',
       'GRAVESHIFT_OAUTH_CLIENTS',
       'GRAVESHIFT_DAEMON_READ_TOKEN',

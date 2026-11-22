@@ -25,6 +25,10 @@ export interface DiagnoseDeps {
 export function validateEvidence(output: LlmDiagnosis, bundle: ContextBundle): string | undefined {
   const unseen = output.evidence.find((e) => !bundle.refs.has(e.ref));
   if (unseen) return `evidence ref "${unseen.ref}" does not appear in the context`;
+  const invented = output.evidence.find(
+    (entry) => !bundle.refs.get(entry.ref)?.replaceAll('\\"', '"').includes(entry.excerpt),
+  );
+  if (invented) return `evidence excerpt does not quote ref "${invented.ref}"`;
   if (output.category === 'unknown' && output.confidence >= 0.5) {
     return 'category unknown requires confidence below 0.5';
   }
@@ -43,12 +47,11 @@ export async function diagnose(
     prompt: bundle.prompt,
     schema: LlmDiagnosisSchema,
     validate: (output) => validateEvidence(output, bundle),
-    rulesOnly: () => rulesOnlyDiagnosis(input, bundle),
+    rulesOnly: () => rulesOnlyDiagnosis(bundle),
   });
 
   if (result.status === 'invalid') return { status: 'needs_human', reason: result.reason };
-  if (result.status === 'unavailable')
-    return { status: 'needs_human', reason: 'no diagnosis source available' };
+  if (result.status === 'unavailable') return { status: 'needs_human', reason: result.reason };
 
   const { category, rootCause, confidence, evidence } = result.value;
   const diagnosis = DiagnosisSchema.parse({

@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@graveshift/core": "workspace:*",
+    "@graveshift/integrations": "workspace:*",
     "zod": "^4.6.7"
   }
 }

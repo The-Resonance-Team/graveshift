@@ -1,9 +1,11 @@
 import { DETECTORS } from './detectors';
 
-export { DETECTORS } from './detectors';
-export type { Detector } from './detectors';
-
 const MAX_PASSES = 4;
+
+/** Recognized secrets and personal data, without the free-text entropy heuristic. */
+export function hasSensitiveText(text: string): boolean {
+  return DETECTORS.some(({ type, pattern }) => type !== 'entropy' && text.search(pattern) !== -1);
+}
 
 function pass(text: string): string {
   let out = text;

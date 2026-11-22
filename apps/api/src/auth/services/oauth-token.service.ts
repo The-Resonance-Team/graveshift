@@ -18,7 +18,9 @@ export class OAuthTokenService {
     clientId: string,
     clientSecret: string,
   ): Promise<{ access_token: string; expires_in: number }> {
-    const entry = this.config.oauthClients[clientId];
+    const entry = Object.hasOwn(this.config.oauthClients, clientId)
+      ? this.config.oauthClients[clientId]
+      : undefined;
     if (!entry || !this.secretEquals(entry.secret, clientSecret)) {
       throw new UnauthorizedException();
     }

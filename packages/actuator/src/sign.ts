@@ -36,3 +36,7 @@ export function verifyHmac(request: ActionRequest, secret: string): boolean {
   const given = Buffer.from(signature, 'hex');
   return given.length === expected.length && timingSafeEqual(given, expected);
 }
+
+export function requestHash(request: ActionRequest): string {
+  return new Bun.CryptoHasher('sha256').update(canonical(request)).digest('hex');
+}

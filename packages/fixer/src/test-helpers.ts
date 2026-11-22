@@ -1,7 +1,10 @@
 import type { Diagnosis, Incident } from '@graveshift/core';
 
-import type { CheckRun, GitHubClient, PullRequestState } from './client';
+import type { GitHubClient } from './client';
 import type { RepoPolicy } from './types';
+
+export const TEST_BASE_SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+export const TEST_BLOB_SHA = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 
 export const repo: RepoPolicy = {
   repo: 'xiro/haunted-candy-shop',
@@ -43,19 +46,20 @@ export interface Call {
   args: unknown[];
 }
 
-export function fakeClient(over: { pr?: PullRequestState[]; checks?: CheckRun[][] } = {}) {
+export function fakeClient() {
   const calls: Call[] = [];
-  let pollPr = 0;
-  let pollChecks = 0;
   const record =
     <A extends unknown[], R>(method: string, result: (...args: A) => R) =>
-    async (...args: A): Promise<Awaited<R>> => {
+    async (...args: A): Promise<R> => {
       calls.push({ method, args });
-      return result(...args) as Awaited<R>;
+      return result(...args);
     };
   const client: GitHubClient = {
-    getBaseSha: record('getBaseSha', () => 'base-sha'),
+    getBaseSha: record('getBaseSha', () => TEST_BASE_SHA),
     getCommitTree: record('getCommitTree', () => 'base-tree'),
+    getTree: record('getTree', () => []),
+    readBlob: record('readBlob', () => ''),
+    getExistingDraft: record('getExistingDraft', () => undefined),
     createBlob: record('createBlob', (_repo: string, content: string) => `blob-${content.length}`),
     createTree: record('createTree', () => 'tree-sha'),
     createCommit: record('createCommit', () => 'commit-sha'),
@@ -65,21 +69,17 @@ export function fakeClient(over: { pr?: PullRequestState[]; checks?: CheckRun[][
       url: 'https://github.com/xiro/haunted-candy-shop/pull/42',
     })),
     addLabels: record('addLabels', () => undefined),
-    listCheckRuns: record(
-      'listCheckRuns',
-      () => over.checks?.[Math.min(pollChecks++, over.checks.length - 1)] ?? [],
-    ),
-    getPullRequest: record(
-      'getPullRequest',
-      () =>
-        over.pr?.[Math.min(pollPr++, over.pr.length - 1)] ?? {
-          state: 'open' as const,
-          merged: false,
-          headSha: 'commit-sha',
-        },
-    ),
   };
   return { client, calls };
 }
 
-export const file = (path: string, linesChanged = 1) => ({ path, content: 'x', linesChanged });
+export const file = (
+  path: string,
+  linesChanged = 1,
+  baseBlobSha: string | null = TEST_BLOB_SHA,
+) => ({
+  path,
+  content: 'x',
+  linesChanged,
+  baseBlobSha,
+});

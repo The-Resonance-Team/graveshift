@@ -112,8 +112,7 @@ export function withDraftPr(item: WorkItem, pr: PrRef): WorkItem {
   return { ...item, draftPr: pr };
 }
 
-// Auto-fix is a boot flag in graveshift.config.yaml, not a work-item field.
-// The client config stays an empty, strict shape for the triage helper signature.
+// Auto-fix is a per-Agent trigger setting in client config, not a work-item field.
 export const WorkItemClientConfigSchema = z.object({}).strict();
 export type WorkItemClientConfig = z.infer<typeof WorkItemClientConfigSchema>;
 

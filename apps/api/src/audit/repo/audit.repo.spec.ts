@@ -31,6 +31,7 @@ const build = (): AuditEntry[] => {
 
 const toRow = (entry: AuditEntry): PrismaAuditEntry => ({
   projectId: PROJECT,
+  eventKey: null,
   seq: entry.seq,
   at: new Date(entry.at),
   actor: entry.actor,

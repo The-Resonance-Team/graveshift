@@ -4,9 +4,8 @@ import { GraveshiftError } from '@graveshift/core';
 import {
   createAppAuth,
   createRestClient,
-  type CheckRun,
   type GitHubClient,
-  type PullRequestState,
+  type SourceEntry,
   type TreeEntry,
 } from '@graveshift/fixer';
 import {
@@ -14,6 +13,7 @@ import {
   createGateway,
   resolveApiKey,
   type AuditEvent,
+  type AuditSink,
   type GatewayResult,
   type GatewayTask,
 } from '@graveshift/gateway';
@@ -35,7 +35,7 @@ export interface FixDepsOptions {
   readonly githubFetch?: typeof fetch;
   readonly aiFetch?: typeof fetch;
   readonly env?: Record<string, string | undefined>;
-  readonly onAudit?: (event: AuditEvent) => unknown;
+  readonly onAudit?: AuditSink;
 }
 
 const requiredEnv = (name: string, env: Record<string, string | undefined>): string => {
@@ -53,8 +53,10 @@ const pendingContext: FixContextProvider = {
   },
 };
 
-// ponytail: audit events are dropped here; upgrade to the #60 audit sink when it is wired
-const dropAudit = (_event: AuditEvent): void => {};
+// ponytail: the fix-path audit sink echoes the call id in memory; upgrade to a durable sink before a fix runs in production, so a model result cannot be acknowledged without a committed audit entry
+const dropAudit = async (event: AuditEvent): Promise<{ callId: string }> => ({
+  callId: event.callId,
+});
 
 // The model key and GitHub App key are not needed by most routes. Build the real
 // collaborators on first fix use, so boot needs no secret and a fix fails closed
@@ -86,6 +88,15 @@ class LazyGitHubClient implements GitHubClient {
   getCommitTree(repo: string, commitSha: string): Promise<string> {
     return this.client.getCommitTree(repo, commitSha);
   }
+  getTree(repo: string, treeSha: string): Promise<SourceEntry[]> {
+    return this.client.getTree(repo, treeSha);
+  }
+  readBlob(repo: string, sha: string): Promise<string> {
+    return this.client.readBlob(repo, sha);
+  }
+  getExistingDraft(repo: string, branch: string, baseSha: string) {
+    return this.client.getExistingDraft(repo, branch, baseSha);
+  }
   createBlob(repo: string, content: string): Promise<string> {
     return this.client.createBlob(repo, content);
   }
@@ -106,12 +117,6 @@ class LazyGitHubClient implements GitHubClient {
   }
   addLabels(repo: string, number: number, labels: string[]): Promise<void> {
     return this.client.addLabels(repo, number, labels);
-  }
-  listCheckRuns(repo: string, sha: string): Promise<CheckRun[]> {
-    return this.client.listCheckRuns(repo, sha);
-  }
-  getPullRequest(repo: string, number: number): Promise<PullRequestState> {
-    return this.client.getPullRequest(repo, number);
   }
 }
 

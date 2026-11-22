@@ -7,8 +7,8 @@ import {
   type WorkItem,
   withDraftPr,
 } from '@graveshift/core';
-import { type Patch, type PrRef, openDraftPr } from '@graveshift/fixer';
-import { generatePatch, type RepoRules } from '@graveshift/patch';
+import { type PrRef, openDraftPr } from '@graveshift/fixer';
+import { generatePatch, type Patch, type RepoRules } from '@graveshift/patch';
 import { redact } from '@graveshift/redactor';
 import { decide, type Effect } from '@graveshift/policy';
 import { Inject, Injectable } from '@nestjs/common';

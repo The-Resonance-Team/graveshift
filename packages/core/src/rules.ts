@@ -37,6 +37,26 @@ export interface OverrideDetection {
   warning: string;
 }
 
+export const RuleConfirmationSchema = z.strictObject({
+  accepted: z.boolean(),
+  overrideIds: z.array(z.string()),
+  warning: z.string(),
+});
+export type RuleConfirmation = z.infer<typeof RuleConfirmationSchema>;
+
+export function confirmRuleOverrides(input: {
+  systemRules: readonly Rule[];
+  clientRules: readonly Rule[];
+  confirmOverrides?: boolean;
+}): RuleConfirmation {
+  const { ids, warning } = detectRuleOverrides(input.systemRules, input.clientRules);
+  return {
+    accepted: ids.length === 0 || input.confirmOverrides === true,
+    overrideIds: ids,
+    warning,
+  };
+}
+
 const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 const matchKey = (match: RuleMatch): string =>
@@ -78,7 +98,12 @@ const matches = (rule: Rule, envelope: EventEnvelope): boolean => {
 export function evaluateEnvelope(envelope: EventEnvelope, rules: readonly Rule[]): RuleAction {
   for (const rule of [...rules].sort(order)) {
     if (rule.enabled && matches(rule, envelope)) {
-      return envelope.severity === 'info' && rule.action !== 'suppress' ? 'telemetry' : rule.action;
+      // An explicit rule may suppress or escalate an info event; the default stays telemetry.
+      return envelope.severity === 'info' &&
+        rule.action !== 'suppress' &&
+        rule.action !== 'escalate'
+        ? 'telemetry'
+        : rule.action;
     }
   }
   return DEFAULT_RULE_ACTIONS[envelope.severity];

@@ -4,13 +4,41 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "typecheck": "bun check --no-script",
-    "test": "bun test",
+    "typecheck": "bun check --no-script --tsconfig-override ../api/tsconfig.json",
+    "test": "bun test --tsconfig-override ../api/tsconfig.json",
     "start": "bun src/main.ts"
   },
   "dependencies": {
     "@effect/platform-bun": "4.1.5",
+    "@graveshift/agents": "workspace:*",
     "@graveshift/core": "workspace:*",
-    "effect": "4.1.5"
+    "@graveshift/diagnoser": "workspace:*",
+    "@graveshift/events": "workspace:*",
+    "@graveshift/fixer": "workspace:*",
+    "@graveshift/gateway": "workspace:*",
+    "@graveshift/integrations": "workspace:*",
+    "@graveshift/metrics": "workspace:*",
+    "@graveshift/patch": "workspace:*",
+    "@graveshift/policy": "workspace:*",
+    "@graveshift/redactor": "workspace:*",
+    "@graveshift/sources-docker": "workspace:*",
+    "@graveshift/sources-k8s": "workspace:*",
+    "@graveshift/watcher": "workspace:*",
+    "@graveshift/work": "workspace:*",
+    "@nats-io/jetstream": "3.5.0",
+    "@nats-io/transport-node": "3.5.0",
+    "effect": "4.1.5",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@nestjs/common": "12.6.0",
+    "@nestjs/config": "12.1.1",
+    "@nestjs/core": "12.6.0",
+    "@nestjs/http-client": "0.0.3",
+    "@nestjs/passport": "12.0.2",
+    "@nestjs/testing": "12.6.0",
+    "@nestjs/throttler": "6.8.0",
+    "@types/supertest": "7.2.1",
+    "supertest": "7.3.2"
   }
 }

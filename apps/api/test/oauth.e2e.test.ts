@@ -41,6 +41,14 @@ describe('OAuth 2.1 client credentials (e2e)', () => {
     await exchange('client-9', TEST_CLIENT_SECRET).expect(401);
   });
 
+  test.each(['constructor', '__proto__', 'toString'])(
+    'refuses inherited registry client %s with 401',
+    async (clientId) => {
+      await exchange(clientId, TEST_CLIENT_SECRET).expect(401);
+      await useToken(rawToken(ctx.jwt, { sub: clientId })).expect(401);
+    },
+  );
+
   test('refuses a token signed with another secret', async () => {
     await useToken(rawToken(ctx.jwt, { secret: 'another-test-secret-32-chars-long' })).expect(401);
   });

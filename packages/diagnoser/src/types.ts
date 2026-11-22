@@ -16,7 +16,7 @@ export const LlmDiagnosisSchema = z.object({
   category: CategorySchema,
   rootCause: z.string().min(1),
   confidence: z.number().min(0).max(1),
-  evidence: z.array(z.object({ ref: z.string().min(1), excerpt: z.string() })).min(1),
+  evidence: z.array(z.object({ ref: z.string().min(1), excerpt: z.string().min(1) })).min(1),
 });
 export type LlmDiagnosis = z.infer<typeof LlmDiagnosisSchema>;
 
@@ -30,7 +30,16 @@ export interface DiagnoseInput {
 
 export interface ContextBundle {
   prompt: string;
-  refs: Map<string, string>;
+  refs: ReadonlyMap<string, string>;
+  evidence: readonly PreparedEvidence[];
+}
+
+export interface PreparedEvidence {
+  ref: string;
+  kind: 'incident' | 'signal' | 'log' | 'file' | 'commit';
+  text: string;
+  label?: string;
+  rule?: string;
 }
 
 export const LIMITS = { logLines: 300, files: 5, fileLines: 400, commits: 3 } as const;

@@ -7,7 +7,7 @@ import {
 import { McpExecutionContext } from '@nestjs/mcp';
 import type { AuthInfo } from '@modelcontextprotocol/server';
 
-import { PRIMITIVE_SCOPES } from './mcp-http-scope.guard';
+import { canCallPrimitive } from './mcp.permissions';
 
 /** A presented token may call only the primitives its scopes allow. Deny by default. */
 @Injectable()
@@ -19,9 +19,7 @@ export class McpScopeGuard implements CanActivate {
     // and in-memory clients have no token and trust the local process.
     const auth = mcp.getAuthInfo() ?? request?.authInfo;
     if (!auth) return true;
-    const name = mcp.getName();
-    const required = name ? PRIMITIVE_SCOPES[name] : undefined;
-    if (!required || !auth.scopes.includes(required)) throw new ForbiddenException();
+    if (!canCallPrimitive(mcp.getName(), auth.scopes)) throw new ForbiddenException();
     return true;
   }
 }

@@ -37,7 +37,7 @@ export class CredentialService implements CredentialVerifier {
   private readonly clientIndex = new Map<string, string>();
 
   constructor(
-    @Inject(CREDENTIAL_REPO) private readonly repo: CredentialRepo,
+    @Inject(CREDENTIAL_REPO) private readonly repo: Pick<CredentialRepo, keyof CredentialRepo>,
     @Inject(CREDENTIAL_CONFIG) private readonly config: AuthConfig,
   ) {}
 
@@ -115,7 +115,6 @@ export class CredentialService implements CredentialVerifier {
       throw new UnauthorizedException();
     }
     if (expectedKind && record.kind !== expectedKind) throw new UnauthorizedException();
-    this.remember(value, record);
     return {
       id: record.id,
       clientId: record.clientId,
@@ -123,6 +122,7 @@ export class CredentialService implements CredentialVerifier {
       scopes: record.scopes,
       kind: record.kind,
       service: record.service,
+      expiresAt: record.expiresAt,
     };
   }
 

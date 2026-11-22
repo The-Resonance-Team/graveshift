@@ -152,19 +152,51 @@ describe('POST /api/events (e2e)', () => {
     await push(key, validEnvelope()).expect(401);
   });
 
-  test('redacts every string field before publish', async () => {
-    const key = await createKey({ kind: 'plugin', name: 'redact-all', scopes: ['events:publish'] });
-    await push(
-      key,
-      validEnvelope({
-        id: 'evt-redact',
-        traceId: 'alice@example.com',
-        source: 'Bearer abcdefgh1234',
-      }),
-    ).expect(202);
-    const published = ctx.publisher.envelopes.find((item) => item.id === 'evt-redact');
-    expect(published?.traceId).not.toContain('alice@example.com');
-    expect(published?.source).not.toContain('abcdefgh1234');
+  test('preserves event identity and rejects sensitive metadata before publication', async () => {
+    const key = await createKey({
+      kind: 'plugin',
+      name: 'identity-privacy',
+      scopes: ['events:publish'],
+    });
+    const ids: [string, string] = [
+      'c3b478e1-4fa8-4988-b3e6-572bd46d8c21',
+      'a4927f1e-652e-4a10-9ec3-7d857bbaf504',
+    ];
+    const responses = await Promise.all(
+      ids.map((id) =>
+        push(
+          key,
+          validEnvelope({
+            id,
+            traceId: ids[0],
+            fingerprint: 'api:oom',
+            source: 'Bearer abcdefgh1234',
+            payload: { note: 'write to alice@example.com', 'client@example.com': 'private field' },
+          }),
+        ).expect(202),
+      ),
+    );
+    responses.forEach((accepted, index) => {
+      const id = ids[index];
+      expect(accepted.body.id).toBe(id);
+    });
+    const published = ctx.publisher.envelopes.filter((item) => ids.includes(item.id));
+    expect(published).toHaveLength(2);
+    expect(published.map((item) => item.id)).toEqual(ids);
+    for (const envelope of published) {
+      expect(envelope.traceId).toBe(ids[0]);
+      expect(envelope.fingerprint).toBe('api:oom');
+      expect(envelope.source).not.toContain('abcdefgh1234');
+      expect(JSON.stringify(envelope.payload)).not.toContain('alice@example.com');
+      expect(JSON.stringify(envelope.payload)).not.toContain('client@example.com');
+    }
+    const count = ctx.publisher.envelopes.length;
+    await Promise.all(
+      [{ traceId: 'alice@example.com' }, { type: 'AKIAIOSFODNN7EXAMPLE' }].map((metadata) =>
+        push(key, validEnvelope(metadata)).expect(422),
+      ),
+    );
+    expect(ctx.publisher.envelopes).toHaveLength(count);
   });
 
   test('an oversized invalid body returns 413 before validation', async () => {

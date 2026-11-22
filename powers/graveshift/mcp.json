@@ -2,10 +2,7 @@
   "mcpServers": {
     "graveshift": {
       "command": "bun",
-      "args": ["run", "--filter", "@graveshift/api", "start:stdio"],
-      "env": {
-        "GRAVESHIFT_OAUTH_JWT_SECRET": "replace-with-a-32-character-or-longer-secret"
-      }
+      "args": ["run", "--filter", "@graveshift/api", "start:stdio"]
     }
   }
 }

@@ -17,7 +17,7 @@ export const handleRequest = (request: Request): Response => {
   return new Response(null, { headers: TEXT_HEADERS, status: 404 });
 };
 
-/** Health stays unauthenticated; only the read surface needs the deployment-local token. */
+/** Health stays unauthenticated; only the read surface needs a local token. */
 export const createRequestHandler = (state: DaemonReadState, readToken: string): FetchHandler => {
   const read = handleReadRequest(state, readToken);
   return (request: Request): Response => {
@@ -26,3 +26,12 @@ export const createRequestHandler = (state: DaemonReadState, readToken: string):
     return handleRequest(request);
   };
 };
+
+export function daemonHandler(commands: FetchHandler, reads: FetchHandler): FetchHandler {
+  return (request) => {
+    const path = new URL(request.url).pathname;
+    if (path.startsWith('/internal/work/')) return commands(request);
+    if (path.startsWith('/internal/read/')) return reads(request);
+    return handleRequest(request);
+  };
+}

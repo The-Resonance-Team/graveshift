@@ -29,3 +29,6 @@ The ordered, tamper-evident record of decisions.
 
 **Autopsy**:
 The postmortem written when a haunting closes.
+
+**Credential**:
+A named, scoped grant that lets a client use Graveshift. It can expire or be revoked. One `projectId` binds it to its scope.

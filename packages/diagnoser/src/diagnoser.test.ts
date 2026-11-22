@@ -61,8 +61,8 @@ describe('recorded fixtures: rules-only path', () => {
       fc.property(fc.array(fc.string(), { maxLength: 30 }), (logs) => {
         const input = { ...base, logs };
         const bundle = buildContext(input);
-        const first = rulesOnlyDiagnosis(input, bundle);
-        expect(rulesOnlyDiagnosis(input, bundle)).toEqual(first);
+        const first = rulesOnlyDiagnosis(bundle);
+        expect(rulesOnlyDiagnosis(bundle)).toEqual(first);
         for (const e of first.evidence) expect(bundle.refs.has(e.ref)).toBe(true);
       }),
     );
@@ -91,6 +91,7 @@ describe('diagnosis gateway controls', () => {
         tokensIn: 100,
         tokensOut: 30,
         costUsd: 1,
+        callId: expect.any(String),
       },
     ]);
   });
@@ -146,14 +147,22 @@ describe('evidence validation', () => {
         const result = await diagnose(deps(gateway), base);
         expect(result).toMatchObject({ status: 'diagnosed', source: 'rules-only' });
         expect(requests).toHaveLength(2);
-        expect(requests[1]?.body).toContain('<validation_error>');
+        expect(requests[1]?.body).toContain('<untrusted_validation_error>');
         expect(events).toMatchObject([{ status: 'rules_only', tokensIn: 200, costUsd: 2 }]);
       }),
     );
   });
 
   test('no diagnosis source at all returns needs_human', async () => {
-    const gateway = { run: async () => ({ status: 'unavailable' as const }) };
+    const gateway = {
+      run: async () => ({
+        status: 'unavailable' as const,
+        reason: 'unavailable' as const,
+        callId: 'call-1',
+        usage: { in: 0, out: 0 },
+        costUsd: 0,
+      }),
+    };
     const result = await diagnose(deps(gateway), base);
     expect(result).toMatchObject({ status: 'needs_human' });
   });

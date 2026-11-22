@@ -3,37 +3,39 @@ export {
   GENESIS_HASH,
   hashEntry,
   makeAuditEntry,
-  type AuditDraft,
   type AuditInput,
   type ChainAnchor,
   type VerifyResult,
   verifyEntries,
 } from './audit-chain';
-export { err, GraveshiftError, ok, TransitionError, TriageError } from './errors';
-export type { Result, TransitionErrorCode, TriageErrorCode } from './errors';
+export { prepareEnvelope } from './envelope';
+export { EnvelopeError, err, GraveshiftError, ok, TransitionError, TriageError } from './errors';
+export type { EnvelopeErrorCode, Result, TransitionErrorCode, TriageErrorCode } from './errors';
 export {
   DEFAULT_RULE_ACTIONS,
   detectRuleOverrides,
+  confirmRuleOverrides,
   evaluateEnvelope,
   mergeRules,
   RULE_ACTIONS,
   RuleActionSchema,
   RuleMatchSchema,
   RuleSchema,
+  RuleConfirmationSchema,
 } from './rules';
-export type { OverrideDetection, Rule, RuleAction, RuleMatch } from './rules';
-export { RuntimeEventSchema, ServiceHealthSchema, ServiceInfoSchema } from './runtime-source';
-export type { RuntimeEvent, RuntimeSource, ServiceHealth, ServiceInfo } from './runtime-source';
+export type { OverrideDetection, Rule, RuleAction, RuleMatch, RuleConfirmation } from './rules';
 export {
   ActionProposalSchema,
   ApprovalSchema,
   AuditEntriesSchema,
+  AuditDraftSchema,
   AuditEntrySchema,
   ChainResultSchema,
   CounterSnapshotSchema,
   CounterSourceSchema,
   DiagnosisSchema,
   EventEnvelopeSchema,
+  EVENT_SEVERITIES,
   INCIDENT_STATES,
   IncidentSchema,
   IncidentStateSchema,
@@ -46,10 +48,13 @@ export {
   ServiceViewSchema,
   ServiceViewsSchema,
   SignalSchema,
+  SUBJECT_TOKEN_PATTERN,
+  SUBJECT_TYPE_PATTERN,
 } from './schemas';
 export type {
   ActionProposal,
   Approval,
+  AuditDraft,
   AuditEntry,
   ChainResult,
   CounterSnapshot,

@@ -2,14 +2,10 @@ import { describe, expect, test } from 'bun:test';
 import fc from 'fast-check';
 
 import { createDockerRestarter } from './backends';
-import { allowedServices, createTokenStore } from './guards';
-import { policy, setup, signed, T0 } from './test-helpers';
+import { setup, signed, T0 } from './test-helpers';
+import type { HttpFetch } from './types';
 
 describe('allowlist and scale bounds', () => {
-  test('allowlist comes from non-deny, non-PR rules and ignores wildcards', () => {
-    expect([...allowedServices(policy)].sort()).toEqual(['api', 'worker']);
-  });
-
   test('property: scale runs iff the service is worker and replicas are within 1..3', async () => {
     await fc.assert(
       fc.asyncProperty(
@@ -30,16 +26,31 @@ describe('allowlist and scale bounds', () => {
 
   test('docker restarts are resolved by compose label and POST only restart', async () => {
     const seen: string[] = [];
-    const fetchFn = (async (url: URL, init?: RequestInit) => {
+    const fetchFn: HttpFetch = async (url, init) => {
       seen.push(`${init?.method ?? 'GET'} ${url.pathname}`);
       return url.pathname === '/containers/json'
         ? Response.json([{ Id: 'abc' }])
         : new Response(null, { status: 204 });
-    }) as unknown as typeof fetch;
+    };
     await createDockerRestarter('http://socket-proxy-actuator:2375', fetchFn).restart('worker');
     expect(seen).toEqual(['GET /containers/json', 'POST /containers/abc/restart']);
     expect(() => createDockerRestarter('unix:///var/run/docker.sock')).toThrow();
   });
+
+  test.each([null, [{ Name: 'missing-id' }], { Id: 'not-an-array' }])(
+    'invalid container lookup %j cannot cause a restart',
+    async (body) => {
+      const seen: string[] = [];
+      const fetchFn: HttpFetch = async (url) => {
+        seen.push(url.pathname);
+        return Response.json(body);
+      };
+      await expect(
+        createDockerRestarter('http://socket-proxy-actuator:2375', fetchFn).restart('worker'),
+      ).rejects.toThrow('invalid data');
+      expect(seen).toEqual(['/containers/json']);
+    },
+  );
 });
 
 describe('circuit breaker', () => {
@@ -69,16 +80,5 @@ describe('circuit breaker', () => {
     actuator.breaker.reset('api');
     const again = signed({ tokenId: 'tok-3', issuedOffset: 11 * 60_000 - 1000 });
     expect((await actuator.execute(again)).status).toBe('executed');
-  });
-});
-
-describe('token store', () => {
-  test('forgets a token only after its expiry', () => {
-    let now = 1000;
-    const store = createTokenStore(() => now);
-    expect(store.consume('a', 2000)).toBe(true);
-    expect(store.consume('a', 2000)).toBe(false);
-    now = 2000;
-    expect(store.consume('a', 3000)).toBe(true);
   });
 });

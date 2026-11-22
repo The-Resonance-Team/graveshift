@@ -1,10 +1,11 @@
-// Same convention as the diagnoser: data from a request is never trusted text.
 // Redaction stays in the gateway; this module only marks the data boundaries.
-const neutralize = (text: string): string => text.replace(/<(\/?)(untrusted_)/gi, '&lt;$1$2');
-const safeAttr = (text: string): string => neutralize(text).replace(/["\n]/g, '_');
+export const neutralizeUntrusted = (text: string): string =>
+  text.replace(/<(\/?)(untrusted_)/gi, '&lt;$1$2');
+const safeAttr = (text: string): string => neutralizeUntrusted(text).replace(/["<>\r\n]/g, '_');
 
 export function wrapUntrusted(tag: string, text: string): string {
-  return `<untrusted_${safeAttr(tag)}>\n${neutralize(text)}\n</untrusted_${tag}>`;
+  const name = tag.replace(/[^a-z0-9_]/gi, '_');
+  return `<untrusted_${name}>\n${neutralizeUntrusted(text)}\n</untrusted_${name}>`;
 }
 
 export function untrustedRequest(text: string): string {
@@ -12,7 +13,7 @@ export function untrustedRequest(text: string): string {
 }
 
 export function untrustedParam(name: string, value: string): string {
-  return `<untrusted_param name="${safeAttr(name)}">${neutralize(value)}</untrusted_param>`;
+  return `<untrusted_param name="${safeAttr(name)}">${neutralizeUntrusted(value)}</untrusted_param>`;
 }
 
 export const UNTRUSTED_SYSTEM_NOTE =

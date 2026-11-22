@@ -1,4 +1,14 @@
-import type { RuntimeEvent } from '@graveshift/core';
+import type { Signal } from '@graveshift/core';
+
+/**
+ * Watch-loop notices. Core used to export RuntimeEvent; it no longer does, so
+ * the base Collector loop's shape is declared locally. The `signal` variant is
+ * kept for callers that forward observations through the watch channel.
+ */
+export type RuntimeEvent =
+  | { kind: 'signal'; cursor?: string; signal: Signal }
+  | { kind: 'source_disconnected'; at: string; reason: string }
+  | { kind: 'source_reconnected'; at: string; cursor?: string };
 
 export const backoffMs = (attempt: number, base = 500, cap = 30_000): number =>
   Math.min(cap, base * 2 ** Math.min(attempt, 20));

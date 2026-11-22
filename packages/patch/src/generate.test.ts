@@ -9,6 +9,7 @@ import {
 } from './generate';
 import { PatchRejectedError } from './guard';
 import { PatchSchema, type Patch, type RepoRules } from './schemas';
+import { TEST_BASE_SHA, TEST_BLOB_SHA } from './test-constants';
 
 const rules: RepoRules = {
   maxFilesChanged: 5,
@@ -18,10 +19,14 @@ const rules: RepoRules = {
 };
 
 const patch: Patch = {
-  files: [{ path: 'src/a.ts', content: 'const price = 1;', linesChanged: 1 }],
+  baseSha: TEST_BASE_SHA,
+  files: [
+    { path: 'src/a.ts', content: 'const price = 1;', linesChanged: 1, baseBlobSha: TEST_BLOB_SHA },
+  ],
 };
 
 const ok = (value: Patch): GatewayResult<Patch> => ({
+  callId: 'call-1',
   status: 'ok',
   value,
   model: 'test-model',
@@ -77,6 +82,7 @@ describe('generatePatch', () => {
 
   test('returns a typed rejection for invalid model output', async () => {
     const fake = fakeGateway({
+      callId: 'call-1',
       status: 'invalid',
       reason: 'bad shape',
       usage: { in: 10, out: 5 },
@@ -91,13 +97,19 @@ describe('generatePatch', () => {
   });
 
   test('returns a typed rejection for a missing patch', async () => {
-    const unavailable = fakeGateway({ status: 'unavailable' });
+    const totals = { callId: 'call-1', usage: { in: 0, out: 0 }, costUsd: 0 };
+    const unavailable = fakeGateway({ status: 'unavailable', reason: 'unavailable', ...totals });
     expect(await generatePatch(options(unavailable))).toMatchObject({
       ok: false,
-      error: expect.objectContaining({ reasons: ['no patch source available'] }),
+      error: expect.objectContaining({ reasons: ['no patch source available: unavailable'] }),
     });
 
-    const rulesOnly = fakeGateway({ status: 'rules_only', value: patch, reason: 'invalid' });
+    const rulesOnly = fakeGateway({
+      status: 'rules_only',
+      value: patch,
+      reason: 'invalid',
+      ...totals,
+    });
     expect(await generatePatch(options(rulesOnly))).toMatchObject({
       ok: false,
       error: expect.objectContaining({ reasons: ['no patch proposed'] }),
@@ -129,7 +141,16 @@ describe('generatePatch', () => {
 
   test('model output cannot grant a permission', async () => {
     const withGrant = {
-      files: [{ path: 'src/a.ts', content: 'x', linesChanged: 1, permissions: ['deploy'] }],
+      baseSha: TEST_BASE_SHA,
+      files: [
+        {
+          path: 'src/a.ts',
+          content: 'x',
+          linesChanged: 1,
+          baseBlobSha: TEST_BLOB_SHA,
+          permissions: ['deploy'],
+        },
+      ],
     };
     const fake = fakeGateway(ok(withGrant as Patch));
     const result = await generatePatch(options(fake));
@@ -141,14 +162,20 @@ describe('generatePatch', () => {
     const accepted = await generatePatch(options(fakeGateway(ok(patch))));
     expect(accepted.ok).toBe(true);
 
-    const bad = { files: [{ path: 'deploy/a.yaml', content: 'x', linesChanged: 1 }] };
+    const bad = {
+      baseSha: TEST_BASE_SHA,
+      files: [{ path: 'deploy/a.yaml', content: 'x', linesChanged: 1, baseBlobSha: TEST_BLOB_SHA }],
+    };
     const rejected = await generatePatch(options(fakeGateway(ok(bad))));
     expect(rejected.ok).toBe(false);
     if (!rejected.ok) expect(rejected.error.reasons).toContain('deploy/a.yaml: forbidden path');
   });
 
   test('a caller cannot bypass the guard', async () => {
-    const bad = { files: [{ path: 'deploy/a.yaml', content: 'x', linesChanged: 1 }] };
+    const bad = {
+      baseSha: TEST_BASE_SHA,
+      files: [{ path: 'deploy/a.yaml', content: 'x', linesChanged: 1, baseBlobSha: TEST_BLOB_SHA }],
+    };
     const spoofed = {
       ...options(fakeGateway(ok(bad))),
       guard: () => undefined,
@@ -160,7 +187,10 @@ describe('generatePatch', () => {
 
   test('an under-reported large file is rejected after the model call', async () => {
     const content = Array.from({ length: 201 }, (_unused, index) => `line ${index}`).join('\n');
-    const big = { files: [{ path: 'src/big.ts', content, linesChanged: 1 }] };
+    const big = {
+      baseSha: TEST_BASE_SHA,
+      files: [{ path: 'src/big.ts', content, linesChanged: 1, baseBlobSha: TEST_BLOB_SHA }],
+    };
     const result = await generatePatch(options(fakeGateway(ok(big))));
     expect(result.ok).toBe(false);
     if (!result.ok) {

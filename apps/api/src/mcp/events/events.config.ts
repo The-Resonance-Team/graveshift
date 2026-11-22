@@ -1,5 +1,6 @@
 import { Global, Module } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
+
+import { BOOT_CONFIG, type RootBootConfig } from '../../config/boot.config';
 
 export const EVENTS_CONFIG = Symbol('EVENTS_CONFIG');
 
@@ -14,10 +15,10 @@ export interface EventsConfig {
   providers: [
     {
       provide: EVENTS_CONFIG,
-      inject: [ConfigService],
-      useFactory: (config: ConfigService): EventsConfig => ({
-        natsUrl: config.get<string>('GRAVESHIFT_NATS_URL'),
-        stream: config.getOrThrow<string>('GRAVESHIFT_NATS_STREAM'),
+      inject: [BOOT_CONFIG],
+      useFactory: (config: RootBootConfig): EventsConfig => ({
+        natsUrl: config.natsUrl,
+        stream: config.natsStream,
       }),
     },
   ],

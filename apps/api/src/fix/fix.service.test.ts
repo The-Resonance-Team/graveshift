@@ -105,7 +105,15 @@ describe('fix use case', () => {
 
   test('an unguarded patch never reaches the client', async () => {
     const unsafe: Patch = {
-      files: [{ path: 'policy.yaml', content: 'x', linesChanged: 1 }],
+      baseSha: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      files: [
+        {
+          path: 'policy.yaml',
+          content: 'x',
+          linesChanged: 1,
+          baseBlobSha: '96759cc1f604468aa78a72be3c5be39abfc788b2',
+        },
+      ],
     };
     const { service, calls } = serviceWith({ patch: unsafe });
     const result = await service.fixNow(baseItem);
@@ -150,7 +158,10 @@ describe('fix use case', () => {
     expect(commit.args[1]).toBe(
       'fix: The api grave was drained by a leech. (incident wi-1-diag-1)',
     );
-    expect(ref.args[1]).toContain('inc-wi1diag1-the-api-grave-was-drained-by-a-leech');
+    // Base fixer hashes the incident identity and slugifies only the headline.
+    expect(ref.args[1]).toMatch(
+      /^refs\/heads\/graveshift\/inc-[a-f0-9]{32}-the-api-grave-was-drained-by-a-leech$/,
+    );
     expect(ref.args[1]).not.toContain('untrusted');
     expect(body).toContain('<untrusted_root_cause>');
   });
@@ -194,7 +205,9 @@ describe('fix use case', () => {
     const result = await service.fixNow(baseItem);
     expect(result.ok).toBe(false);
     expect(result.failure).toBe('pr_failed');
-    expect(result.reason).toContain('pr_failed: pulls responded 502');
+    // Base fixer wraps publication errors in a typed PublicationError, so the phase
+    // is what reaches the typed failure reason, not the upstream message.
+    expect(result.reason).toContain('pr_failed: draft publication failed during draft');
     expect(result.item.draftPr).toBeNull();
   });
 

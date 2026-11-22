@@ -1,4 +1,4 @@
-import type { EventEnvelope } from '@graveshift/core';
+import { prepareEnvelope, type EventEnvelope } from '@graveshift/core';
 
 import { publishSubject } from './subject';
 
@@ -45,11 +45,10 @@ export { createHttpPublisher, type HttpPublisherOptions } from './http';
 /** Publish each envelope to JetStream with its id as the deduplication key. */
 export function createNatsPublisher(js: PublishTarget): Publisher {
   return {
-    publish(envelope) {
-      const payload = new TextEncoder().encode(JSON.stringify(envelope));
-      return js
-        .publish(publishSubject(envelope), payload, { msgID: envelope.id })
-        .then(() => undefined);
+    async publish(envelope) {
+      const prepared = prepareEnvelope(envelope);
+      const payload = new TextEncoder().encode(JSON.stringify(prepared));
+      await js.publish(publishSubject(prepared), payload, { msgID: prepared.id });
     },
   };
 }

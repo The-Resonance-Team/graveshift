@@ -20,8 +20,8 @@ const ResponseSchema = z.union([
 ]);
 
 export interface MetricsClient {
-  query(promql: string): Promise<number | null>;
-  watcher(name: WatcherQuery, job: string): Promise<number | null>;
+  query(promql: string, signal?: AbortSignal): Promise<number | null>;
+  watcher(name: WatcherQuery, job: string, signal?: AbortSignal): Promise<number | null>;
 }
 
 export function createMetricsClient(
@@ -29,10 +29,13 @@ export function createMetricsClient(
   fetchFn: typeof fetch = fetch,
   timeoutMs = 5000,
 ): MetricsClient {
-  const query = async (promql: string): Promise<number | null> => {
+  const query = async (promql: string, signal?: AbortSignal): Promise<number | null> => {
     const url = new URL('/api/v1/query', baseUrl);
     url.searchParams.set('query', promql);
-    const res = await fetchFn(url, { signal: AbortSignal.timeout(timeoutMs) });
+    const timeout = AbortSignal.timeout(timeoutMs);
+    const res = await fetchFn(url, {
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+    });
     if (!res.ok) throw new MetricsError(`prometheus responded ${res.status}`);
     const body = ResponseSchema.safeParse(await res.json());
     if (!body.success) throw new MetricsError('unexpected prometheus response');
@@ -40,7 +43,7 @@ export function createMetricsClient(
     const sample = body.data.data.result[0];
     if (!sample) return null;
     const value = Number(sample.value[1]);
-    return Number.isNaN(value) ? null : value;
+    return Number.isFinite(value) ? value : null;
   };
-  return { query, watcher: (name, job) => query(WATCHER_QUERIES[name](job)) };
+  return { query, watcher: (name, job, signal) => query(WATCHER_QUERIES[name](job), signal) };
 }

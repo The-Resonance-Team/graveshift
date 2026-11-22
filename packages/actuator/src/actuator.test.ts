@@ -4,6 +4,7 @@ import fc from 'fast-check';
 import { iso, policy, SECRET, setup, signed, T0, unsigned } from './test-helpers';
 import { signRequest, verifyHmac } from './sign';
 import { createActuator } from './execute';
+import { createAdmissionFixture } from './admission-fixture';
 import type { ActionRequest } from './types';
 
 describe('decisions', () => {
@@ -40,7 +41,7 @@ describe('decisions', () => {
       ['expired', signed({ issuedOffset: -20 * 60_000 })],
       ['ttl_too_long', signed({ ttlMs: 16 * 60_000 })],
       ['not_yet_valid', signed({ issuedOffset: 5_000 })],
-      ['target_not_allowlisted', signed({ service: 'postgres' })],
+      ['policy_deny_rule', signed({ service: 'postgres' })],
       ['policy_no_matching_rule', signed({ signals: ['unrelated'] })],
       ['policy_low_confidence', signed({ confidence: 0.2 })],
       ['policy_no_matching_rule', signed({ service: 'worker', kind: 'scale', replicas: 99 })],
@@ -58,6 +59,12 @@ describe('decisions', () => {
     const calls: string[] = [];
     const actuator = createActuator({
       secret: SECRET,
+      requiredAudit: async (draft) => ({ key: draft.key }),
+      durableAdmission: createAdmissionFixture(
+        policy,
+        () => T0,
+        async (draft) => ({ key: draft.key }),
+      ).admission,
       policy,
       namespace: 'candy-shop',
       now: () => T0,
@@ -90,6 +97,12 @@ describe('decisions', () => {
     expect(() =>
       createActuator({
         secret: 'short',
+        requiredAudit: async (draft) => ({ key: draft.key }),
+        durableAdmission: createAdmissionFixture(
+          policy,
+          () => T0,
+          async (draft) => ({ key: draft.key }),
+        ).admission,
         policy,
         namespace: 'n',
         docker: { restart: async () => {} },

@@ -12,6 +12,8 @@ This file is an index. It lists each context, the terms it owns and the path to 
 | `packages/agents` | `packages/agents/GLOSSARY.md` |
 | `packages/api-contract` | No domain terms |
 | `packages/core` | `packages/core/GLOSSARY.md` |
+| `packages/config` | No domain terms |
+| `packages/work` | `packages/work/GLOSSARY.md` |
 | `packages/diagnoser` | `packages/diagnoser/GLOSSARY.md` |
 | `packages/events` | No domain terms |
 | `packages/fixer` | `packages/fixer/GLOSSARY.md` |

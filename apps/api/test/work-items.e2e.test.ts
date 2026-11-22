@@ -1,294 +1,290 @@
-import { createSubtasks, NEEDS_HUMAN, type WorkItem } from '@graveshift/core';
-import type { INestApplication } from '@nestjs/common';
+import { WORK_COMMANDS } from '@graveshift/work';
+import { HttpStatus, ValidationPipe, type INestApplication } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { JwtModule, JwtService } from '@nestjs/jwt';
+import { PassportModule } from '@nestjs/passport';
 import { Test } from '@nestjs/testing';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import request from 'supertest';
 
-import { configureApp } from '../src/app.factory';
-import { AppModule } from '../src/app.module';
-import type { FixDeps } from '../src/fix/fix.types';
-import { WORK_ITEM_POLICY, type WorkItemPolicy } from '../src/work-items/work-item.policy';
-import { WORK_ITEM_SEED, WorkItemStore } from '../src/work-items/work-item.store';
-import { fakeFixDeps, FIX_DEPS, fixCalls } from './fakes/fake-fix-deps';
+import { CREDENTIAL_CONFIG } from '../src/auth/auth.types';
+import { OAuthClientCredentialsStrategy } from '../src/auth/oauth-client-credentials.strategy';
+import { InternalGuard } from '../src/internal/internal.guard';
+import { InternalWorkController } from '../src/work-items/controllers/internal-work.controller';
+import { WorkItemsController } from '../src/work-items/controllers/work-items.controller';
+import { WorkItemRepo } from '../src/work-items/work-item.repo';
+import { TEST_CONFIG, TEST_ROOT_ENV } from './fakes/auth-test-config';
+import { fakeWorkApi } from './fakes/fake-fix-deps';
 
-const AGENT_ASSIGNEE = 'needs_agent_SRE Bot';
+describe('Work item HTTP boundary', () => {
+  let app: INestApplication;
+  let adapter: ReturnType<typeof fakeWorkApi>;
+  let token: string;
 
-const POLICY: WorkItemPolicy = {
-  agentNames: ['SRE Bot'],
-  clientConfig: {},
-  autoFixEnabled: true,
-};
-
-interface StoreLike {
-  list(): WorkItem[];
-  get(id: string): WorkItem | undefined;
-  save(item: WorkItem): void;
-}
-
-function fakeStore(seed: WorkItem[]): StoreLike {
-  const map = new Map(seed.map((seedItem) => [seedItem.id, seedItem]));
-  return {
-    list: () => [...map.values()],
-    get: (id) => map.get(id),
-    save: (next) => {
-      map.set(next.id, next);
-    },
-  };
-}
-
-function item(id: string, overrides: Partial<WorkItem> = {}): WorkItem {
-  return {
-    id,
-    title: `Work item ${id}`,
-    description: '',
-    successCriteria: [],
-    subtasks: createSubtasks([]),
-    status: 'todo',
-    priority: 'medium',
-    assignee: NEEDS_HUMAN,
-    reporter: 'wraith',
-    startDate: null,
-    dueDate: null,
-    sprint: null,
-    parent: null,
-    labels: [],
-    team: 'sre',
-    watchers: [],
-    severity: 'warning',
-    service: 'api',
-    diagnosisRef: `diag-${id}`,
-    fixPriority: 100,
-    draftPr: null,
-    ...overrides,
-  };
-}
-
-// The tests bring their own store, policy and fix deps. No agent YAML or demo seed is read.
-async function buildApp(deps: FixDeps = fakeFixDeps()): Promise<INestApplication> {
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-    .overrideProvider(WORK_ITEM_SEED)
-    .useValue([])
-    .overrideProvider(WorkItemStore)
-    .useValue(
-      fakeStore([
-        item('wi-1', {
-          title: 'Fix OOM on api',
-          subtasks: createSubtasks([
-            { id: 'st-1', title: 'Read the diagnosis', done: true },
-            { id: 'st-2', title: 'Propose a fix', done: false },
-          ]),
-        }),
-        item('wi-2', { assignee: 'needs_agent_DevOps Bot' }),
-        item('wi-3', { status: 'done' }),
-      ]),
-    )
-    .overrideProvider(WORK_ITEM_POLICY)
-    .useValue(POLICY)
-    .overrideProvider(FIX_DEPS)
-    .useValue(deps)
-    .compile();
-  return configureApp(moduleRef.createNestApplication({ logger: false }));
-}
-
-describe('work items API (e2e)', () => {
-  let app!: INestApplication;
-
-  beforeEach(async () => {
-    app = await buildApp();
+  async function start(options: Parameters<typeof fakeWorkApi>[0] = {}) {
+    adapter = fakeWorkApi({ projectId: TEST_ROOT_ENV.GRAVESHIFT_PROJECT_ID, ...options });
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        PassportModule,
+        JwtModule.register({}),
+        ThrottlerModule.forRoot([{ ttl: 60_000, limit: 100 }]),
+      ],
+      controllers: [WorkItemsController, InternalWorkController],
+      providers: [
+        OAuthClientCredentialsStrategy,
+        InternalGuard,
+        { provide: CREDENTIAL_CONFIG, useValue: TEST_CONFIG },
+        { provide: ConfigService, useValue: new ConfigService(TEST_ROOT_ENV) },
+        { provide: WorkItemRepo, useValue: adapter.repo },
+        { provide: WORK_COMMANDS, useValue: adapter.commands },
+      ],
+    }).compile();
+    app = moduleRef.createNestApplication({ logger: false });
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+        errorHttpStatusCode: HttpStatus.UNPROCESSABLE_ENTITY,
+      }),
+    );
     await app.init();
-  });
+    token = moduleRef.get(JwtService).sign(
+      {
+        sub: 'client-1',
+        projectId: TEST_ROOT_ENV.GRAVESHIFT_PROJECT_ID,
+        scope: ['tokens:manage'],
+      },
+      {
+        secret: TEST_CONFIG.jwtSecret,
+        issuer: TEST_CONFIG.jwtIssuer,
+        audience: TEST_CONFIG.jwtAudience,
+        expiresIn: 300,
+      },
+    );
+  }
 
-  afterEach(async () => {
-    await app.close();
-  });
+  beforeEach(async () => start());
+  afterEach(async () => app.close());
 
-  test('GET /api/work-items returns a page for the table', async () => {
-    const response = await request(app.getHttpServer()).get('/api/work-items').expect(200);
-    expect(response.body.total).toBe(3);
-    expect(response.body.items).toHaveLength(3);
-    expect(response.body.items[0].subtasks.completed).toBe(1);
-
-    const page = await request(app.getHttpServer())
-      .get('/api/work-items?offset=1&limit=1')
+  test('requires a management token and uses its project for reads', async () => {
+    await request(app.getHttpServer()).get('/api/work-items').expect(401);
+    await request(app.getHttpServer()).post('/api/work-items/work-1/fix-now').send({}).expect(401);
+    const detail = await request(app.getHttpServer())
+      .get('/api/work-items/work-1')
+      .auth(token, { type: 'bearer' })
       .expect(200);
-    expect(page.body.items).toHaveLength(1);
-    expect(page.body.items[0].id).toBe('wi-2');
-  });
-
-  test('GET /api/work-items/:id returns the detail sheet', async () => {
-    const response = await request(app.getHttpServer()).get('/api/work-items/wi-1').expect(200);
-    expect(response.body.title).toBe('Fix OOM on api');
-    expect(response.body.diagnosisRef).toBe('diag-wi-1');
-    await request(app.getHttpServer()).get('/api/work-items/missing').expect(404);
-  });
-
-  test('POST triage triggers auto-fix when the boot flag is on', async () => {
-    const response = await request(app.getHttpServer())
-      .post('/api/work-items/wi-1/triage')
-      .send({ assignee: AGENT_ASSIGNEE })
-      .expect(200);
-    expect(response.body.item.assignee).toBe(AGENT_ASSIGNEE);
-    expect(response.body.item.draftPr).toMatchObject({ number: 7 });
-    expect(response.body.autoFix).toMatchObject({ ok: true, effect: 'allow', failure: 'none' });
-    expect(fixCalls().some((call) => call.method === 'createPullRequest')).toBe(true);
-
-    const detail = await request(app.getHttpServer()).get('/api/work-items/wi-1').expect(200);
-    expect(detail.body.draftPr).toMatchObject({ number: 7 });
-  });
-
-  test('POST triage saves state and reports a thrown auto-fix', async () => {
-    await app.close();
-    app = await buildApp(fakeFixDeps({ throwOnLoad: true }));
-    await app.init();
-    const response = await request(app.getHttpServer())
-      .post('/api/work-items/wi-1/triage')
-      .send({ assignee: AGENT_ASSIGNEE })
-      .expect(200);
-    expect(response.body.item.assignee).toBe(AGENT_ASSIGNEE);
-    expect(response.body.autoFix).toMatchObject({
-      ok: false,
-      effect: 'deny',
-      failure: 'fix_error',
-      reason: 'context provider failed',
-    });
-    const detail = await request(app.getHttpServer()).get('/api/work-items/wi-1').expect(200);
-    expect(detail.body.assignee).toBe(AGENT_ASSIGNEE);
-  });
-
-  test('POST triage rejects an unknown agent and a malformed assignee', async () => {
+    expect(detail.body.diagnosisRef).toBe('diagnosis-1');
     await request(app.getHttpServer())
-      .post('/api/work-items/wi-1/triage')
-      .send({ assignee: 'needs_agent_Missing Bot' })
-      .expect(422);
-    await request(app.getHttpServer())
-      .post('/api/work-items/wi-1/triage')
-      .send({ assignee: 'human' })
-      .expect(422);
-    expect(fixCalls()).toHaveLength(0);
-  });
-
-  test('POST triage assigns to needs_human and refuses a done work item', async () => {
-    const response = await request(app.getHttpServer())
-      .post('/api/work-items/wi-2/triage')
-      .send({ assignee: NEEDS_HUMAN })
-      .expect(200);
-    expect(response.body.item.assignee).toBe(NEEDS_HUMAN);
-    await request(app.getHttpServer())
-      .post('/api/work-items/wi-3/triage')
-      .send({ assignee: AGENT_ASSIGNEE })
-      .expect(409);
-    await request(app.getHttpServer())
-      .post('/api/work-items/missing/triage')
-      .send({ assignee: NEEDS_HUMAN })
+      .get('/api/work-items/missing')
+      .auth(token, { type: 'bearer' })
       .expect(404);
   });
 
-  test('POST fix-now returns the full result with a draft PR ref', async () => {
-    const before = await request(app.getHttpServer()).get('/api/work-items/wi-1').expect(200);
-    expect(before.body.fixPriority).toBe(100);
-
+  test('rejects a signed token from a different project with PROJECT_FORBIDDEN', async () => {
+    const foreign = app.get(JwtService).sign(
+      { sub: 'client-2', projectId: 'project-2', scope: ['tokens:manage'] },
+      {
+        secret: TEST_CONFIG.jwtSecret,
+        issuer: TEST_CONFIG.jwtIssuer,
+        audience: TEST_CONFIG.jwtAudience,
+        expiresIn: 300,
+      },
+    );
     const response = await request(app.getHttpServer())
-      .post('/api/work-items/wi-1/fix-now')
-      .send({ note: 'Check memory use' })
+      .get('/api/work-items/work-1')
+      .auth(foreign, { type: 'bearer' })
+      .expect(403);
+    expect(response.body.code).toBe('PROJECT_FORBIDDEN');
+  });
+
+  test('lists and validates filters with stable pagination', async () => {
+    const page = await request(app.getHttpServer())
+      .get('/api/work-items?status=todo&limit=1&offset=1')
+      .auth(token, { type: 'bearer' })
       .expect(200);
-    expect(response.body).toMatchObject({
+    expect(page.body).toMatchObject({ total: 2, limit: 1, offset: 1 });
+    expect(page.body.items).toHaveLength(1);
+    await Promise.all(
+      ['offset=-1', 'limit=101', 'limit=abc', 'unknown=1', 'status=missing'].map((query) =>
+        request(app.getHttpServer())
+          .get(`/api/work-items?${query}`)
+          .auth(token, { type: 'bearer' })
+          .expect(422),
+      ),
+    );
+  });
+
+  test('delegates Fix now and keeps the completed public fields with routing and attempt ID', async () => {
+    const result = await request(app.getHttpServer())
+      .post('/api/work-items/work-1/fix-now')
+      .auth(token, { type: 'bearer' })
+      .set('Idempotency-Key', 'fix-command-1')
+      .send({ note: 'Read memory use' })
+      .expect(200);
+    expect(result.body).toMatchObject({
       ok: true,
       trigger: 'fix_now',
       effect: 'allow',
       failure: 'none',
       reason: null,
       pr: { number: 7 },
+      routing: null,
+      attemptId: 'attempt-work-1',
+      item: { fixPriority: 0 },
     });
-    expect(response.body.item.fixPriority).toBe(0);
-    expect(response.body.item.draftPr).toMatchObject({ number: 7 });
-
-    const create = fixCalls().find((call) => call.method === 'createPullRequest');
-    if (create === undefined) throw new Error('expected a createPullRequest call');
-    expect((create.args[1] as { draft: boolean }).draft).toBe(true);
-
-    const after = await request(app.getHttpServer()).get('/api/work-items/wi-1').expect(200);
-    expect(after.body.fixPriority).toBe(0);
-    expect(after.body.draftPr).toMatchObject({ number: 7 });
+    expect(adapter.calls).toEqual([
+      {
+        method: 'fixNow',
+        id: 'work-1',
+        input: { note: 'Read memory use' },
+        caller: { projectId: '12345', actor: 'client-1', commandId: 'fix-command-1' },
+      },
+    ]);
+    const replay = await request(app.getHttpServer())
+      .post('/api/work-items/work-1/fix-now')
+      .auth(token, { type: 'bearer' })
+      .set('Idempotency-Key', 'fix-command-1')
+      .send({ note: 'Read memory use' })
+      .expect(200);
+    expect(replay.body).toEqual(result.body);
+    expect(result.headers['idempotency-key']).toBe('fix-command-1');
   });
 
-  test('POST fix-now returns the policy denial in the result', async () => {
+  test('rejects Human Fix now and completed triage through coded domain errors', async () => {
+    const human = await request(app.getHttpServer())
+      .post('/api/work-items/human/fix-now')
+      .auth(token, { type: 'bearer' })
+      .send({})
+      .expect(403);
+    expect(human.body.code).toBe('MANUAL_ASSIGNMENT');
+    const done = await request(app.getHttpServer())
+      .post('/api/work-items/done/triage')
+      .auth(token, { type: 'bearer' })
+      .send({ assignee: 'needs_human' })
+      .expect(409);
+    expect(done.body.code).toBe('TERMINAL_STATUS');
+  });
+
+  test('saves triage and returns a failed auto-fix outcome', async () => {
     await app.close();
-    app = await buildApp(fakeFixDeps({ confidence: 0.1 }));
-    await app.init();
+    await start({ fail: true });
     const response = await request(app.getHttpServer())
-      .post('/api/work-items/wi-1/fix-now')
+      .post('/api/work-items/work-1/triage')
+      .auth(token, { type: 'bearer' })
+      .send({ assignee: 'needs_agent_Automatic Agent' })
+      .expect(200);
+    expect(response.body).toMatchObject({
+      item: { assignee: 'needs_agent_Automatic Agent' },
+      autoFix: { ok: false, failure: 'fix_error', routing: null, attemptId: 'attempt-work-1' },
+    });
+    const saved = await request(app.getHttpServer())
+      .get('/api/work-items/work-1')
+      .auth(token, { type: 'bearer' })
+      .expect(200);
+    expect(saved.body.assignee).toBe('needs_agent_Automatic Agent');
+  });
+
+  test('preserves policy denial as a completed result', async () => {
+    await app.close();
+    await start({ deny: true });
+    const response = await request(app.getHttpServer())
+      .post('/api/work-items/work-1/fix-now')
+      .auth(token, { type: 'bearer' })
       .send({})
       .expect(200);
     expect(response.body).toMatchObject({
       ok: false,
       effect: 'deny',
       failure: 'policy_denied',
-      reason: 'low_confidence',
       pr: null,
+      reason: 'low_confidence',
+      item: { fixPriority: 0 },
     });
-    expect(response.body.item.fixPriority).toBe(100);
-    expect(fixCalls().some((call) => call.method === 'createPullRequest')).toBe(false);
   });
 
-  test('POST fix-now refuses a done item, an unknown id and a bad body', async () => {
-    await request(app.getHttpServer()).post('/api/work-items/wi-3/fix-now').send({}).expect(409);
-    await request(app.getHttpServer()).post('/api/work-items/missing/fix-now').send({}).expect(404);
-    await request(app.getHttpServer())
-      .post('/api/work-items/wi-1/fix-now')
-      .send({ unknown: true })
-      .expect(422);
-    expect(fixCalls()).toHaveLength(0);
-  });
-
-  test('GET /api/work-items coerces and bounds the query', async () => {
-    const page = await request(app.getHttpServer())
-      .get('/api/work-items?offset=0&limit=2')
-      .expect(200);
-    expect(page.body.offset).toBe(0);
-    expect(page.body.limit).toBe(2);
-    expect(page.body.items).toHaveLength(2);
-
-    await request(app.getHttpServer()).get('/api/work-items?offset=-1').expect(422);
-    await request(app.getHttpServer()).get('/api/work-items?limit=101').expect(422);
-    await request(app.getHttpServer()).get('/api/work-items?limit=abc').expect(422);
-  });
-
-  test('GET /api/work-items rejects an undeclared query field with 422', async () => {
-    await request(app.getHttpServer()).get('/api/work-items?unknown=1').expect(422);
-  });
-
-  test('POST fix-now rejects an empty or null note', async () => {
+  test('validates public bodies and command IDs before delegation', async () => {
     await Promise.all(
-      ['', null].map((note) =>
+      [
+        { unknown: true },
+        { expectedVersion: 0 },
+        { note: '' },
+        { note: null },
+        { note: 'x'.repeat(501) },
+      ].map((body) =>
         request(app.getHttpServer())
-          .post('/api/work-items/wi-1/fix-now')
-          .send({ note })
+          .post('/api/work-items/work-1/fix-now')
+          .auth(token, { type: 'bearer' })
+          .send(body)
           .expect(422),
       ),
     );
-    expect(fixCalls()).toHaveLength(0);
-  });
-
-  test('POST triage rejects an undeclared field', async () => {
     await request(app.getHttpServer())
-      .post('/api/work-items/wi-1/triage')
-      .send({ assignee: NEEDS_HUMAN, extra: true })
+      .post('/api/work-items/work-1/fix-now')
+      .auth(token, { type: 'bearer' })
+      .set('Idempotency-Key', 'invalid command')
+      .send({})
       .expect(422);
+    await request(app.getHttpServer())
+      .post('/api/work-items/work-1/answer')
+      .auth(token, { type: 'bearer' })
+      .send({ attemptId: 'attempt-1', questionId: 'q1', params: { INCIDENT: 42 } })
+      .expect(422);
+    expect(adapter.calls).toHaveLength(0);
   });
 
-  test('POST triage rejects a missing or malformed assignee', async () => {
-    await Promise.all(
-      [{}, { assignee: 42 }, { assignee: 'needs_humanXYZ' }].map((body) =>
-        request(app.getHttpServer()).post('/api/work-items/wi-1/triage').send(body).expect(422),
-      ),
-    );
-  });
-
-  test('POST fix-now accepts a note at the length bound', async () => {
+  test('returns an empty routing summary when no attempt is active', async () => {
     const response = await request(app.getHttpServer())
-      .post('/api/work-items/wi-1/fix-now')
-      .send({ note: 'x'.repeat(500) })
+      .get('/api/work-items/work-1/routing')
+      .auth(token, { type: 'bearer' })
       .expect(200);
-    expect(response.body.ok).toBe(true);
+    expect(response.body).toEqual({ routing: null });
+  });
+
+  test('delegates a validated answer and returns the stale-question conflict', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/work-items/work-1/answer')
+      .auth(token, { type: 'bearer' })
+      .set('Idempotency-Key', 'answer-1')
+      .send({ attemptId: 'attempt-1', questionId: 'question-1', params: { INCIDENT: 'OOM' } })
+      .expect(409);
+    expect(response.body.code).toBe('QUESTION_NOT_PENDING');
+    expect(adapter.calls[0]).toMatchObject({
+      method: 'answer',
+      input: { params: { INCIDENT: 'OOM' } },
+      caller: { commandId: 'answer-1' },
+    });
+  });
+
+  test('protects private state routes and validates canonical nested schemas', async () => {
+    await request(app.getHttpServer())
+      .post('/internal/work-items/work-1/read')
+      .send({ projectId: '12345' })
+      .expect(401);
+    await request(app.getHttpServer())
+      .post('/internal/work-items/work-1/read')
+      .auth(token, { type: 'bearer' })
+      .send({ projectId: '12345' })
+      .expect(401);
+    const read = await request(app.getHttpServer())
+      .post('/internal/work-items/work-1/read')
+      .auth(TEST_ROOT_ENV.GRAVESHIFT_API_INTERNAL_TOKEN, { type: 'bearer' })
+      .send({ projectId: '12345' })
+      .expect(200);
+    expect(read.body).toMatchObject({ version: 0, item: { id: 'work-1' } });
+    await request(app.getHttpServer())
+      .post('/internal/work-items/work-1/claim')
+      .auth(TEST_ROOT_ENV.GRAVESHIFT_API_INTERNAL_TOKEN, { type: 'bearer' })
+      .send({
+        caller: { projectId: '12345', actor: 'daemon', commandId: 'claim-1' },
+        input: { expectedVersion: 0, command: { kind: 'fix_now', body: { unknown: true } } },
+      })
+      .expect(422);
+    await request(app.getHttpServer())
+      .post('/internal/work-items/work-1/read')
+      .auth(TEST_ROOT_ENV.GRAVESHIFT_API_INTERNAL_TOKEN, { type: 'bearer' })
+      .send({ projectId: '12345', extra: true })
+      .expect(422);
   });
 });

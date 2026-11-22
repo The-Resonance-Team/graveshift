@@ -49,9 +49,14 @@ export async function connectNatsPublisher(
  */
 export async function connectNatsReader(servers: string | string[]): Promise<NatsReaderHandle> {
   const nc: NatsConnection = await connect({ servers });
-  const manager = await jetstream(nc).jetstreamManager();
-  return {
-    reader: manager,
-    close: () => nc.close(),
-  };
+  try {
+    const manager = await jetstream(nc).jetstreamManager();
+    return {
+      reader: manager,
+      close: () => nc.close(),
+    };
+  } catch (error) {
+    await nc.close();
+    throw error;
+  }
 }

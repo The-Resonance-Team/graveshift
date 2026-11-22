@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { z } from 'zod';
 
 import { createGateway } from './gateway';
-import { binding, config, fakeAdapter, make, task } from './testing';
+import { acknowledgedAudit, binding, config, fakeAdapter, make, task } from './testing';
 import {
   type AuditEvent,
   type GeneratedObject,
@@ -32,7 +32,7 @@ describe('budget recheck and totals', () => {
     const gw = createGateway({
       agents: [binding(global.adapter)],
       config: { ...config, globalDailyBudgetUsd: 1 },
-      onAudit: () => {},
+      onAudit: acknowledgedAudit(),
     });
     expect(await gw.run(task())).toMatchObject({ status: 'rules_only', reason: 'budget' });
     expect(global.calls()).toBe(1);
@@ -47,7 +47,7 @@ describe('budget recheck and totals', () => {
     const ok = await createGateway({
       agents: [binding(flaky.adapter)],
       config,
-      onAudit: (event) => events.push(event),
+      onAudit: acknowledgedAudit(events),
     }).run(task());
     expect(ok).toMatchObject({ status: 'ok', usage: { in: 1000, out: 200 }, costUsd: 1 });
     expect(events[0]).toMatchObject({ tokensIn: 1000, tokensOut: 200, costUsd: 1 });
@@ -66,7 +66,7 @@ describe('budget recheck and totals', () => {
     const result = await createGateway({
       agents: [binding(chargedThenFailed.adapter)],
       config,
-      onAudit: (event) => failedEvents.push(event),
+      onAudit: acknowledgedAudit(failedEvents),
     }).run(task());
     expect(result.status).toBe('rules_only');
     expect(failedEvents[0]).toMatchObject({
@@ -79,12 +79,21 @@ describe('budget recheck and totals', () => {
 
   test('a model missing from the price table fails closed', async () => {
     const events: AuditEvent[] = [];
-    const fake = fakeAdapter({ model: 'unpriced-model' });
+    const fake = fakeAdapter();
+    fake.adapter.generateObject = async () => ({
+      object: { answer: 'ok' },
+      model: 'unpriced-model',
+      usage: { in: 1000, out: 0 },
+    });
     expect(
-      await make([binding(fake.adapter)], { onAudit: (event) => events.push(event) }).run(task()),
-    ).toMatchObject({ status: 'rules_only', reason: 'unavailable' });
-    expect(fake.calls()).toBe(1);
-    expect(events[0]).toMatchObject({ status: 'rules_only', tokensIn: 0, costUsd: 0 });
+      await make([binding(fake.adapter)], { onAudit: acknowledgedAudit(events) }).run(task()),
+    ).toMatchObject({
+      status: 'unavailable',
+      reason: 'pricing_unavailable',
+      usage: { in: 1000, out: 0 },
+      costUsd: null,
+    });
+    expect(events[0]).toMatchObject({ status: 'unavailable', tokensIn: 1000, costUsd: null });
   });
 
   test('duplicate agent names are rejected', () => {
@@ -108,7 +117,7 @@ describe('redaction of terminal results and failing callbacks', () => {
 
   test('thrown validate and rulesOnly still produce a typed result and one audit event', async () => {
     const events: AuditEvent[] = [];
-    const onAudit = (event: AuditEvent) => events.push(event);
+    const onAudit = acknowledgedAudit(events);
     const validate = () => {
       throw new Error('validator exploded');
     };
@@ -118,12 +127,12 @@ describe('redaction of terminal results and failing callbacks', () => {
     const invalid = await make([binding(fakeAdapter({ script: [{ answer: 'bad' }] }).adapter)], {
       onAudit,
     }).run(task({ validate, rulesOnly: undefined as never }));
-    expect(invalid.status).toBe('invalid');
+    expect(invalid).toMatchObject({ status: 'unavailable', reason: 'validation_unavailable' });
 
     const fallback = await make([binding(fakeAdapter({ available: false }).adapter)], {
       onAudit,
     }).run(task({ rulesOnly }));
-    expect(fallback).toEqual({ status: 'unavailable' });
+    expect(fallback).toMatchObject({ status: 'unavailable', reason: 'fallback_unavailable' });
     expect(events).toHaveLength(2);
     expect(events[1]?.reason).toContain('rules-only fallback failed');
   });
@@ -133,6 +142,7 @@ describe('redaction of terminal results and failing callbacks', () => {
     const hung: ModelAdapter = {
       provider: '@ai-sdk/google',
       model: 'test-model',
+      capability: 'structured_language',
       available: () => true,
       async generateObject({ signal }): Promise<GeneratedObject> {
         return new Promise((_resolve, reject) => {
@@ -151,7 +161,7 @@ describe('redaction of terminal results and failing callbacks', () => {
     const result = await createGateway({
       agents: [binding(hung)],
       config: { ...config, timeoutMs: 10, maxRetries: 0 },
-      onAudit: () => {},
+      onAudit: acknowledgedAudit(),
     }).run(task());
     expect(result.status).toBe('rules_only');
     expect(aborted).toBe(true);
@@ -173,7 +183,7 @@ describe('redaction of terminal results and failing callbacks', () => {
       validate: () => undefined,
     };
     const result = await make([binding(fake.adapter)], {
-      onAudit: (event) => events.push(event),
+      onAudit: acknowledgedAudit(events),
     }).run(looseTask);
     expect(result).toMatchObject({ status: 'ok', value: { answer: 'ok' } });
     expect(JSON.stringify(result)).not.toContain('grant');

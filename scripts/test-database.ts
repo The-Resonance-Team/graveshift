@@ -35,6 +35,12 @@ try {
     '--tsconfig-override',
     'apps/api/tsconfig.json',
     './apps/api/test/database',
+    './apps/api/src/actions',
+    './apps/api/src/audit',
+    './apps/api/src/hauntings',
+    './apps/api/src/auth/repo',
+    './apps/api/src/work-items',
+    './apps/daemon/src/platform.database.test.ts',
   ]);
 } finally {
   await run([...compose, 'down', '--volumes', '--remove-orphans']);

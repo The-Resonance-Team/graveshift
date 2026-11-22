@@ -1,28 +1,33 @@
-import { type WorkItem } from '@graveshift/core';
+import { WORK_COMMANDS } from '@graveshift/work';
 import { Module } from '@nestjs/common';
 
+import { AuditModule } from '../audit/audit.module';
+import { BOOT_CONFIG, type RootBootConfig } from '../config/boot.config';
 import { GRAVESHIFT_CONFIG } from '../config/config.provider';
-import { createFixDeps } from '../fix/fix.deps';
-import { FixService } from '../fix/fix.service';
-import { FIX_DEPS } from '../fix/fix.types';
-import { DEMO_WORK_ITEMS } from './work-item.fixtures';
-import { createWorkItemPolicy, WORK_ITEM_POLICY } from './work-item.policy';
-import { WORK_ITEM_SEED, WorkItemStore } from './work-item.store';
-import { WorkItemsController } from './work-items.controller';
+import { DaemonWorkClient } from '../fix/daemon-work.client';
+import { HauntingsModule } from '../hauntings/hauntings.module';
+import { InternalWorkController } from './controllers/internal-work.controller';
+import { WorkIngressController } from './controllers/work-ingress.controller';
+import { WorkItemsController } from './controllers/work-items.controller';
+import { createWorkItemPolicy, WORK_AGENTS, WORK_ITEM_POLICY } from './work-item.policy';
+import { WorkItemRepo } from './work-item.repo';
+import { WorkIngressService } from './work-ingress.service';
 
 @Module({
-  controllers: [WorkItemsController],
+  imports: [AuditModule, HauntingsModule],
+  controllers: [WorkItemsController, WorkIngressController, InternalWorkController],
   providers: [
-    WorkItemStore,
-    FixService,
-    { provide: FIX_DEPS, useFactory: createFixDeps, inject: [GRAVESHIFT_CONFIG] },
+    WorkItemRepo,
+    WorkIngressService,
+    DaemonWorkClient,
+    { provide: WORK_COMMANDS, useExisting: DaemonWorkClient },
     {
-      provide: WORK_ITEM_SEED,
-      // No demo data in production. An explicit flag is the only way to seed the store.
-      useFactory: (): readonly WorkItem[] =>
-        process.env.GRAVESHIFT_WORK_ITEM_DEMO === 'true' ? DEMO_WORK_ITEMS : [],
+      provide: WORK_AGENTS,
+      inject: [BOOT_CONFIG],
+      useFactory: (config: RootBootConfig) => config.agents,
     },
     { provide: WORK_ITEM_POLICY, useFactory: createWorkItemPolicy, inject: [GRAVESHIFT_CONFIG] },
   ],
+  exports: [WorkItemRepo, WORK_COMMANDS],
 })
 export class WorkItemsModule {}

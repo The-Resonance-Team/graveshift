@@ -1,15 +1,11 @@
-import type { Policy } from '@graveshift/policy';
+import type { RepoRules } from '@graveshift/patch/schemas';
 
-export type RepoPolicy = Policy['github']['repos'][number];
-
-export interface PatchFile {
-  path: string;
-  content: string | null;
-  linesChanged: number;
-}
-
-export interface Patch {
-  files: PatchFile[];
+export interface RepoPolicy extends RepoRules {
+  repo: string;
+  services: string[];
+  baseBranch: string;
+  branchPrefix: string;
+  draft: true;
 }
 
 export interface PrRef {

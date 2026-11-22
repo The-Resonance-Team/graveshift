@@ -1,4 +1,5 @@
-import type { EventEnvelope } from '@graveshift/core';
+import { prepareEnvelope, type EventEnvelope } from '@graveshift/core';
+import { ProtocolError } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
 import { MCP_READ_SCOPES } from '../../auth/scopes';
@@ -17,8 +18,16 @@ export interface EventTypeDescriptor {
   inputSchema: Record<string, unknown>;
   payloadSchema: Record<string, unknown>;
   scope: EventScope;
-  parsePayload(value: Record<string, unknown>): Record<string, unknown>;
-  payloadFrom(envelope: EventEnvelope): Record<string, unknown>;
+  arguments(input: Record<string, unknown>): EventFilter;
+  matches(envelope: EventEnvelope, filter: EventFilter): boolean;
+  occurrence(envelope: EventEnvelope): EventOccurrence;
+}
+
+export interface EventOccurrence {
+  eventId: string;
+  name: string;
+  timestamp: string;
+  data: Record<string, unknown>;
 }
 
 /** One stored occurrence. `seq` is the JetStream stream position used as cursor. */
@@ -41,14 +50,11 @@ export interface EventSource {
   read(afterSeq: number | null, maxEvents: number): Promise<EventReadResult>;
 }
 
-const serviceFilter = {
-  type: 'object',
-  properties: {
-    service: { type: 'string', description: 'Only events for this Grave.' },
-    severity: { type: 'string', enum: ['info', 'warning', 'critical'] },
-  },
-  additionalProperties: false,
-} as const;
+const EventFilterSchema = z.strictObject({
+  service: z.string().describe('Only events for this Grave.').optional(),
+  severity: z.enum(['info', 'warning', 'critical']).optional(),
+});
+export type EventFilter = z.infer<typeof EventFilterSchema>;
 
 const text = () => z.string().catch('');
 const count = () => z.number().catch(0);
@@ -115,10 +121,31 @@ function descriptor(
     description,
     delivery: ['poll'],
     scope,
-    inputSchema: serviceFilter,
+    inputSchema: z.toJSONSchema(EventFilterSchema),
     payloadSchema: z.toJSONSchema(PAYLOADS[name]),
-    parsePayload: (value) => PAYLOADS[name].parse(value),
-    payloadFrom: PICK[name],
+    arguments(input) {
+      const parsed = EventFilterSchema.safeParse(input);
+      if (!parsed.success) {
+        throw new ProtocolError(-32602, 'InvalidParams', { reason: 'arguments' });
+      }
+      return parsed.data;
+    },
+    matches(envelope, filter) {
+      return (
+        eventTypeFor(envelope) === name &&
+        (filter.service === undefined || filter.service === envelope.service) &&
+        (filter.severity === undefined || filter.severity === envelope.severity)
+      );
+    },
+    occurrence(input) {
+      const envelope = prepareEnvelope(input);
+      return {
+        eventId: envelope.id,
+        name,
+        timestamp: envelope.observedAt,
+        data: PAYLOADS[name].parse(PICK[name](envelope)),
+      };
+    },
   };
 }
 

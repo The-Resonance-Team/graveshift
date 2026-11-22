@@ -8,6 +8,22 @@ import type { McpTokenVerifier } from '@nestjs/mcp';
 import type { AuthInfo } from '@modelcontextprotocol/server';
 
 import { CredentialService } from '../auth/services/credential.service';
+import type { VerifiedCredential } from '../auth/auth.types';
+
+function credentialAuthInfo(
+  token: string,
+  principal: VerifiedCredential,
+): AuthInfo & { projectId: string } {
+  return {
+    token,
+    clientId: principal.clientId,
+    scopes: principal.scopes,
+    ...(principal.expiresAt === null
+      ? {}
+      : { expiresAt: Math.floor(Date.parse(principal.expiresAt) / 1000) }),
+    projectId: principal.projectId,
+  };
+}
 
 /** MCP shares the one credential component. No second issuer lives in this module. */
 @Injectable()
@@ -16,14 +32,7 @@ export class McpTokenVerifierService implements McpTokenVerifier {
 
   async verifyAccessToken(token: string): Promise<AuthInfo> {
     const principal = await this.credentials.verify(token, 'mcp');
-    const auth: AuthInfo & { projectId: string } = {
-      token,
-      clientId: principal.clientId,
-      scopes: principal.scopes,
-      expiresAt: Math.floor(Date.now() / 1000) + 3600,
-      projectId: principal.projectId,
-    };
-    return auth;
+    return credentialAuthInfo(token, principal);
   }
 }
 
@@ -43,13 +52,7 @@ export class McpBearerGuard implements CanActivate {
     try {
       const principal = await this.credentials.verify(token, 'mcp');
       request.mcpPrincipal = principal;
-      request.authInfo = {
-        token,
-        clientId: principal.clientId,
-        scopes: principal.scopes,
-        expiresAt: Math.floor(Date.now() / 1000) + 3600,
-        projectId: principal.projectId,
-      };
+      request.authInfo = credentialAuthInfo(token, principal);
       return true;
     } catch {
       const response = context

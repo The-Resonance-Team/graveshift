@@ -11,11 +11,6 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@graveshift/core": "workspace:*",
-    "@graveshift/metrics": "workspace:*"
-  },
-  "devDependencies": {
-    "@graveshift/sources-docker": "workspace:*",
-    "@graveshift/sources-k8s": "workspace:*"
+    "@graveshift/core": "workspace:*"
   }
 }

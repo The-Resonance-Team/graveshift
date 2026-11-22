@@ -1,4 +1,4 @@
-import { mergeAgentTemplates } from '@graveshift/agents';
+import { mergeAgentTemplates, type AgentConfig } from '@graveshift/agents';
 import type { GraveshiftConfig } from '@graveshift/config';
 import { WorkItemClientConfigSchema, type WorkItemClientConfig } from '@graveshift/core';
 
@@ -22,3 +22,7 @@ export function createWorkItemPolicy(config: GraveshiftConfig): WorkItemPolicy {
     autoFixEnabled: config.fix.enabled,
   };
 }
+
+/** The durable routing seam: the Agent configurations used by Work commands. */
+export const WORK_AGENTS = Symbol('WORK_AGENTS');
+export type WorkAgents = readonly AgentConfig[];

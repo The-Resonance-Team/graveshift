@@ -1,8 +1,8 @@
 # Security
 
-Graveshift is read-only toward production by default. These rules match `.kiro/steering/safety.md`. The statements below describe the code as built; where a control is not built it says so.
+The external API, daemon and privileged actuator have separate owners. Fixes end at draft pull requests. Model output never grants permission. [ADR 0008, ADRs 0014–0018 and ADRs 0019–0022](adr/) state the execution and privacy rules.
 
-## Guardrails
+## Authentication and private access
 
 1. **Only the actuator changes runtime state.** `packages/actuator` runs an `ActionRequest` only if the HMAC-SHA256 signature is valid, the token is unexpired (15 minutes, `TOKEN_TTL_MS`), the token has not been used before, the service is allowed, and `decide()` does not deny. Runtime actions are always `require_approval` in policy, even in `act` mode. The actuator refuses to start without `ACTUATOR_HMAC_SECRET` of 32 or more characters.
 2. **PR only.** `packages/fixer` pushes only to the policy branch prefix (default `graveshift/`) and opens pull requests with `draft: true`. It has no merge call. The patch guard rejects absolute paths, `..`, backslashes, forbidden paths and over-size patches before any GitHub call.
@@ -15,7 +15,9 @@ Graveshift is read-only toward production by default. These rules match `.kiro/s
 9. **Agent model calls.** `packages/gateway` is the single model path, including diagnosis. `apiKeyEnv` names an environment variable. Do not store keys in YAML. The adapter rejects an unset or placeholder key. The gateway redacts model inputs, applies per-Agent and global UTC daily budgets, requires evidence validation and an audit callback on every task. Transport retry follows the gateway config. Validation gets one retry with a redacted reason if budget remains. Diagnosis checks evidence refs and supplies a rules-only fallback. Policy is the authority for permissions. ADR 0009 removed the reference daemon and `packages/llm`.
 10. **One read-only config endpoint with a scope.** `GET /api/config/export` is the only config endpoint. It needs a bearer credential from the shared OAuth issuer with `config:export`, and it returns the whole config that `packages/config` validated at boot: `boot`, `agents`, `policy` and `fix`. The sanitized read views and the per-block exports are removed. The endpoint serves the one frozen boot provider; no handler reads a YAML file per request and no write path exists. `apiKeyEnv`, `appIdEnv` and `privateKeyEnv` stay environment variable names, and no environment value is ever resolved. `ThrottlerGuard` runs first, then `AuthGuard('oauth-client-access')` checks the exact scope before the handler reads any config. An anonymous request gets 401, a token without `config:export` gets 403, and an over-limit caller gets 429 before a handler or an audit transaction. `config:export` is HTTP-only: it is in the shared #63 catalog, never in `MCP_READ_SCOPES` or `PLUGIN_SCOPES`, and the create-credential request type does not advertise it, so the document never offers a scope the service denies. `CredentialService.issue` rejects it for both credential kinds. The shared #63 catalog holds one config scope: `config:export`. The older decision in #47 and ticket #73 still describe `config:read` and sanitized reads; the coordinator must update that text. A client can be issued only a scope it already holds. The export writes exactly one audit entry (`type: config.exported`, actor = the authenticated client id, payload = `{ exported: 'config' }`) through `AuditRepo.append` before the response; a failed append fails the request closed and serves no config. No unauthenticated write endpoint exists; the API holds no config write path. A config file change is a reviewed commit and a restart (ADR 0015). `AgentConfigSchema` and `AgentsFileSchema` are strict, so an unknown key stops boot. `PolicySchema` strips unknown keys at boot. E2E tests prove a set secret value, an unknown key with a secret, and a resolved environment value never appear in a response. The API logs no config secret. The dashboard is owned by another frontend engineer; this repo ships contracts and endpoint definitions only.
 
-## Audit chain
+Management clients exchange registered client credentials for short-lived JWTs. Verification checks issuer, audience, expiry, client registry and project. Credential management requires `tokens:manage`. Named MCP and Plugin Credentials have restricted scopes, expiry and revocation.
+
+Only a one-way hash of an issued Credential enters PostgreSQL. The value is returned once after commit. List responses omit hashes and values. Verification compares hashes in constant time. The active cap and Credential/audit mutation are atomic across instances. Revocation is read from durable state. MCP metadata uses the real stored expiry.
 
 `apps/api/src/audit` keeps audit entries in PostgreSQL, keyed by `project_id` and `seq`, with `at` (UTC), `actor`, `type`, `incident_id`, `payload`, `prev_hash` and `hash`.
 
@@ -28,9 +30,13 @@ Graveshift is read-only toward production by default. These rules match `.kiro/s
 - Credential creation, revocation and first observed expiry write an audit entry in the same PostgreSQL transaction as the credential change.
 - The one config export (`GET /api/config/export`) writes exactly one `config.exported` entry before the response. The entry stores `project_id` (the authenticated client's project) and `actor` (the authenticated client id) in their own columns; the `payload` holds only `{ exported: 'config' }`. No config content enters the payload. A failed append fails the request closed: no config is served.
 
-## MCP server
+Throttling resolves identity through the same verifier on cold and warm processes. Unknown tokens share the caller's IP bucket. An index warmed by an earlier request cannot change the identity rule. Storage failure does not become an anonymous authorization success.
 
-Every tool input has a Zod schema with limits (`list_incidents` at most 50, `get_audit_log` at most 100, `tail_logs` at most 200 lines). `query_metric` accepts only allowlisted metric and function names and range selectors of at most 60 minutes. `propose_fix` returns a policy decision and never executes; its reply says that rate and budget limits are not enforced because the daemon exposes no counters. The HTTP route calls the shared credential component and accepts only an unexpired, unrevoked MCP token with kind `mcp`. The component compares hashes in constant time. The `/mcp` bearer path is tested in-process only (HTTP e2e against the Nest application), not over a real network. The stdio launcher has no authentication by design: it trusts the local process and must only be started by a local user. It still builds the same `AppModule`, so `GRAVESHIFT_OAUTH_JWT_SECRET` must be set at boot even for stdio; `powers/graveshift/mcp.json` holds a placeholder that a local user replaces.
+Private HTTP requires a dedicated internal bearer credential per hop and the configured project. The daemon presents `GRAVESHIFT_API_INTERNAL_TOKEN` to the API, which checks it at every `/internal/*` route. The API presents `GRAVESHIFT_DAEMON_INTERNAL_TOKEN` to the daemon. The two values must differ; boot fails closed when they match. The daemon binds to loopback. External clients use only the API. Private routes are excluded from generated OpenAPI. Keep both internal credentials separate from management JWT secrets and the actuator HMAC secret.
+
+## Event and evidence privacy
+
+Approved event IDs, trace IDs, fingerprints and authorized routing metadata are nonsecret fields with explicit validation. UUID entropy alone does not rewrite them. Recognized secrets or personal data in identity/routing are rejected. Free text, source labels and payloads receive redaction. Sensitive payload fields are removed without collapsing distinct surviving keys.
 
 The MCP audit tools are stubs in v2. `get_audit_log` returns an empty list, and `verify_audit_chain` returns `{ ok: false, unavailable: true }`, because the v2 daemon exposes no audit read API. These tools do not read the PostgreSQL audit chain that this service writes. Tickets #47 and #60 own the real implementations.
 
@@ -69,7 +75,17 @@ The adapter accepts `event` items and skips `session`, `client_report`, `attachm
 
 The CI e2e suite uses a fake publisher and fake Credential verifier. It makes no socket call. To test an official SDK locally, run `env -u CI bun test --tsconfig-override apps/api/tsconfig.json apps/api/test/sentry-sdk.loopback.e2e.test.ts`. The test starts Nest on loopback and sends one SDK event. It uses no Sentry account, NATS endpoint or production Credential.
 
-## Known gaps
+Preparation accepts JSON data only and validates the serialized envelope again. A publisher cannot acknowledge data that the reader will reject after a privacy rewrite. The same identity policy protects MCP occurrence output.
+
+Medium uses one retained evidence collection for context, citation checks and deterministic fallback. Untrusted text cannot open or close framing sections. Every prompt path uses the shared gateway. Evidence refs remain stable in the final model context.
+
+## Model and policy controls
+
+The gateway owns provider capability checks, cancellation, configured transport retry, one validation correction, Agent/global budgets and terminal audit. An unsupported connector cannot reach a structured-language task. Unknown pricing or usage remains explicit and blocks further acceptance under the configured policy.
+
+A model result is accepted only after durable audit acknowledgement. Audit failure returns no model value and does not run another model call or fallback. Known usage remains visible. API keys come from the Agent's named environment variable; they never enter YAML, config responses or audit payloads.
+
+Policy is pure, deny-first and default deny. The daemon supplies complete recorded Diagnosis and real counters. An unmapped Grave, missing context or unknown counter fails closed. A Human assignment is manual work and cannot invoke auto-fix or Fix now. An Agent assignment selects the exact executing Agent, with its client trigger setting deciding automatic or explicit start.
 
 - The v2 daemon serves only `/healthz` on localhost. The `/mcp` bearer path is checked in-process only, and stdio is unauthenticated by design.
 - Consumed actuator token IDs are in memory; a restart inside the 15-minute window forgets them.
@@ -80,3 +96,37 @@ The CI e2e suite uses a fake publisher and fake Credential verifier. It makes no
 - Expiry audit is written the first time an expired credential is presented; an idle credential does not create an expiry event until a request observes it.
 - `GRAVESHIFT_OAUTH_JWT_SECRET` has no default. Set it to a secret of at least 32 characters before boot.
 - Without `GRAVESHIFT_NATS_URL`, publish calls fail closed with 503. The API does not buffer envelopes on disk.
+
+## Exorcism publication
+
+The canonical Patch guard runs at generation, publication and separate-process intake. It checks paths, collisions, file count, line limits and actual content. Files that cross a symlink or leave the workspace are rejected.
+
+Verification reads a bounded source snapshot at a fixed base and blob identity, applies the Patch in an isolated workspace and computes actual changes. Commands receive no inherited credentials and have no network access. Timeouts terminate the owned process group. Check output does not become public failure text. A platform that cannot enforce isolation fails closed.
+
+Publication rechecks the source base, owns safe titles/subjects/body text and uses stable full-identity branch keys. It creates `draft: true` and exposes no merge operation. Durable claims and publication intent precede writes. A known draft ref is retained after labels or a later audit handoff fails. Uncertain effects are reconciled before another write.
+
+GitHub App credentials are scoped to configured installations. Concurrent refreshes share one pending operation. Separate-process one-shot jobs still validate policy, artifacts and filesystem paths independently; shared algorithms do not remove their checks.
+
+## Privileged runtime actions
+
+The actuator is separate from Fix execution. It checks the canonical request, HMAC, valid Blessing interval, approved person, action binding, named target, scale bounds, safer mode, circuit breaker and rate limit. No Fix path invokes it.
+
+Admission reserves capacity before an asynchronous runtime adapter runs. Required audit acknowledgement precedes the effect. Denials consume neither the token nor capacity. Admitted failures count against the rate window. Bounded history fails closed rather than evicting an unexpired consumed token.
+
+Durable claims protect token and action identity across process restart. A prior incomplete claim is uncertain and cannot authorize another execution. Terminal audit failure retains the known runtime result; it never retries the action. Docker and Kubernetes writers retain narrow capabilities and no general shell execution.
+
+## Audit and database enforcement
+
+Each project has one append-only hash chain. A transaction assigns sequence, timestamp, canonical payload, previous hash and hash. PostgreSQL triggers reject UPDATE and DELETE. An exact producer-key retry returns the prior entry; changed facts conflict. Credential changes and their chain entry commit together.
+
+Verification detects edited fields, sequence gaps, reordering and changed hashes. Tail truncation still requires an external head anchor to detect. Database operators retain control over schema and backups; triggers do not replace that operational trust.
+
+Production uses one PostgreSQL store with no file fallback. Local tests use a unique Docker instance with no host data mount. The destructive fixture guard requires the test opt-in, matching run identity and loopback database. CI does not start a database.
+
+## Current operational limits
+
+- Provider budgets are process-local. Reserve capacity before parallel billing, and persist spend before restart-safe daily enforcement is required.
+- Kubernetes watch expiry can leave an observation gap. Scope the read role to the namespaces under watch.
+- Linux verification requires bubblewrap and was not exercised on this macOS development host. Sandbox startup failure blocks publication.
+- Banshee approval collection, webhook delivery and hosted multi-project operation remain deferred.
+- Deployment keys, GitHub installation permission and network controls must be configured for the chosen local deployment. No live production system was changed by the architecture verification.

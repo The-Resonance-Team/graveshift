@@ -186,12 +186,29 @@ export function validatePatch(raw: string, rules: RepoRules): Patch {
 }
 
 export function redactPatch(patch: Patch): Patch {
-  return PatchSchema.parse({
-    files: patch.files.map((file) => ({
-      ...file,
-      content: file.content === null ? null : redact(file.content),
-    })),
-  });
+  // Redaction keeps the whole-tree base and every per-file base blob: dropping
+  // them would make the signed artifact unverifiable and bypass the base guard.
+  const files = patch.files.map((file) => ({
+    ...file,
+    content: file.content === null ? null : redact(file.content),
+  }));
+  const parsed = PatchSchema.safeParse({ baseSha: patch.baseSha, files });
+  if (!parsed.success) throw new Error('redacted patch failed schema validation');
+  return parsed.data;
+}
+
+export class OneShotBaseError extends Error {
+  readonly code = 'PATCH_BASE_STALE';
+
+  constructor() {
+    super('patch base does not match the checked out commit');
+    this.name = 'OneShotBaseError';
+  }
+}
+
+// The patch is bound to one base commit. A changed base must stop the job before any write.
+export function assertPatchBase(patch: Patch, baseSha: string): void {
+  if (!/^[a-f0-9]{40}$/.test(baseSha) || patch.baseSha !== baseSha) throw new OneShotBaseError();
 }
 
 export function assertNoSymlinkEscape(rootReal: string, target: string): void {

@@ -1,22 +1,17 @@
-import type { IncidentView } from './mcp.types';
+import { prepareRecordedHaunting, type RecordedHaunting } from '@graveshift/core/recorded';
 
 /** Autopsy: the postmortem for a closed incident, built only from recorded facts. */
-export function writeAutopsy(view: IncidentView): string {
+export function writeAutopsy(input: RecordedHaunting): string {
+  const view = prepareRecordedHaunting(input);
   const { incident } = view;
-  const diagnosis = incident.diagnosis as
-    | {
-        rootCause?: string;
-        confidence?: number;
-        evidence?: Array<{ ref: string; excerpt: string }>;
-      }
-    | undefined;
+  const diagnosis = incident.diagnosis;
   const lines = [
     `# Autopsy: ${incident.service} (${incident.id})`,
     '',
     `- State: ${incident.state}`,
     `- Severity: ${view.severity ?? 'unknown'}`,
-    `- Opened: ${String(incident.openedAt ?? 'unknown')}`,
-    `- Resolved: ${String(incident.resolvedAt ?? 'not resolved')}`,
+    `- Opened: ${incident.openedAt}`,
+    `- Resolved: ${incident.resolvedAt ?? 'not resolved'}`,
     '',
     '## Root cause',
     diagnosis?.rootCause ?? 'No diagnosis was recorded.',

@@ -1,192 +1,138 @@
 import { describe, expect, test } from 'bun:test';
-import { mapDockerEvent } from '@graveshift/sources-docker';
-import { mapK8sEvent } from '@graveshift/sources-k8s';
 
-import { at, harness, signal, T0 } from './test-helpers';
+import { harness, health, log, metric, observation, signal } from './test-helpers';
 
-describe('rules', () => {
-  test('log.error-burst fires at 5 errors in 60 s, not 4, not when spread out', () => {
-    const four = harness();
-    for (let i = 0; i < 4; i++) four.watcher.log('api', 'ERROR boom', at(i * 10));
-    expect(four.outcomes).toHaveLength(0);
-
-    const five = harness();
-    for (let i = 0; i < 5; i++) five.watcher.log('api', 'ERROR boom', at(i * 10));
-    expect(five.accepted('log.error-burst')).toHaveLength(1);
-
+describe('Wraith observation thresholds through ingest', () => {
+  test('requires five error log lines in 60 seconds and ignores ordinary lines', () => {
+    const quick = harness();
+    for (const seconds of [0, 10, 20, 30]) quick.watcher.ingest(log(seconds));
+    expect(quick.outcomes).toHaveLength(0);
+    quick.watcher.ingest(log(40));
+    expect(quick.accepted('log.error-burst')).toHaveLength(1);
     const spread = harness();
-    for (let i = 0; i < 8; i++) spread.watcher.log('api', 'ERROR boom', at(i * 20));
+    for (let seconds = 0; seconds < 160; seconds += 20) spread.watcher.ingest(log(seconds));
     expect(spread.outcomes).toHaveLength(0);
-
     const quiet = harness();
-    for (let i = 0; i < 10; i++) quiet.watcher.log('api', 'GET /candies/1 200', at(i));
+    for (let seconds = 0; seconds < 10; seconds += 1)
+      quiet.watcher.ingest(log(seconds, 'GET /candies 200'));
     expect(quiet.outcomes).toHaveLength(0);
   });
 
-  test('runtime.restart-loop fires at 3 restarts in 5 min or on crash_loop', () => {
+  test('requires three restarts in five minutes or one native crash loop observation', () => {
     const slow = harness();
-    for (const s of [0, 200, 400]) slow.watcher.ingest(signal('restart', s));
+    for (const seconds of [0, 200, 400]) slow.watcher.ingest(signal('restart', seconds));
     expect(slow.outcomes).toHaveLength(0);
-
     const quick = harness();
-    for (const s of [0, 100, 250]) quick.watcher.ingest(signal('restart', s));
+    for (const seconds of [0, 100, 250]) quick.watcher.ingest(signal('restart', seconds));
     expect(quick.accepted('runtime.restart-loop')).toHaveLength(1);
-
     const crash = harness();
-    crash.watcher.ingest(signal('crash_loop', 0, 'worker', 'k8s'));
+    crash.watcher.ingest(signal('crash_loop', 0));
     expect(crash.accepted('runtime.restart-loop')).toHaveLength(1);
   });
 
-  test('runtime.oom fires on an oom signal', () => {
-    const h = harness();
-    h.watcher.ingest(signal('oom', 0));
-    expect(h.accepted('runtime.oom')).toHaveLength(1);
+  test('detects OOM and image pull observations immediately', () => {
+    const captured = harness();
+    captured.watcher.ingest(signal('oom', 0));
+    captured.watcher.ingest(signal('image_pull_backoff', 1));
+    expect(captured.accepted().map((outcome) => outcome.detection.rule)).toEqual([
+      'runtime.oom',
+      'k8s.image-pull',
+    ]);
   });
 
-  test('runtime.unhealthy needs 3 consecutive failed checks and resets on success', () => {
-    const h = harness();
-    h.watcher.healthCheck('api', false, at(0));
-    h.watcher.healthCheck('api', false, at(15));
-    h.watcher.healthCheck('api', true, at(30));
-    h.watcher.healthCheck('api', false, at(45));
-    h.watcher.healthCheck('api', false, at(60));
-    expect(h.outcomes).toHaveLength(0);
-    h.watcher.healthCheck('api', false, at(75));
-    expect(h.accepted('runtime.unhealthy')).toHaveLength(1);
-
-    const events = harness();
-    for (const s of [0, 5, 10]) events.watcher.ingest(signal('unhealthy', s));
-    expect(events.accepted('runtime.unhealthy')).toHaveLength(1);
+  test('counts consecutive health failures and resets on a successful check', () => {
+    const captured = harness();
+    for (const [seconds, ok] of [
+      [0, false],
+      [15, false],
+      [30, true],
+      [45, false],
+      [60, false],
+    ] as const)
+      captured.watcher.ingest(health(seconds, ok));
+    expect(captured.outcomes).toHaveLength(0);
+    captured.watcher.ingest(health(75, false));
+    expect(captured.accepted('runtime.unhealthy')).toHaveLength(1);
+    const runtime = harness();
+    for (const seconds of [0, 5, 10]) runtime.watcher.ingest(signal('unhealthy', seconds));
+    expect(runtime.accepted('runtime.unhealthy')).toHaveLength(1);
   });
 
-  test('metric.5xx-rate needs more than 5% held for 1 min', () => {
-    const h = harness();
-    for (const s of [0, 15, 30, 45])
-      h.watcher.metrics('api', { errorRate5xx: 0.2, p95LatencySeconds: null }, at(s));
-    expect(h.outcomes).toHaveLength(0);
-    h.watcher.metrics('api', { errorRate5xx: 0.2, p95LatencySeconds: null }, at(60));
-    expect(h.accepted('metric.5xx-rate')).toHaveLength(1);
-
+  test('requires a 5xx rate above five percent for one minute and resets on a dip', () => {
+    const captured = harness();
+    for (const seconds of [0, 15, 30, 45]) captured.watcher.ingest(metric(seconds, 0.2));
+    expect(captured.outcomes).toHaveLength(0);
+    captured.watcher.ingest(metric(60, 0.2));
+    expect(captured.accepted('metric.5xx-rate')).toHaveLength(1);
     const dip = harness();
-    for (const [s, rate] of [
+    for (const [seconds, rate] of [
       [0, 0.2],
       [30, 0.01],
       [60, 0.2],
       [90, 0.2],
-    ] as const) {
-      dip.watcher.metrics('api', { errorRate5xx: rate, p95LatencySeconds: null }, at(s));
-    }
+    ] as const)
+      dip.watcher.ingest(metric(seconds, rate));
     expect(dip.outcomes).toHaveLength(0);
-
     const exact = harness();
-    for (const s of [0, 60])
-      exact.watcher.metrics('api', { errorRate5xx: 0.05, p95LatencySeconds: null }, at(s));
+    for (const seconds of [0, 60]) exact.watcher.ingest(metric(seconds, 0.05));
     expect(exact.outcomes).toHaveLength(0);
   });
 
-  test('metric.p95-latency fires above 1.5 s only', () => {
-    const h = harness();
-    h.watcher.metrics('api', { errorRate5xx: null, p95LatencySeconds: 1.5 }, at(0));
-    expect(h.outcomes).toHaveLength(0);
-    h.watcher.metrics('api', { errorRate5xx: null, p95LatencySeconds: 1.81 }, at(15));
-    expect(h.accepted('metric.p95-latency')).toHaveLength(1);
-  });
-
-  test('k8s.image-pull fires on image_pull_backoff', () => {
-    const h = harness();
-    h.watcher.ingest(signal('image_pull_backoff', 0, 'api', 'k8s'));
-    expect(h.accepted('k8s.image-pull')).toHaveLength(1);
-  });
-});
-
-describe('dedupe, grouping, severity, silence', () => {
-  test('a repeated fingerprint inside 10 min is a duplicate, after 10 min it fires again', () => {
-    const h = harness();
-    h.watcher.ingest(signal('oom', 0));
-    h.watcher.ingest(signal('oom', 599));
-    h.watcher.ingest(signal('oom', 600));
-    expect(h.outcomes.map((o) => o.status)).toEqual(['accepted', 'duplicate', 'accepted']);
-  });
-
-  test('different services do not dedupe each other', () => {
-    const h = harness();
-    h.watcher.ingest(signal('oom', 0, 'api'));
-    h.watcher.ingest(signal('oom', 1, 'worker'));
-    expect(h.accepted()).toHaveLength(2);
-  });
-
-  test('signals for one service group into one incident, other services get their own', () => {
-    const h = harness();
-    h.watcher.ingest(signal('oom', 0));
-    h.watcher.ingest(signal('image_pull_backoff', 5, 'api', 'k8s'));
-    h.watcher.ingest(signal('oom', 6, 'worker'));
-    const changes = h.accepted().map((o) => (o.status === 'accepted' ? o.change : null));
-    expect(changes.map((c) => [c?.type, c?.incident.id])).toEqual([
-      ['opened', 'inc-1'],
-      ['updated', 'inc-1'],
-      ['opened', 'inc-2'],
-    ]);
-    expect(changes[1]?.incident.signalIds).toHaveLength(2);
-    expect(changes[1]?.incident.state).toBe('open');
-  });
-
-  test('severity is the highest of the incident signals', () => {
-    const h = harness();
-    for (let i = 0; i < 5; i++) h.watcher.log('api', 'error x', at(i));
-    const first = h.accepted()[0];
-    expect(first?.status === 'accepted' && first.change.severity).toBe('warning');
-    h.watcher.ingest(signal('oom', 10));
-    const last = h.accepted().at(-1);
-    expect(last?.status === 'accepted' && last.change.severity).toBe('critical');
-  });
-
-  test('released incidents let the next signal open a new incident', () => {
-    const h = harness();
-    h.watcher.ingest(signal('oom', 0));
-    h.watcher.release('inc-1');
-    h.watcher.ingest(signal('image_pull_backoff', 5, 'api', 'k8s'));
-    expect(h.accepted().map((o) => (o.status === 'accepted' ? o.change.incident.id : ''))).toEqual([
-      'inc-1',
-      'inc-2',
-    ]);
-  });
-
-  test('a salt line suppresses signals inside the window only, and does not start a dedupe window', () => {
-    const h = harness();
-    h.watcher.silence({ service: 'api', from: at(0), until: at(300) });
-    h.watcher.ingest(signal('oom', 10));
-    h.watcher.ingest(signal('oom', 10, 'worker'));
-    h.watcher.ingest(signal('oom', 300));
-    expect(h.outcomes.map((o) => o.status)).toEqual(['suppressed', 'accepted', 'accepted']);
-  });
-});
-
-describe('both runtime sources', () => {
-  test('docker oom and k8s image pull each create an incident via the real mappers', () => {
-    const h = harness();
-    const docker = mapDockerEvent(
-      { Type: 'container', Action: 'oom', Actor: { ID: 'c1', Attributes: {} }, time: T0 / 1000 },
-      'worker',
+  test('requires p95 latency above 1.5 seconds and ignores missing metric samples', () => {
+    const captured = harness();
+    captured.watcher.ingest(metric(0, null, 1.5));
+    captured.watcher.ingest(metric(1, null));
+    expect(captured.outcomes).toHaveLength(0);
+    captured.watcher.ingest(metric(15, null, 1.81));
+    expect(captured.accepted('metric.p95-latency')).toHaveLength(1);
+    captured.watcher.ingest(
+      observation('metric.sample', 20, { errorRate5xx: 'bad', p95LatencySeconds: 8 }),
     );
-    const k8s = mapK8sEvent({
-      uid: 'u1',
-      reason: 'Failed',
-      message: 'Error: ErrImagePull',
-      type: 'Warning',
-      namespace: 'candy-shop',
-      involvedKind: 'Pod',
-      involvedName: 'api-5d8f9c7b6d-x2k4q',
-      resourceVersion: '1',
-      at: at(1),
-    });
-    for (const s of [docker, k8s]) if (s) h.watcher.ingest({ kind: 'signal', signal: s });
-    expect(h.accepted().map((o) => o.detection.rule)).toEqual(['runtime.oom', 'k8s.image-pull']);
-    expect(h.watcher.openIncidents().map((i) => i.incident.service)).toEqual(['worker', 'api']);
+    expect(captured.accepted()).toHaveLength(1);
   });
 
-  test('connection events are ignored', () => {
-    const h = harness();
-    h.watcher.ingest({ kind: 'source_disconnected', at: at(0), reason: 'EOF' });
-    expect(h.outcomes).toHaveLength(0);
+  test('server HTTP errors drive detection while request telemetry and client errors do not', () => {
+    const captured = harness();
+    captured.watcher.ingest(observation('http.request', 0, { status: 500 }));
+    captured.watcher.ingest(
+      observation('http.error', 1, { message: 'missing' }, { severity: 'info' }),
+    );
+    captured.watcher.ingest(
+      observation('http.error', 2, { message: 'boom' }, { severity: 'critical' }),
+    );
+    expect(captured.accepted('http.error')).toHaveLength(1);
+  });
+
+  test('crew output and connection events cannot feed detection', () => {
+    const captured = harness();
+    for (const type of [
+      'haunting.opened',
+      'haunting.updated',
+      'diagnosis.created',
+      'fix.completed',
+      'audit.entry',
+      'collector.disconnected',
+      'collector.reconnected',
+    ]) {
+      captured.watcher.ingest(
+        observation(
+          type,
+          0,
+          { line: 'ERROR', errorRate5xx: 1, p95LatencySeconds: 10, kind: 'oom' },
+          { severity: 'critical' },
+        ),
+      );
+    }
+    expect(captured.outcomes).toHaveLength(0);
+    expect(captured.watcher.openIncidents()).toHaveLength(0);
+  });
+
+  test('replayed event ids cannot inflate temporal counts', () => {
+    const captured = harness();
+    for (let count = 0; count < 10; count += 1) captured.watcher.ingest(signal('restart', 0));
+    captured.watcher.ingest(signal('restart', 1));
+    expect(captured.outcomes).toHaveLength(0);
+    captured.watcher.ingest(signal('restart', 2));
+    expect(captured.accepted()).toHaveLength(1);
   });
 });

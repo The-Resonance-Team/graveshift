@@ -14,7 +14,8 @@ import {
   type AuthConfig,
   type CredentialVerifier,
 } from '../../src/auth/auth.types';
-import { TEST_CONFIG } from './auth-test-config';
+import { BOOT_CONFIG } from '../../src/config/boot.config';
+import { TEST_CONFIG, testBootConfig } from './auth-test-config';
 import { FakeCredentialRepo } from './fake-credential-repo';
 
 export { TEST_CONFIG };
@@ -34,7 +35,10 @@ export async function buildAuthApp(
   const repo = new FakeCredentialRepo();
   const publisher = publisherOverride ?? createInMemoryPublisher();
   const config = { ...TEST_CONFIG, ...overrides };
+  const boot = { ...(await testBootConfig()), auth: config };
   const builder = Test.createTestingModule({ imports: [AppModule] })
+    .overrideProvider(BOOT_CONFIG)
+    .useValue(boot)
     .overrideProvider(CREDENTIAL_CONFIG)
     .useValue(config)
     .overrideProvider(CREDENTIAL_REPO)

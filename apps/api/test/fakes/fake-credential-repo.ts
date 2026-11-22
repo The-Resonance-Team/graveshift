@@ -1,11 +1,16 @@
 import type { CredentialRecord, Principal } from '../../src/auth/auth.types';
-import { CredentialLimitError, CredentialRepo } from '../../src/auth/repo/credential.repo';
+import {
+  CredentialLimitError,
+  CredentialRepo,
+  MAX_ACTIVE_CREDENTIALS,
+} from '../../src/auth/repo/credential.repo';
 
 /** In-memory store for tests. It reads no file and holds no secret. */
-export class FakeCredentialRepo extends CredentialRepo {
+export class FakeCredentialRepo implements Pick<CredentialRepo, keyof CredentialRepo> {
   readonly records: CredentialRecord[] = [];
   readonly auditEvents: Array<{ actor: string; type: string; payload: Record<string, unknown> }> =
     [];
+  auditFailure: Error | undefined;
 
   async list(principal: Principal): Promise<CredentialRecord[]> {
     return this.records
@@ -17,10 +22,12 @@ export class FakeCredentialRepo extends CredentialRepo {
   }
 
   async findByHash(hash: string): Promise<CredentialRecord | undefined> {
-    return this.records.find((record) => record.hash === hash);
+    const record = this.records.find((item) => item.hash === hash);
+    return record === undefined ? undefined : { ...record };
   }
 
   async add(record: CredentialRecord): Promise<void> {
+    if (this.auditFailure) throw this.auditFailure;
     const active = this.records.filter(
       (item) =>
         item.clientId === record.clientId &&
@@ -28,7 +35,7 @@ export class FakeCredentialRepo extends CredentialRepo {
         item.revokedAt === null &&
         (item.expiresAt === null || Date.parse(item.expiresAt) > Date.now()),
     ).length;
-    if (active >= 10) throw new CredentialLimitError();
+    if (active >= MAX_ACTIVE_CREDENTIALS) throw new CredentialLimitError();
     this.records.push({ ...record });
     this.auditEvents.push({
       actor: record.clientId,
@@ -38,6 +45,7 @@ export class FakeCredentialRepo extends CredentialRepo {
   }
 
   async revoke(id: string, principal: Principal, at: string): Promise<boolean> {
+    if (this.auditFailure) throw this.auditFailure;
     const record = this.records.find(
       (item) =>
         item.id === id &&
@@ -56,6 +64,7 @@ export class FakeCredentialRepo extends CredentialRepo {
   }
 
   async recordExpiry(id: string, at: string): Promise<void> {
+    if (this.auditFailure) throw this.auditFailure;
     const record = this.records.find((item) => item.id === id);
     if (!record || record.expirationAuditedAt !== null) return;
     record.expirationAuditedAt = at;

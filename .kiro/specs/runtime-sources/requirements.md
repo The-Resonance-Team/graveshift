@@ -1,8 +1,8 @@
 # Runtime Sources — Requirements
 
-## R1 RuntimeSource contract
-- R1.1 WHEN a runtime source is registered THE SYSTEM SHALL implement `listServices`, `watchEvents`, `tailLogs` and `getHealth`.
-- R1.2 Docker and K8s implementations SHALL pass the shared contract suite.
+## R1 Collector contract
+- R1.1 A runtime Collector implements `start(context)` and `stop()`, and publishes canonical Event envelopes through its supplied Publisher.
+- R1.2 Docker and Kubernetes adapters provide inventory, log and health reads and pass shared lifetime tests.
 
 ## R2 Reconnect
 - R2.1 WHEN a source connection drops THE SYSTEM SHALL reconnect with exponential backoff.
@@ -13,4 +13,4 @@
 
 ## R4 K8s source
 - R4.1 The K8s source SHALL use `@kubernetes/client-node` with the in-cluster ServiceAccount and `graveshift-reader` RBAC.
-- R4.2 WHEN a K8s event arrives THE SYSTEM SHALL map it to the normalized signal set (OOM, restart, ImagePullBackOff, unhealthy).
+- R4.2 A Kubernetes event maps to a normalized runtime Event envelope. Its Grave identity includes the configured Collector, namespace and deployment.

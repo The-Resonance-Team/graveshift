@@ -13,6 +13,7 @@ const credential: VerifiedCredential = {
   kind: 'plugin',
   service: 'api',
   projectId: '12345',
+  expiresAt: null,
 };
 const verifier: CredentialVerifier = {
   async verify(value: string, expectedKind): Promise<VerifiedCredential> {

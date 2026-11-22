@@ -16,6 +16,7 @@ const TEST_CREDENTIAL: VerifiedCredential = {
   kind: 'plugin',
   service: 'api',
   projectId: '12345',
+  expiresAt: null,
 };
 const verifier: CredentialVerifier = {
   async verify(value: string, expectedKind): Promise<VerifiedCredential> {
@@ -67,12 +68,15 @@ describe('POST /api/:projectId/envelope (e2e)', () => {
     });
     expect(ctx.publisher.envelopes[0]?.payload.message).not.toContain('alice@example.com');
     expect(ctx.publisher.envelopes[0]?.payload.request).toMatchObject({ method: 'GET' });
-    expect(ctx.publisher.envelopes[0]?.payload.request).toMatchObject({
-      headers: { authorization: '[REDACTED]' },
-    });
-    expect(JSON.stringify(ctx.publisher.envelopes[0]?.payload.request ?? {})).not.toContain(
-      'secret',
-    );
+    // prepareEnvelope drops sensitive payload keys (the base contract), so the
+    // authorization header key and its value never reach the published envelope.
+    expect(
+      (ctx.publisher.envelopes[0]?.payload.request as { headers?: unknown } | undefined)?.headers,
+    ).toEqual({});
+    const requestJson = JSON.stringify(ctx.publisher.envelopes[0]?.payload.request ?? {});
+    expect(requestJson).not.toContain('secret');
+    expect(requestJson).not.toContain('authorization');
+    expect(requestJson).not.toContain('Bearer');
   });
 
   test('accepts an envelope with only skipped items and publishes nothing', async () => {

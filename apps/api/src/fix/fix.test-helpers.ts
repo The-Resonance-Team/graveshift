@@ -23,8 +23,19 @@ export const repo: RepoPolicy = {
   maxLinesChanged: 200,
 };
 
+const BASE_SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const BLOB_SHA = '96759cc1f604468aa78a72be3c5be39abfc788b2';
+
 export const patch: Patch = {
-  files: [{ path: 'src/api.ts', content: 'export const ok = true;\n', linesChanged: 1 }],
+  baseSha: BASE_SHA,
+  files: [
+    {
+      path: 'src/api.ts',
+      content: 'export const ok = true;\n',
+      linesChanged: 1,
+      baseBlobSha: BLOB_SHA,
+    },
+  ],
 };
 
 export const baseItem: WorkItem = {
@@ -86,8 +97,10 @@ export function fakeGateway(value: Patch | 'unavailable') {
   const gateway: PatchGateway = {
     async run(task) {
       calls.push(task);
-      if (value === 'unavailable') return { status: 'unavailable' };
-      return { status: 'ok', value, model: 'fake-model', usage: { in: 0, out: 0 }, costUsd: 0 };
+      const totals = { callId: 'fake-call', usage: { in: 0, out: 0 }, costUsd: 0 };
+      if (value === 'unavailable')
+        return { ...totals, status: 'unavailable', reason: 'unavailable' };
+      return { ...totals, status: 'ok', value, model: 'fake-model' };
     },
   };
   return { gateway, calls };
@@ -101,11 +114,23 @@ export function fakeClient(over: { prError?: Error } = {}) {
   const client: GitHubClient = {
     async getBaseSha(name, branch) {
       push('getBaseSha', name, branch);
-      return 'base-sha';
+      return BASE_SHA;
     },
     async getCommitTree(name, sha) {
       push('getCommitTree', name, sha);
       return 'base-tree';
+    },
+    async getTree(name, sha) {
+      push('getTree', name, sha);
+      return [{ path: 'src/api.ts', blobSha: BLOB_SHA, mode: '100644' }];
+    },
+    async readBlob(name, sha) {
+      push('readBlob', name, sha);
+      return 'export const ok = false;\n';
+    },
+    async getExistingDraft(name, branch, baseSha) {
+      push('getExistingDraft', name, branch, baseSha);
+      return undefined;
     },
     async createBlob(name, content) {
       push('createBlob', name, content);
@@ -129,14 +154,6 @@ export function fakeClient(over: { prError?: Error } = {}) {
     },
     async addLabels(name, number, labels) {
       push('addLabels', name, number, labels);
-    },
-    async listCheckRuns(name, sha) {
-      push('listCheckRuns', name, sha);
-      return [];
-    },
-    async getPullRequest(name, number) {
-      push('getPullRequest', name, number);
-      return { state: 'open', merged: false, headSha: 'commit-sha' };
     },
   };
   return { client, calls };
