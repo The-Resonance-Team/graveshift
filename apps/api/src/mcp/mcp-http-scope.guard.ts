@@ -14,6 +14,7 @@ export const MCP_READ_SCOPE_ORDER = [
   'audit:read',
   'logs:read',
   'metrics:read',
+  'fix:propose',
 ] as const;
 
 /** Keys are exact registered primitive names in snake_case. A wrong name is denied with 403. */

@@ -20,7 +20,11 @@ export function configureApp<T extends INestApplication>(app: T): T {
   // Request DTOs carry explicit @ApiProperty metadata: this Bun API has no Nest CLI
   // compile step, so the Swagger classValidatorShim plugin never runs and rule #8
   // does not apply. The metadata keeps the generated contract request types intact.
-  SwaggerModule.setup('docs', app, createOpenApiDocument(app));
+  // The UI is a local development aid. In production it is not exposed as an extra
+  // surface; the generated contract document stays available through the build step.
+  if (process.env.NODE_ENV !== 'production') {
+    SwaggerModule.setup('docs', app, createOpenApiDocument(app));
+  }
   return app;
 }
 
