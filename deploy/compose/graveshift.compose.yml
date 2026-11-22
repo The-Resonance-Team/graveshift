@@ -104,10 +104,10 @@ services:
     cap_drop: [ALL]
     command: ['-c', '/etc/nats/nats.conf']
     environment:
-      NATS_PUBLISH_USER: ${NATS_PUBLISH_USER:-}
-      NATS_PUBLISH_PASSWORD: ${NATS_PUBLISH_PASSWORD:-}
-      NATS_READ_USER: ${NATS_READ_USER:-}
-      NATS_READ_PASSWORD: ${NATS_READ_PASSWORD:-}
+      NATS_PUBLISH_USER: ${NATS_PUBLISH_USER:?NATS_PUBLISH_USER is required}
+      NATS_PUBLISH_PASSWORD: ${NATS_PUBLISH_PASSWORD:?NATS_PUBLISH_PASSWORD is required}
+      NATS_READ_USER: ${NATS_READ_USER:?NATS_READ_USER is required}
+      NATS_READ_PASSWORD: ${NATS_READ_PASSWORD:?NATS_READ_PASSWORD is required}
     volumes:
       - ./nats/nats.conf:/etc/nats/nats.conf:ro
       - /run/secrets/nats:/run/secrets/nats:ro

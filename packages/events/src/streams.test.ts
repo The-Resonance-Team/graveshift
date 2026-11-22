@@ -74,6 +74,17 @@ describe('dead-letter subject', () => {
     expect(deadLetterSubject('acme', 'checkout.api')).toBe('graveshift.acme.dlq.checkout_api');
   });
 
+  test('rejects an unsafe tenantId', () => {
+    for (const tenantId of ['a.b', 'a*b', 'a>b', 'a b', '']) {
+      expect(() => deadLetterSubject(tenantId, 'checkout')).toThrow('tenantId');
+    }
+  });
+
+  test('maps an unsafe Grave token but keeps the tenant check', () => {
+    expect(deadLetterSubject('acme', 'check out')).toBe('graveshift.acme.dlq.check_out');
+    expect(() => deadLetterSubject('bad.tenant', 'check out')).toThrow('tenantId');
+  });
+
   test('does not match the detection consumer filter', () => {
     const filter = DETECTION_CONSUMER.filter_subject;
     const parts = filter.split('.');

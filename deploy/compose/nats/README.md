@@ -18,4 +18,18 @@ nats stream add --config graveshift-events.stream.json
 nats consumer add GRAVESHIFT_EVENTS --config graveshift-watcher.consumer.json
 ```
 
+## Local config check
+
+After you edit `nats.conf`, parse it with the real NATS server on your local
+machine. `nats-server -t` reads the config and exits; it starts no daemon.
+
+```sh
+brew install nats-server   # once, on the local machine
+bun scripts/check-nats-config.ts
+```
+
+The script uses a throwaway certificate and fake credentials for the parse. It
+never reads the secret mount. This check is local only; GitHub Actions does not
+run it, so no daemon or long-running server runs in CI.
+
 The backup and restore runbook is at `docs/runbooks/nats-jetstream-backup.md`.

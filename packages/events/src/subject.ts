@@ -54,5 +54,6 @@ export function publishSubject(envelope: EventEnvelope): string {
 
 /** Build the dead-letter subject for an exhausted detection envelope. */
 export function deadLetterSubject(tenantId: string, grave: string): string {
+  assertSafeSubjectPart(tenantId, 'tenantId');
   return `${SUBJECT_PREFIX}.${tenantId}.dlq.${safeSubjectToken(grave)}`;
 }

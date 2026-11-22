@@ -11,6 +11,7 @@ const compose = await Bun.file(join(here, '../../../deploy/compose/graveshift.co
 const runbook = await Bun.file(
   join(here, '../../../docs/runbooks/nats-jetstream-backup.md'),
 ).text();
+const natsCompose = compose.match(/^  nats:\n([\s\S]*?)(?=^networks:)/m)?.[1] ?? '';
 
 describe('declarative NATS config matches the code', () => {
   test('stream config matches the one stream definition', async () => {
@@ -48,11 +49,22 @@ describe('NATS server config', () => {
   });
 
   test('explains the container bind and publishes no NATS host port', () => {
-    const nats = compose.match(/^  nats:\n([\s\S]*?)(?=^networks:)/m)?.[1] ?? '';
-    expect(nats).not.toBe('');
-    expect(nats).toContain("expose: ['4222']");
-    expect(nats).not.toMatch(/^\s{4}ports:/m);
+    expect(natsCompose).not.toBe('');
+    expect(natsCompose).toContain("expose: ['4222']");
+    expect(natsCompose).not.toMatch(/^\s{4}ports:/m);
     expect(conf).toContain('# The container must bind 0.0.0.0');
+  });
+
+  test('fails at start when a NATS credential is unset', () => {
+    for (const name of [
+      'NATS_PUBLISH_USER',
+      'NATS_PUBLISH_PASSWORD',
+      'NATS_READ_USER',
+      'NATS_READ_PASSWORD',
+    ]) {
+      expect(natsCompose).toContain(`${name}: \${${name}:?`);
+    }
+    expect(natsCompose).not.toContain(':-}');
   });
 
   test('defines separate publish and read users', () => {
@@ -62,7 +74,7 @@ describe('NATS server config', () => {
     expect(publisher).toContain('publish: ["graveshift.>"]');
   });
 
-  test('gives the read user only the request, pull and ack publish subjects', () => {
+  test('gives the read user only the request, pull, ack and dead-letter publish subjects', () => {
     const readUser = conf.match(/user: \$NATS_READ_USER([\s\S]*?)\n    \}/)?.[1] ?? '';
     expect(readUser).not.toBe('');
     const publish = (readUser.match(/publish: \[([\s\S]*?)\]/)?.[1] ?? '').replace(/\s/g, '');
@@ -73,12 +85,14 @@ describe('NATS server config', () => {
       '$JS.API.DIRECT.GET.GRAVESHIFT_EVENTS.>',
       '$JS.API.CONSUMER.MSG.NEXT.GRAVESHIFT_EVENTS.graveshift-watcher',
       '$JS.ACK.GRAVESHIFT_EVENTS.>',
+      'graveshift.*.dlq.*',
     ]) {
       expect(publish).toContain(`"${subject}"`);
     }
     expect(subscribe).toBe('"_INBOX.>"');
     expect(publish).not.toContain('$JS.API.*');
     expect(publish).not.toContain('graveshift.>');
+    expect(publish).not.toContain('$JS.API.CONSUMER.INFO.');
   });
 
   test('opens no MQTT, leafnode or WebSocket listener', () => {
@@ -86,6 +100,16 @@ describe('NATS server config', () => {
     expect(conf).not.toMatch(/^\s*leafnodes\s*\{/m);
     expect(conf).not.toMatch(/^\s*websocket\s*\{/m);
     expect(conf).not.toContain('port: -1');
+  });
+});
+
+describe('local config check', () => {
+  test('documents a local-only nats-server parse check', async () => {
+    const readme = await Bun.file(join(natsDir, 'README.md')).text();
+    expect(readme).toContain('bun scripts/check-nats-config.ts');
+    expect(readme).toContain('GitHub Actions does not');
+    const script = await Bun.file(join(here, '../../../scripts/check-nats-config.ts')).text();
+    expect(script).toContain("'nats-server', '-t'");
   });
 });
 
