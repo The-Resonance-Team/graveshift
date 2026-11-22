@@ -4,7 +4,7 @@ import {
   type RoutingResult,
 } from '@graveshift/agents/routing';
 import type { AgentConfig } from '@graveshift/agents';
-import { decide, toAuditEvent, type Policy } from '@graveshift/policy';
+import { decide, type Policy } from '@graveshift/policy';
 import {
   WorkError,
   type ClaimResult,
@@ -16,7 +16,8 @@ import {
   type WorkRuntime,
 } from '@graveshift/work';
 
-import type { WriteAudit } from './audit';
+import { currentAuditScope, type WriteAudit } from './audit';
+import { auditScopeOfCaller, fixAuditIdentity, policyDecisionAudit } from './fix-audit';
 import { ExecutionFailure, type FixExecutor } from './execution';
 import { ContextFailure, type ResolveContext } from './fix-context';
 import { publishFix } from './publication';
@@ -73,6 +74,12 @@ async function runOwnedFix(
     signal.throwIfAborted();
     return options.runtime.finish(caller, id, { ...fence, state, outcome });
   };
+  // The command that owns this attempt runs under the authenticated audit scope bound by
+  // `createWorkCommands`, and the gateway attributes its model calls to that binding. Without
+  // it the attempt has no chain, so it is denied here: no context read, no model call, no
+  // budget spend and no GitHub call follow.
+  if (currentAuditScope() === undefined) return finish(failed('audit_failed'));
+  const scope = auditScopeOfCaller(caller);
   const agent = options.agents.find((entry) => entry.name === attempt.agent);
   if (agent === undefined || snapshot.item.assignee !== `needs_agent_${attempt.agent}`) {
     return finish(failed('routing_failed', 'The assigned Agent is unavailable'));
@@ -86,12 +93,12 @@ async function runOwnedFix(
   }
   signal.throwIfAborted();
   const decision = decide(options.policy, context.policy, { name: 'open_pr' });
+  const identity = fixAuditIdentity(scope, snapshot.item, attempt, context.incident.id);
   try {
-    await options.audit({
-      key: `fix:${attempt.id}:policy:${attempt.version}`,
-      incidentId: context.incident.id,
-      ...toAuditEvent(decision, context.policy, { name: 'open_pr' }),
-    });
+    await options.audit(
+      policyDecisionAudit(decision, context.policy, { name: 'open_pr' }, identity),
+      scope,
+    );
   } catch {
     return finish(failed('audit_failed'));
   }

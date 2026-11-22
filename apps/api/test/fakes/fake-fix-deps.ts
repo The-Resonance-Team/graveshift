@@ -44,18 +44,31 @@ export function workItem(id = 'work-1', overrides: Partial<WorkItem> = {}): Work
 }
 
 /** Explicit HTTP test adapter. No production store or fix execution is replaced. */
-export function fakeWorkApi(options: { deny?: boolean; fail?: boolean; projectId?: string } = {}) {
-  const allowedProjectId = options.projectId ?? '12345';
-  const items = new Map([
-    ['work-1', workItem()],
-    ['human', workItem('human', { assignee: 'needs_human' })],
-    ['done', workItem('done', { status: 'done' })],
-  ]);
+export function fakeWorkApi(
+  options: { deny?: boolean; fail?: boolean; projectId?: string; projectIds?: string[] } = {},
+) {
+  const allowed = new Set([options.projectId ?? '12345', ...(options.projectIds ?? [])]);
+  // The production store is keyed by Project, so the fake is too: one client's change can never
+  // be seen by another Project.
+  const store = (): Map<string, WorkItem> =>
+    new Map([
+      ['work-1', workItem()],
+      ['human', workItem('human', { assignee: 'needs_human' })],
+      ['done', workItem('done', { status: 'done' })],
+    ]);
+  const items = new Map<string, Map<string, WorkItem>>();
+  const itemsFor = (projectId: string): Map<string, WorkItem> => {
+    const existing = items.get(projectId);
+    if (existing !== undefined) return existing;
+    const created = store();
+    items.set(projectId, created);
+    return created;
+  };
   const calls: { method: string; caller: WorkCaller; id: string; input: unknown }[] = [];
   const receipts = new Map<string, { content: string; result: FixResult }>();
   const read = (projectId: string, id: string) => {
-    if (projectId !== allowedProjectId) throw new WorkError('PROJECT_FORBIDDEN', 'Wrong project');
-    const item = items.get(id);
+    if (!allowed.has(projectId)) throw new WorkError('PROJECT_FORBIDDEN', 'Wrong project');
+    const item = itemsFor(projectId).get(id);
     if (!item) throw new WorkError('WORK_NOT_FOUND', 'The Work item does not exist');
     return item;
   };
@@ -75,7 +88,7 @@ export function fakeWorkApi(options: { deny?: boolean; fail?: boolean; projectId
     const current = read(caller.projectId, id);
     assertFixEligible(current, trigger, TEST_AGENTS);
     const item = trigger === 'fix_now' ? { ...current, fixPriority: 0 } : current;
-    items.set(id, item);
+    itemsFor(caller.projectId).set(id, item);
     const pr =
       options.deny || options.fail
         ? null
@@ -97,7 +110,7 @@ export function fakeWorkApi(options: { deny?: boolean; fail?: boolean; projectId
       routing: null,
       attemptId: `attempt-${id}`,
     };
-    items.set(id, result.item);
+    itemsFor(caller.projectId).set(id, result.item);
     receipts.set(key, { content, result });
     return result;
   };
@@ -105,7 +118,7 @@ export function fakeWorkApi(options: { deny?: boolean; fail?: boolean; projectId
     async triage(caller, id, input) {
       calls.push({ method: 'triage', caller, id, input });
       const decision = decideTriage(read(caller.projectId, id), input.assignee, TEST_AGENTS);
-      items.set(id, decision.item);
+      itemsFor(caller.projectId).set(id, decision.item);
       if (decision.trigger === null) return { item: decision.item, autoFix: null };
       return triageResult(await run(caller, id, input, 'auto_fix'));
     },
@@ -126,7 +139,7 @@ export function fakeWorkApi(options: { deny?: boolean; fail?: boolean; projectId
     async list(projectId: string, query: WorkListQuery) {
       read(projectId, 'work-1');
       const { offset, limit, ...filters } = query;
-      const rows = [...items.values()]
+      const rows = [...itemsFor(projectId).values()]
         .filter((item) =>
           Object.entries(filters).every(([key, value]) => item[key as keyof WorkItem] === value),
         )

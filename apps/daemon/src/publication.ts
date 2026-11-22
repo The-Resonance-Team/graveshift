@@ -9,6 +9,7 @@ import type {
   WorkSnapshot,
 } from '@graveshift/work';
 
+import { auditScopeOfCaller, fixAuditIdentity, fixPrIntentAudit } from './fix-audit';
 import type { PreparedFix } from './execution';
 import type { FixOptions } from './run-fix';
 
@@ -39,12 +40,14 @@ export async function publishFix(
   };
   try {
     signal?.throwIfAborted();
-    await options.audit({
-      key: `fix:${attempt.id}:verified`,
-      actor: attempt.agent,
-      type: 'fix.verified',
-      payload: { workItemId: id, attemptId: attempt.id, ...prepared.intent },
-    });
+    // The pre-side-effect entry: it is appended before any GitHub call, so a sink failure
+    // stops the Fix with no outside effect and no saved publication intent. The API writes the
+    // matching `fix.outcome` entry after the attempt returns.
+    const scope = auditScopeOfCaller(caller);
+    await options.audit(
+      fixPrIntentAudit(fixAuditIdentity(scope, snapshot.item, attempt), prepared.intent),
+      scope,
+    );
     adopt(
       await options.runtime.beginPublication(caller, id, { ...fence(), intent: prepared.intent }),
     );

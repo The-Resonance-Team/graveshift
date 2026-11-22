@@ -20,6 +20,7 @@ import {
   Req,
   UseFilters,
   UseGuards,
+  UseInterceptors,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import {
@@ -35,6 +36,7 @@ import {
 import { ThrottlerGuard } from '@nestjs/throttler';
 
 import type { PrincipalRequest } from '../../auth/auth.types';
+import { AuditScopeInterceptor } from '../../audit/audit-scope.interceptor';
 import { AnswerRequestDto } from '../dto/answer-request.dto';
 import { FixNowRequestDto } from '../dto/fix-now-request.dto';
 import { ListWorkItemsQueryDto } from '../dto/list-work-items-query.dto';
@@ -64,6 +66,7 @@ function caller(request: PrincipalRequest, commandId: string): WorkCaller {
 
 @ApiTags('work-items')
 @UseGuards(ThrottlerGuard, AuthGuard('oauth-client-credentials'))
+@UseInterceptors(AuditScopeInterceptor)
 @UseFilters(WorkErrorFilter)
 @ApiUnauthorizedResponse({ description: 'A management access token is required.' })
 @Controller('api/work-items')

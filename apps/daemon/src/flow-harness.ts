@@ -3,7 +3,7 @@ import type { AuditDraft } from '@graveshift/core';
 import { createGateway, type ModelAdapter } from '@graveshift/gateway';
 import { PatchSchema } from '@graveshift/patch';
 
-import { gatewayAudit } from './audit';
+import { currentAuditScope, gatewayAudit, type AuditScope } from './audit';
 import { ExecutionFailure } from './execution';
 import { agent, caller, context, policy, pr } from './flow-fixtures';
 import { FlowRuntime } from './flow-runtime';
@@ -15,13 +15,23 @@ const TEST_BLOB_SHA = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 
 export function harness(agents: AgentConfig[] = [agent()]) {
   const runtime = new FlowRuntime(agents);
-  const audit: AuditDraft[] = [];
+  // The durable record, as the real writer shapes it: one chain key per append, and a write
+  // with no authenticated scope is refused instead of saved.
+  const audit: Array<AuditDraft & { projectId: string }> = [];
   const effects: string[] = [];
+  // One ordered record of both kinds of side effect, so a test can prove an audit write
+  // happened before an outside call instead of comparing two arrays and assuming.
+  const events: string[] = [];
   const requests: string[] = [];
+  const failTypes = new Set<string>();
   let failAudit = false;
-  const write = async (draft: AuditDraft) => {
+  const write = async (draft: AuditDraft, scope?: AuditScope) => {
+    const bound = scope ?? currentAuditScope();
+    if (bound === undefined) throw new Error('An audit entry needs the authenticated scope');
     if (failAudit && draft.type === 'model.call') throw new Error('Durable audit unavailable');
-    audit.push(draft);
+    if (failTypes.has(draft.type)) throw new Error(`Durable audit unavailable: ${draft.type}`);
+    audit.push({ ...draft, projectId: bound.projectId });
+    events.push(`audit:${draft.type}`);
   };
   const gateway = createGateway({
     agents: agents.map((configured) => {
@@ -66,11 +76,13 @@ export function harness(agents: AgentConfig[] = [agent()]) {
     audit: write,
     context: async () => {
       effects.push('context');
+      events.push('context');
       return context();
     },
     model: routingModel(gateway),
     execute: async (input) => {
       effects.push(`source:${input.agent.name}`);
+      events.push(`source:${input.agent.name}`);
       const patch = await gateway.run({
         agent: input.agent.name,
         task: 'generate_patch',
@@ -90,10 +102,12 @@ export function harness(agents: AgentConfig[] = [agent()]) {
         intent: { repo: pr.repo, branch: pr.branch, baseSha: 'base-1' },
         publish: async () => {
           effects.push('publish');
+          events.push('publish');
           return pr;
         },
         dispose: async () => {
           effects.push('dispose');
+          events.push('dispose');
         },
       };
     },
@@ -103,11 +117,16 @@ export function harness(agents: AgentConfig[] = [agent()]) {
     runtime,
     audit,
     effects,
+    events,
     requests,
     options,
     commands: () => createWorkCommands(options),
     failAudit: () => {
       failAudit = true;
+    },
+    /** Makes the durable append of one audit type fail, so a test can exercise one stage. */
+    failAuditOf: (type: string) => {
+      failTypes.add(type);
     },
   };
 }

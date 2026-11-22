@@ -7,10 +7,19 @@ import {
 } from '@graveshift/core';
 import { PolicySchema } from '@graveshift/policy';
 
+import { withAuditScope } from './audit';
 import type { FixContext } from './fix-context';
 
 export const at = '2026-11-21T10:00:00.000Z';
 export const caller = { projectId: 'project-1', actor: 'person-1', commandId: 'command-1' };
+
+/**
+ * Binds the authenticated audit scope a real Work command carries, so a test can call a fix or
+ * model seam directly. Production binds it once in `createWorkCommands`.
+ */
+export function withFixAuditScope<Value>(work: () => Promise<Value>): Promise<Value> {
+  return withAuditScope({ projectId: caller.projectId, actor: caller.actor }, work);
+}
 export const envelope: EventEnvelope = {
   id: 'event-one',
   projectId: caller.projectId,

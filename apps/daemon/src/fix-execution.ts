@@ -16,6 +16,7 @@ import { generatePatch } from '@graveshift/patch';
 import { PATCH_SYSTEM } from '@graveshift/patch/generate';
 import { z } from 'zod';
 
+import { currentAuditScope } from './audit';
 import { ExecutionFailure, type FixExecutor } from './execution';
 import { withModelContext } from './model-context';
 import { cancellableGitHub } from './cancellable-github';
@@ -32,6 +33,11 @@ export interface ExecutorOptions {
 export function createFixExecutor(options: ExecutorOptions): FixExecutor {
   return async (input) => {
     input.signal?.throwIfAborted();
+    // Checked before the first model call: a patch call with no authenticated audit scope would
+    // spend budget on a model call whose durable entry has no chain to belong to.
+    if (currentAuditScope() === undefined) {
+      throw new ExecutionFailure('audit_failed', 'No authenticated audit scope for the Agent');
+    }
     const client = cancellableGitHub(options.client, input.signal);
     const verification = options.verification[input.context.repo.repo];
     if (verification === undefined)

@@ -46,7 +46,9 @@ export const program = Effect.scoped(
     // ponytail: serve the first granted Project; upgrade when per-Project daemon
     // routing lands so one daemon can serve every Project in the deployment.
     const projectId = boot.projectIds[0] ?? '';
-    const audit = createAudit(api, projectId);
+    // The audit writer holds no Project of its own: every entry is appended to the chain of the
+    // scope bound for the authenticated command or Collector event that asked for it.
+    const audit = createAudit(api);
     const gateway = yield* startup(
       () => configuredGateway(boot, audit, env),
       'Agent bindings or gateway pricing are invalid',
