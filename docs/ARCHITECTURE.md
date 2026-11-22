@@ -29,6 +29,7 @@ The daemon at `apps/daemon` is an Effect v4 skeleton on Bun. ADR 0009 removed th
 | Patch | `packages/patch` | Patch schemas, `generatePatch` and `guardPatch`. The model proposes a Patch. The guard validates it. Policy decides later. |
 | Actuator | `packages/actuator` | Separate service. Verifies and executes approved actions. |
 | MCP | `apps/api/src/mcp` | `graveshift-mcp` through the official `@nestjs/mcp` module: Streamable HTTP at `/mcp` with a bearer token, plus a stdio launcher. |
+| MCP client SDK | `packages/mcp-client` | `@graveshift/mcp-client`: the one typed client for the MCP endpoint. Streamable HTTP and stdio transports, bounded retry, typed errors and typed wrappers for the nine tools, two prompts and the postmortem resource. It adds no server and stores no secret; the caller passes the credential per call. `bun run --filter @graveshift/mcp-client drift:check` fails when the catalog and the endpoint drift. |
 | Banshee | `packages/notifier-discord` | **Not built.** Package exports only its name. |
 
 ## Incident flow
