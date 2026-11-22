@@ -64,6 +64,24 @@ describe('config guards (e2e)', () => {
     }
   });
 
+  test('the config export still requires config:export', async () => {
+    // The shared oauth-client-access strategy defaults to config:export when a route has
+    // no scope metadata. Generalizing it for work items must not open this endpoint.
+    const unrelated = await bearerToken(app, CLIENTS.unrelated.id, CLIENTS.unrelated.secret);
+    await request(app.getHttpServer())
+      .get(CONFIG_EXPORT_ROUTE)
+      .set('Authorization', `Bearer ${unrelated}`)
+      .expect(403);
+    expect(audit.appended).toHaveLength(0);
+
+    const allowed = await bearerToken(app, CLIENTS.export.id, CLIENTS.export.secret);
+    await request(app.getHttpServer())
+      .get(CONFIG_EXPORT_ROUTE)
+      .set('Authorization', `Bearer ${allowed}`)
+      .expect(200);
+    expect(audit.appended).toHaveLength(1);
+  });
+
   test('config:export stays HTTP-only: the catalog holds it, no credential kind does', async () => {
     // Catalog check: the scope exists for the #63 OAuth issuer only. The removed
     // config:read scope must not return to the catalog.

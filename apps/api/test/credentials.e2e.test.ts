@@ -1,7 +1,8 @@
-import type { INestApplication } from '@nestjs/common';
+import { ForbiddenException, type INestApplication } from '@nestjs/common';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import request from 'supertest';
 
+import { CredentialService } from '../src/auth/services/credential.service';
 import { accessToken, buildAuthApp, rawToken, type AuthTestApp } from './fakes/auth-test-helpers';
 
 describe('credential routes (e2e)', () => {
@@ -112,6 +113,25 @@ describe('credential routes (e2e)', () => {
       name: 'reader',
       scopes: ['tokens:manage'],
     }).expect(422);
+  });
+
+  test('creating a credential with fix:trigger is refused with 403', async () => {
+    // fix:trigger is HTTP-only: an OAuth client holds it through the boot registry, but
+    // no credential kind can carry it. Bypass the DTO to check the service choke point.
+    const credentials = app.get(CredentialService, { strict: false });
+    const principal = {
+      clientId: 'client-1',
+      projectId: '12345',
+      scopes: ['tokens:manage', 'fix:trigger'],
+    };
+    let failure: unknown;
+    try {
+      await credentials.issue({ kind: 'mcp', name: 'trigger', scopes: ['fix:trigger'] }, principal);
+    } catch (error) {
+      failure = error;
+    }
+    expect(failure).toBeInstanceOf(ForbiddenException);
+    expect((failure as ForbiddenException).getStatus()).toBe(403);
   });
 
   test('POST rejects a scope from another surface', async () => {

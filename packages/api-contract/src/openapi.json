@@ -2641,8 +2641,7 @@
                 "logs:read",
                 "metrics:read",
                 "fix:propose",
-                "events:publish",
-                "fix:trigger"
+                "events:publish"
               ]
             }
           },

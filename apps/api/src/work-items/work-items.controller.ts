@@ -24,7 +24,6 @@ import {
   UnprocessableEntityException,
   UseGuards,
 } from '@nestjs/common';
-import { AuthGuard } from '@nestjs/passport';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import {
   ApiBearerAuth,
@@ -38,6 +37,7 @@ import {
   ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
 
+import { NoOAuthScopeRequirement, OAuthClientAccessGuard } from '../auth/oauth-client-access.guard';
 import { FIX_TRIGGER_SCOPE } from '../auth/scopes';
 import { FixService } from '../fix/fix.service';
 import { FixNowRequestDto } from './dto/fix-now-request.dto';
@@ -56,14 +56,17 @@ import {
 } from './work-item.schema';
 import { WorkItemStore } from './work-item.store';
 
-// The shared OAuth 2.1 client-credentials guard verifies the bearer token and puts the
-// authenticated principal on request.user. The local scope guard then checks one exact
-// scope per route and copies the actor plus its ADR 0018 project id to request.auditScope,
-// so the later audit write can scope entries without a deployment-wide project id.
-// ThrottlerGuard runs first, so an over-limit caller reaches neither a store nor a helper.
+// The shared oauth-client-access guard verifies the bearer token with the #63 issuer and
+// puts the authenticated principal on request.user. These routes declare no extra scope on
+// that guard, so the default config:export check does not apply here. The local scope guard
+// then checks one exact scope per route and copies the actor plus its ADR 0018 project id
+// to request.auditScope, so the later audit write can scope entries without a deployment-
+// wide project id. ThrottlerGuard runs first, so an over-limit caller reaches neither a
+// store nor a helper.
 @ApiTags('work-items')
 @ApiBearerAuth()
-@UseGuards(ThrottlerGuard, AuthGuard('oauth-client-credentials'), WorkItemScopeGuard)
+@NoOAuthScopeRequirement()
+@UseGuards(ThrottlerGuard, OAuthClientAccessGuard, WorkItemScopeGuard)
 @ApiTooManyRequestsResponse({ description: 'The client exceeded the rate limit.' })
 @Controller('api/work-items')
 export class WorkItemsController {

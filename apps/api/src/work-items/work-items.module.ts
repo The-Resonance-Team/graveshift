@@ -1,6 +1,7 @@
 import { type WorkItem } from '@graveshift/core';
 import { Module } from '@nestjs/common';
 
+import { OAuthClientAccessGuard } from '../auth/oauth-client-access.guard';
 import { GRAVESHIFT_CONFIG } from '../config/config.provider';
 import { createFixDeps } from '../fix/fix.deps';
 import { FixService } from '../fix/fix.service';
@@ -16,6 +17,7 @@ import { WorkItemsController } from './work-items.controller';
   providers: [
     WorkItemStore,
     FixService,
+    OAuthClientAccessGuard,
     WorkItemScopeGuard,
     { provide: FIX_DEPS, useFactory: createFixDeps, inject: [GRAVESHIFT_CONFIG] },
     {

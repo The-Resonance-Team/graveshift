@@ -25,13 +25,10 @@ export const ALL_SCOPES = [
 ] as const;
 
 // The scopes a credential of either kind can be issued with. The create-credential DTO
-// advertises this list. fix:trigger is here for the HTTP trigger routes, but it stays out
-// of MCP_READ_SCOPES and MCP_READ_SCOPE_ORDER, so no MCP primitive can use it.
-export const CREDENTIAL_ISSUABLE_SCOPES = [
-  ...MCP_READ_SCOPES,
-  ...PLUGIN_SCOPES,
-  ...HTTP_WORK_ITEM_SCOPES,
-] as const;
+// advertises this list. The HTTP-only scopes stay out: the #63 OAuth issuer grants them to
+// OAuth clients, but no credential kind can carry them. fix:trigger also stays out of
+// MCP_READ_SCOPES and MCP_READ_SCOPE_ORDER, so no MCP primitive can use it.
+export const CREDENTIAL_ISSUABLE_SCOPES = [...MCP_READ_SCOPES, ...PLUGIN_SCOPES] as const;
 
 // A client cannot grant these scopes, even when its own access token has them.
 export const FORBIDDEN_SCOPES = ['admin', 'tokens:manage'] as const;

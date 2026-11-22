@@ -107,8 +107,8 @@ describe('fix path over emulated GitHub and AI', () => {
     try {
       await app.init();
 
-      // The fix-now route needs a client-credentials token with fix:trigger.
-      const token = accessToken(app.get(JwtService), ['tokens:manage', 'fix:trigger']);
+      // The fix-now route needs a client-credentials token with fix:trigger only.
+      const token = accessToken(app.get(JwtService), ['fix:trigger']);
       const response = await request(app.getHttpServer())
         .post('/api/work-items/wi-e2e/fix-now')
         .set('Authorization', `Bearer ${token}`)

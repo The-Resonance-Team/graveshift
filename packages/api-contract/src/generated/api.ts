@@ -72,7 +72,7 @@ export interface components {
       kind: "mcp" | "plugin";
       /** @description A display name chosen by the client. */
       name: string;
-      scopes: ("incidents:read" | "diagnoses:read" | "audit:read" | "logs:read" | "metrics:read" | "fix:propose" | "events:publish" | "fix:trigger")[];
+      scopes: ("incidents:read" | "diagnoses:read" | "audit:read" | "logs:read" | "metrics:read" | "fix:propose" | "events:publish")[];
       /** @description Optional Grave or service binding. Plugin keys only. */
       service?: string;
       /** @description Lifetime in seconds. The config default applies when absent. */

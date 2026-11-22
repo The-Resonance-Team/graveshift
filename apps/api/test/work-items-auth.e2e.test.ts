@@ -136,8 +136,9 @@ async function buildApp(options: BuildOptions = {}): Promise<{
   return { app, store, jwt: moduleRef.get(JwtService) };
 }
 
-// tokens:manage satisfies the shared client-credentials guard. The route scope is what
-// the local work-item scope guard checks. No real secret or network call is used here.
+// A client-credentials token needs no tokens:manage on these routes. The auth guard checks
+// the issuer, and the local work-item scope guard checks the route scope. No real secret
+// or network call is used here.
 function token(jwt: JwtService, scopes: string[], overrides: Record<string, string> = {}): string {
   return accessToken(jwt, scopes, overrides);
 }
@@ -180,7 +181,7 @@ describe('work item route guards (e2e)', () => {
 
   test('an incidents:read token lists and gets a work item but cannot trigger', async () => {
     const { app, jwt, store } = await track();
-    const reader = token(jwt, ['tokens:manage', 'incidents:read']);
+    const reader = token(jwt, ['incidents:read']);
     await call(app, reader).get('/api/work-items').expect(200);
     await call(app, reader).get('/api/work-items/wi-1').expect(200);
     await call(app, reader)
@@ -194,7 +195,7 @@ describe('work item route guards (e2e)', () => {
 
   test('a fix:trigger token triages and fixes now but cannot list or get', async () => {
     const { app, jwt } = await track();
-    const trigger = token(jwt, ['tokens:manage', 'fix:trigger']);
+    const trigger = token(jwt, ['fix:trigger']);
     await call(app, trigger)
       .post('/api/work-items/wi-1/triage', { assignee: 'needs_human' })
       .expect(200);
@@ -206,7 +207,9 @@ describe('work item route guards (e2e)', () => {
 
   test('a token with neither route scope is denied on all four routes', async () => {
     const { app, jwt, store } = await track();
-    const other = token(jwt, ['tokens:manage', 'logs:read']);
+    // No tokens:manage here: a 403 proves WorkItemScopeGuard denied the call, not the
+    // auth guard. A missing scope on these routes is 403, not 401.
+    const other = token(jwt, ['logs:read']);
     await call(app, other).get('/api/work-items').expect(403);
     await call(app, other).get('/api/work-items/wi-1').expect(403);
     await call(app, other)
@@ -217,9 +220,21 @@ describe('work item route guards (e2e)', () => {
     expect(fixCalls()).toHaveLength(0);
   });
 
+  test('a client holding only fix:propose gets 403 on triage and fix-now', async () => {
+    const { app, jwt, store } = await track();
+    // fix:propose is an MCP read scope. It grants no HTTP trigger permission.
+    const propose = token(jwt, ['fix:propose']);
+    await call(app, propose)
+      .post('/api/work-items/wi-1/triage', { assignee: 'needs_human' })
+      .expect(403);
+    await call(app, propose).post('/api/work-items/wi-1/fix-now', {}).expect(403);
+    expect(store.reads).toBe(0);
+    expect(fixCalls()).toHaveLength(0);
+  });
+
   test('repeated calls get 429 from the throttle before the store is read', async () => {
     const { app, jwt, store } = await track({ config: { eventRateLimit: 3 } });
-    const reader = token(jwt, ['tokens:manage', 'incidents:read']);
+    const reader = token(jwt, ['incidents:read']);
     const statuses: number[] = [];
     // Calls run one by one so the throttle window counts them in order.
     await Array.from({ length: 6 }).reduce(async (previous) => {
@@ -240,12 +255,12 @@ describe('work item route guards (e2e)', () => {
         'client-audit': {
           secret: 'test-client-secret-audit-01',
           projectId: 'project-audit-77',
-          scopes: ['tokens:manage', 'fix:trigger'],
+          scopes: ['fix:trigger'],
         },
       },
     };
     const { app, jwt } = await track({ config, capture: true });
-    const auditToken = token(jwt, ['tokens:manage', 'fix:trigger'], {
+    const auditToken = token(jwt, ['fix:trigger'], {
       clientId: 'client-audit',
       projectId: 'project-audit-77',
     });

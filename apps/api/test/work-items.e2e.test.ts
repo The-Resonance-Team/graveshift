@@ -65,9 +65,9 @@ function item(id: string, overrides: Partial<WorkItem> = {}): WorkItem {
   };
 }
 
-// The work-item routes need a bearer token. tokens:manage satisfies the shared client-
-// credentials guard, and the two route scopes cover all four routes in these functional
-// tests. The dedicated auth tests check the scope boundary itself.
+// The work-item routes need a bearer token. The two route scopes cover all four routes in
+// these functional tests. tokens:manage is not needed on these routes. The dedicated auth
+// tests check the scope boundary itself.
 function api(app: INestApplication) {
   const token = accessToken(app.get(JwtService), [
     'tokens:manage',
