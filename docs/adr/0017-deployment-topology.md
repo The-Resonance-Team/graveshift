@@ -6,6 +6,7 @@ Date: 2026-11-22.
 
 Part of #18. This decision unblocks #48. It fixes process placement and the
 local link. Ticket #57 defines the NATS stream design and the retention rules.
+Numbering note: ADR 0015 is the config decision on the unmerged `xirothedev/autofix-config-v2` branch; ADR 0016 is reserved for ticket #59.
 
 ## Context
 
