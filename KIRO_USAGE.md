@@ -57,9 +57,9 @@ Consumed servers (GitHub, fetch, Kubernetes) are in `.kiro/settings/mcp.example.
 
 ## 7. Property-based testing
 
-`fast-check` properties run under `bun test` in the policy, redactor, actuator, fixer guard, core state machine, store audit chain, watcher, diagnoser, metrics, runtime sources and demo app test files.
+`fast-check` properties run under `bun test` in the policy, redactor, actuator, fixer guard, core state machine, audit chain (`packages/core` and `apps/api/src/audit`), watcher, diagnoser, metrics, runtime sources and demo app test files.
 
-Real counterexample found: a property test on the audit chain found that a payload with a `__proto__` key hashed differently than it read back. The fix normalises the payload through Zod before hashing (`packages/store/src/sqlite.ts`), and a regression test covers it.
+Real counterexample found: a property test on the audit chain found that a payload with a `__proto__` key hashed differently than it read back. The fix normalises the payload through Zod before hashing (`makeAuditEntry` in `packages/core/src/audit-chain.ts`), and regression tests cover it.
 
 Other counterexamples: capture pending (none are recorded in the repository).
 

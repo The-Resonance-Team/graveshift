@@ -16,7 +16,7 @@ The daemon at `apps/daemon` is an Effect v4 skeleton on Bun. ADR 0009 removed th
 | Core | `packages/core` | Zod schemas, event envelope, incident state machine, circuit-breaker helper, `RuntimeSource` contract and pure rule engine. |
 | Events | `packages/events` | `Publisher` interface, NATS JetStream publisher, an HTTP publisher that posts to the API, and an in-memory fake. No consumer is wired yet. |
 | Integrations | `packages/integrations` | Plugin and Collector contract: `Integration`, `Context` and a pure envelope builder. No NATS client import. |
-| Audit | `apps/api/src/audit` | Pure hash-chain functions and a PostgreSQL repository. Database triggers reject audit row updates and deletes. |
+| Audit | `apps/api/src/audit` | Pure hash-chain functions and a PostgreSQL repository. Database triggers reject audit row updates and deletes. The old SQLite audit store (`packages/store`, Drizzle and `bun:sqlite`) is removed; PostgreSQL is the only audit store. |
 | Policy | `packages/policy` | YAML loader and `decide()`. Pure and deterministic. |
 | Redactor | `packages/redactor` | Twelve ordered detectors, idempotent. |
 | Sources | `packages/sources-docker`, `packages/sources-k8s` | `RuntimeSource` implementations. Docker through the socket proxy; Kubernetes through `@kubernetes/client-node`, read-only. |

@@ -1,5 +1,6 @@
 import {
   AuditEntrySchema,
+  GENESIS_HASH,
   makeAuditEntry,
   type AuditInput,
   type VerifyResult,
@@ -60,7 +61,7 @@ export class AuditRepo {
       Prisma.sql`SELECT 1 FROM pg_advisory_xact_lock(hashtextextended(${tenantId}, 0))`,
     );
     const last = await tx.auditEntry.findFirst({ where: { tenantId }, orderBy: { seq: 'desc' } });
-    const prevHash = last?.hash ?? '0'.repeat(64);
+    const prevHash = last?.hash ?? GENESIS_HASH;
     const entry = makeAuditEntry((last?.seq ?? 0) + 1, new Date().toISOString(), input, prevHash);
     return toEntry(
       await tx.auditEntry.create({
