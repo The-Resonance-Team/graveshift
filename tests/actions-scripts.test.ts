@@ -6,7 +6,7 @@ import { EMPTY_BLOB_SHA } from '@graveshift/patch';
 import { repoRules } from '../scripts/actions/one-shot';
 import { signPolicyDecision } from '../scripts/actions/policy-signature';
 
-import { git, runApply, withRepo } from './actions-scripts.helpers';
+import { git, runApply, withRepo, type Sandbox } from './actions-scripts.helpers';
 
 describe('one-shot scripts', () => {
   test('apply-patch commits with identity and pushes from a clean git config', async () => {
@@ -114,6 +114,57 @@ describe('one-shot scripts', () => {
         }),
       ),
     );
+  });
+
+  const resign = (box: Sandbox, payload: string, extra: Record<string, string> = {}) => {
+    const original = box.env.POLICY_DECISION ?? '';
+    const bound = { ...JSON.parse(original).signed, patchPayload: payload, ...extra };
+    const signed = signPolicyDecision(original, bound, box.env.POLICY_SIGNING_KEY ?? '');
+    writeFileSync(join(box.work, 'patch.json'), payload);
+    return {
+      PATCH_PAYLOAD: payload,
+      POLICY_DECISION: signed.policyDecision,
+      POLICY_SIGNATURE: signed.signature,
+    };
+  };
+  const branchExists = async (box: Sandbox) =>
+    (await git(['--git-dir', box.remote, 'branch', '--list', 'graveshift/*'], box.dir, box.env)) !==
+    '';
+
+  test('a BASE_SHA that differs from patch.baseSha blocks every write', async () => {
+    await withRepo(async (box) => {
+      const other = 'a'.repeat(40);
+      const file = { path: 'src/hello.txt', content: 'x\n', linesChanged: 1 };
+      const payload = JSON.stringify({
+        baseSha: box.baseSha,
+        files: [{ ...file, baseBlobSha: 'ce013625030ba8dba906f756967f9e9ca394464a' }],
+      });
+      const result = await runApply(box, {
+        ...resign(box, payload, { baseSha: other }),
+        BASE_SHA: other,
+      });
+      expect(result.code).not.toBe(0);
+      expect(result.error).toContain('patch base does not match');
+      expect(await branchExists(box)).toBe(false);
+      expect(existsSync(join(box.work, 'patch.json'))).toBe(true);
+    });
+  });
+
+  test('a stale baseBlobSha blocks every write', async () => {
+    await withRepo(async (box) => {
+      const payload = JSON.stringify({
+        baseSha: box.baseSha,
+        files: [
+          { path: 'src/hello.txt', content: 'x\n', linesChanged: 1, baseBlobSha: 'b'.repeat(40) },
+        ],
+      });
+      const result = await runApply(box, resign(box, payload));
+      expect(result.code).not.toBe(0);
+      expect(result.error).toContain('src/hello.txt: file changed since the patch was made');
+      expect(await branchExists(box)).toBe(false);
+      expect(existsSync(join(box.work, 'patch.json'))).toBe(true);
+      expect(await Bun.file(join(box.work, 'src', 'hello.txt')).text()).toBe('hello\n');
+    });
   });
 
   test('unsafe slug and base ref fail before the patch is consumed', async () => {

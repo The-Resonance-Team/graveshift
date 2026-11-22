@@ -26,3 +26,12 @@ export function createWorkItemPolicy(config: GraveshiftConfig): WorkItemPolicy {
 /** The durable routing seam: the Agent configurations used by Work commands. */
 export const WORK_AGENTS = Symbol('WORK_AGENTS');
 export type WorkAgents = readonly AgentConfig[];
+
+/**
+ * Apply the one global `fix.enabled` switch to the Agents that Work commands see.
+ * An Agent with `autoFix: true` starts a fix on its own only while the switch is on.
+ * With the switch off it behaves as `autoFix: false`, so "Fix now" stays the manual trigger.
+ */
+export function gateAutoFix(agents: WorkAgents, autoFixEnabled: boolean): WorkAgents {
+  return agents.map((agent) => ({ ...agent, autoFix: agent.autoFix && autoFixEnabled }));
+}

@@ -15,6 +15,8 @@ import {
   redactPatch,
   validatePatch,
   assertPatchBase,
+  assertPatchBlobs,
+  assertPatchMatchesBaseSha,
 } from './one-shot';
 
 const git = async (args: readonly string[], env: Record<string, string>): Promise<string> => {
@@ -93,10 +95,16 @@ try {
 
   const workspace = resolve(process.cwd(), process.env.PATCH_WORKSPACE ?? '.');
   const rootReal = realpathSync(workspace);
-  const baseSha = process.env.BASE_SHA;
-  if (!baseSha || !/^[0-9a-f]{40}$/.test(baseSha))
-    throw new Error('base_sha must be a full commit SHA');
+  const baseSha = assertPatchMatchesBaseSha(patch, process.env.BASE_SHA);
   await git(['fetch', '--no-tags', 'origin', baseSha], env);
+  // Stale-blob check runs before checkout, so a changed file blocks every write.
+  await assertPatchBlobs(patch, async (path) => {
+    try {
+      return await git(['rev-parse', '--verify', `${baseSha}:${path}`], env);
+    } catch {
+      return undefined;
+    }
+  });
   const remote = await git(['ls-remote', '--heads', 'origin', `refs/heads/${slug}`], env);
   await git(['checkout', '-B', slug, baseSha], env);
 
