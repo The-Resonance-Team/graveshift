@@ -54,6 +54,26 @@ describe('mapSentryEvent', () => {
     expect(envelope.traceId).toBe('0123456789abcdef0123456789abcdef');
   });
 
+  test('drops the SDK default fingerprint part so unrelated errors do not merge', () => {
+    const event = {
+      timestamp: 1,
+      culprit: 'api.handler',
+      message: 'failed',
+      exception: { values: [{ type: 'TypeError' }] },
+    };
+    const header = {};
+    const id = '0123456789abcdef0123456789abcdef';
+
+    expect(
+      mapSentryEvent({ ...event, fingerprint: ['{{ default }}'] }, header, credential, id)
+        .fingerprint,
+    ).toBe('sentry.TypeError:api.handler:failed');
+    expect(
+      mapSentryEvent({ ...event, fingerprint: ['{{ default }}', 'stable'] }, header, credential, id)
+        .fingerprint,
+    ).toBe('stable');
+  });
+
   test('redacts a secret-shaped exception type before it becomes the event type', () => {
     const secret = 'ghp_abcdefghijklmnopqrstuvwxyz1234567890';
     const envelope = mapSentryEvent(

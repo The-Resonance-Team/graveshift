@@ -21,7 +21,11 @@ import {
   type VerifiedCredential,
 } from '../auth.types';
 import type { CreateCredentialDto } from '../dto/create-credential.dto';
-import { CredentialLimitError, CredentialRepo } from '../repo/credential.repo';
+import {
+  CredentialConflictError,
+  CredentialLimitError,
+  CredentialRepo,
+} from '../repo/credential.repo';
 import { FORBIDDEN_SCOPES, type CredentialKind, scopesForKind } from '../scopes';
 
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -89,7 +93,7 @@ export class CredentialService implements CredentialVerifier {
       // The value is returned once. It is never stored, logged or listed again.
       return { ...this.toMetadata(record), prefix: record.prefix, value };
     } catch (error) {
-      if (error instanceof CredentialLimitError) {
+      if (error instanceof CredentialLimitError || error instanceof CredentialConflictError) {
         throw new ConflictException(error.message);
       }
       throw error;

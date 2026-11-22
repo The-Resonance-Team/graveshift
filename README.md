@@ -84,7 +84,7 @@ The `.kiro` directory holds steering, specs, hooks and agents. See [KIRO_USAGE.m
 apps/        api (NestJS API and MCP), daemon (Effect v4 skeleton)
 packages/    actuator, agents, api-contract, core, diagnoser, events, fixer, gateway,
              integrations, metrics, notifier-discord, patch, policy,
-             redactor, sources-docker, sources-k8s, store, watcher
+             redactor, sources-docker, sources-k8s, watcher
 deploy/      compose (working), k8s base and kind (scaffold), helm (scaffold)
 examples/    the haunted candy shop demo app
 powers/      the Graveshift Kiro Power scaffold
