@@ -8,7 +8,7 @@ This file holds system-wide domain terms only. Each area's terms live in the `GL
 
 ## State and events
 
-- **Project** — the scope of all state and events. One `projectId` names it on the Event envelope, the event subject, every stored row, every Credential and every audit entry. A Sentry DSN project id is the same value.
+- **Project** — a scope a user creates in the console after registering an account. One numeric `projectId` names it on the Event envelope, the event subject, every stored row, every Credential and every audit entry. The same value is the Sentry project id: our system and Sentry share one project identity.
 - **Grave** — a service under watch.
 - **Graveyard** — the dashboard that shows all graves.
 - **Resting in peace** — the healthy state of a grave.

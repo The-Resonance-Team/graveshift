@@ -53,8 +53,12 @@ stays the only external surface.
   it for v2.
 - No daemon runs in GitHub Actions. Actions runs the `patch` and `open-pr`
   one-shot jobs. No server, no merge and no runtime action run there.
-- One tenant per deployment in v2. The `tenantId` field stays in the envelope
-  for v3.
+- Self-hosted and cloud run the same product, with account registration,
+  console-created Projects and the full feature set. The only difference is who
+  deploys: we deploy the self-hosted instance, and the cloud user deploys theirs.
+  There is no separate one-tenant self-hosted mode. A project value supplied by
+  the deployment environment is a bootstrap for the host, not a second kind of
+  Project and not a replacement for console-created Projects.
 
 ## Network boundary and auth for each hop
 
@@ -97,5 +101,7 @@ stays the only external surface.
 ## Recheck trigger
 
 Review this decision when the daemon read API moves into the durable store,
-when v3 needs a remote link or more than one tenant, or when Kubernetes mode is
-built. Review it before any daemon is placed in GitHub Actions.
+when one deployment must serve more than one console-created Project, when the
+deployment-local project bootstrap is replaced by console identity, or when a
+remote link or Kubernetes mode is built. Review it before any daemon is placed
+in GitHub Actions.

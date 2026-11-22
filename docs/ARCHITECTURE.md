@@ -188,7 +188,7 @@ The adapter accepts `event` items and skips other item types, including `session
 
 ## Event backbone
 
-Every Plugin and Collector publishes one **Event envelope** to the queue. `EventEnvelopeSchema` in `packages/core` is the source of truth. The envelope carries `projectId` from v2. Its `id` is the idempotency key that makes at-least-once delivery safe.
+Every Plugin and Collector publishes one **Event envelope** to the queue. `EventEnvelopeSchema` in `packages/core` is the source of truth. The envelope carries the `projectId` of the console-created Project. Its `id` is the idempotency key that makes at-least-once delivery safe.
 
 Two lanes carry envelopes:
 
