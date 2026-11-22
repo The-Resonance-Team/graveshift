@@ -6,7 +6,7 @@ import { caller } from './flow-fixtures';
 import { harness } from './flow-harness';
 import { runFix } from './run-fix';
 
-const SECRET = 'ghp_16C7e6F4a2B9d3E8c5A1';
+const SECRET = 'fake-ghp-token';
 
 const worker = { ...caller, workerId: 'worker-1' };
 

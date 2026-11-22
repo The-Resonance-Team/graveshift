@@ -20,7 +20,7 @@ import { TEST_CONFIG, TEST_ROOT_ENV } from './fakes/auth-test-config';
 import { testIdentityRepo } from './fakes/auth-test-helpers';
 import { fakeWorkApi } from './fakes/fake-fix-deps';
 
-const SECRET = 'ghp_16C7e6F4a2B9d3E8c5A1';
+const SECRET = 'fake-ghp-token';
 
 /** One boot per test, with its own sink and its own daemon adapter. */
 async function start(

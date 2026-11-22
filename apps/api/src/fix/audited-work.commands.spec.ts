@@ -7,7 +7,7 @@ import { currentAuditScope, withAuditScope, type AuditScope } from '../audit/aud
 import { InMemoryAuditSink } from '../audit/testing/in-memory-audit.sink';
 import { AuditedWorkCommands } from './audited-work.commands';
 
-const SECRET = 'ghp_16C7e6F4a2B9d3E8c5A1';
+const SECRET = 'fake-ghp-token';
 
 const open: FixResult = {
   item: workItem('work-1', { title: `OOM after ${SECRET}` }),

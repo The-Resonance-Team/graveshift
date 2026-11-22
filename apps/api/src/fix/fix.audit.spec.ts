@@ -19,7 +19,7 @@ const caller = (overrides: Partial<WorkCaller> = {}): WorkCaller => ({
   ...overrides,
 });
 const scope = { projectId: '12345', actor: 'client-1' };
-const secret = 'ghp_16C7e6F4a2B9d3E8c5A1';
+const secret = 'fake-ghp-token';
 
 function result(overrides: Partial<FixResult> = {}): FixResult {
   return {
