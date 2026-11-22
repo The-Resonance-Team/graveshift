@@ -55,6 +55,33 @@ describe('DB-free migration ownership check', () => {
     expect(violations(moved)).toContain('credentials');
   });
 
+  test('fails when a trigger calls another function', () => {
+    const moved = sql.replace(
+      'FOR EACH ROW EXECUTE FUNCTION prevent_audit_entry_mutation();',
+      'FOR EACH ROW EXECUTE FUNCTION other_function();',
+    );
+    expect(moved).not.toBe(sql);
+    expect(violations(moved)).toContain('audit_entries_no_update');
+    expect(violations(moved)).toContain('other_function');
+  });
+
+  test('fails when the audit function body no longer raises append-only', () => {
+    const altered = sql.replace("RAISE EXCEPTION 'audit entries are append-only';", 'RETURN NEW;');
+    expect(altered).not.toBe(sql);
+    expect(violations(altered)).toContain('audit function');
+  });
+
+  test('reports a parse failure when the credentials table end is missing', () => {
+    const broken = sql.replace(
+      '    CONSTRAINT "credentials_pkey" PRIMARY KEY ("id")\n);',
+      '    CONSTRAINT "credentials_pkey" PRIMARY KEY ("id")\n;',
+    );
+    expect(broken).not.toBe(sql);
+    const report = violations(broken);
+    expect(report).toContain('cannot parse the end of table "credentials"');
+    expect(report).not.toContain('must belong to table "credentials"');
+  });
+
   test('fails when the audit enforcement block is missing', () => {
     const withoutBlock = normalize(sql);
     expect(withoutBlock).not.toContain('CREATE TRIGGER');

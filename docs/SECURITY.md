@@ -28,7 +28,7 @@ Graveshift is read-only toward production by default. These rules match `.kiro/s
 
 Every tool input has a Zod schema with limits (`list_incidents` at most 50, `get_audit_log` at most 100, `tail_logs` at most 200 lines). `query_metric` accepts only allowlisted metric and function names and range selectors of at most 60 minutes. `propose_fix` returns a policy decision and never executes; its reply says that rate and budget limits are not enforced because the daemon exposes no counters. The HTTP route calls the shared credential component and accepts only an unexpired, unrevoked MCP token with kind `mcp`. The component compares hashes in constant time. The `/mcp` bearer path is tested in-process only (HTTP e2e against the Nest application), not over a real network. The stdio launcher has no authentication by design: it trusts the local process and must only be started by a local user. It still builds the same `AppModule`, so `GRAVESHIFT_OAUTH_JWT_SECRET` must be set at boot even for stdio; `powers/graveshift/mcp.json` holds a placeholder that a local user replaces.
 
-The MCP audit tools are stubs in v2. `get_audit_log` returns an empty list, and `verify_audit_chain` returns `{ ok: false, unavailable: true }`, because the v2 daemon exposes no audit read API. These tools do not read the PostgreSQL audit chain that this service writes. Tickets #47 and #60 own the real implementations; this PR does not change them.
+The MCP audit tools are stubs in v2. `get_audit_log` returns an empty list, and `verify_audit_chain` returns `{ ok: false, unavailable: true }`, because the v2 daemon exposes no audit read API. These tools do not read the PostgreSQL audit chain that this service writes. Tickets #47 and #60 own the real implementations.
 
 ## Credentials and event ingest
 
@@ -43,7 +43,6 @@ PostgreSQL stores a SHA-256 hash, a short display prefix, kind, name, client id,
 ## Known gaps
 
 - The v2 daemon serves only `/healthz` on localhost. The `/mcp` bearer path is checked in-process only, and stdio is unauthenticated by design.
-- The MCP audit tools `get_audit_log` and `verify_audit_chain` are stubs; they return an empty list and an `unavailable` result until #47 and #60 land.
 - Consumed actuator token IDs are in memory; a restart inside the 15-minute window forgets them.
 - The Kubernetes network policy allows all egress. Egress allowlisting is not done.
 - The `pods/log` rule exposes log contents to the daemon. For real users, use a namespace-scoped Role instead of the ClusterRole.

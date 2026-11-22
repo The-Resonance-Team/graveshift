@@ -18,8 +18,8 @@ if (migrationFiles.length === 0) {
 
 const migrationSql = migrationFiles.map((file) => readFileSync(file, 'utf8')).join('\n');
 
-// The init migration was amended in 20186f0, so its checksum changed. Do not add a
-// follow-up migration. Recreate any local database that applied the old checksum.
+// Commit 20186f0 amended the init migration. Its recorded checksums and the local
+// database recreate note live in docs/DECISIONS.md. Keep one init migration.
 const violations = migrationOwnershipViolations(migrationSql);
 if (violations.length > 0) {
   console.error('Prisma drift check failed: migration objects are on the wrong table.');

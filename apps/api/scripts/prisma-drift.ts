@@ -2,8 +2,13 @@
 // used: the check reads SQL text only, so it can run in CI without a DB service.
 const AUDIT_BLOCK =
   /-- BEGIN unmanaged append-only audit enforcement[\s\S]*?-- END unmanaged append-only audit enforcement\./;
-const TABLE_BODY = /CREATE TABLE\s+"([^"]+)"\s*\(([\s\S]*?)\n\);/g;
-const TRIGGER = /CREATE TRIGGER\s+([A-Za-z0-9_]+)\s+BEFORE\s+([A-Z]+)\s+ON\s+"([^"]+)"/g;
+const AUDIT_FUNCTION =
+  /CREATE FUNCTION\s+([A-Za-z0-9_]+)\s*\(\s*\)\s+RETURNS\s+trigger[\s\S]*?AS\s+\$\$([\s\S]*?)\$\$/;
+const TRIGGER =
+  /CREATE TRIGGER\s+([A-Za-z0-9_]+)\s+BEFORE\s+([A-Z]+)\s+ON\s+"([^"]+)"[^;]*?FOR EACH ROW\s+EXECUTE (?:FUNCTION|PROCEDURE)\s+([A-Za-z0-9_]+)\s*\(\s*\)\s*;/g;
+const APPEND_ONLY_BODY = /RAISE EXCEPTION\s+'[^']*append-only[^']*'/i;
+const FUNCTION_NAME = 'prevent_audit_entry_mutation';
+const CREDENTIALS_TABLE = /CREATE\s+TABLE\s+"credentials"\s*\(/;
 
 const EXPECTED_TRIGGERS = [
   { name: 'audit_entries_no_update', event: 'UPDATE', table: 'audit_entries' },
@@ -23,6 +28,39 @@ export const normalize = (sql: string): string =>
     )
     .join('\n');
 
+/** Reads a table body by balanced parentheses, so Prisma output formatting can change. */
+const tableBody = (sql: string, table: string): string | undefined => {
+  const match = new RegExp(`CREATE\\s+TABLE\\s+"${table}"\\s*\\(`).exec(sql);
+  if (match === null) return undefined;
+  const start = match.index + match[0].length;
+  let depth = 1;
+  let inQuote = false;
+  let inString = false;
+  for (let index = start; index < sql.length; index += 1) {
+    const char = sql[index];
+    if (char === undefined) break;
+    if (char === "'" && !inQuote) {
+      if (inString && sql[index + 1] === "'") {
+        index += 1;
+        continue;
+      }
+      inString = !inString;
+      continue;
+    }
+    if (char === '"' && !inString) {
+      inQuote = !inQuote;
+      continue;
+    }
+    if (inQuote || inString) continue;
+    if (char === '(') depth += 1;
+    else if (char === ')') {
+      depth -= 1;
+      if (depth === 0) return sql.slice(start, index);
+    }
+  }
+  return undefined;
+};
+
 /**
  * Returns every ownership violation in the migration SQL. An empty list means the
  * append-only enforcement and the objects added in 20186f0 sit on their intended tables.
@@ -32,15 +70,26 @@ export function migrationOwnershipViolations(sql: string): string[] {
   if (block === undefined) return ['audit enforcement block is missing from the migration'];
 
   const violations: string[] = [];
-  if (!/CREATE FUNCTION prevent_audit_entry_mutation\(\) RETURNS trigger/.test(block)) {
-    violations.push('audit function prevent_audit_entry_mutation is missing from the block');
+  const fn = AUDIT_FUNCTION.exec(block);
+  if (fn === null) {
+    violations.push(`audit function ${FUNCTION_NAME} is missing from the block`);
+  } else {
+    const [, name, body] = fn;
+    if (name !== FUNCTION_NAME) {
+      violations.push(`audit function is named "${name}"; expected "${FUNCTION_NAME}"`);
+    }
+    if (body === undefined || !APPEND_ONLY_BODY.test(body)) {
+      violations.push('audit function body no longer raises the append-only exception');
+    }
   }
 
-  const triggers = new Map<string, { event: string; table: string }>();
+  const triggers = new Map<string, { event: string; table: string; func: string }>();
   for (const match of block.matchAll(TRIGGER)) {
-    const [, name, event, table] = match;
-    if (name === undefined || event === undefined || table === undefined) continue;
-    triggers.set(name, { event, table });
+    const [, name, event, table, func] = match;
+    if (name === undefined || event === undefined || table === undefined || func === undefined) {
+      continue;
+    }
+    triggers.set(name, { event, table, func });
   }
   for (const expected of EXPECTED_TRIGGERS) {
     const actual = triggers.get(expected.name);
@@ -59,20 +108,23 @@ export function migrationOwnershipViolations(sql: string): string[] {
         `trigger ${expected.name} fires on ${actual.event}; expected ${expected.event}`,
       );
     }
+    if (actual.func !== FUNCTION_NAME) {
+      violations.push(
+        `trigger ${expected.name} calls "${actual.func}"; expected "${FUNCTION_NAME}"`,
+      );
+    }
   }
   for (const extra of triggers.keys()) {
     violations.push(`unexpected trigger ${extra} in the audit enforcement block`);
   }
 
-  const credentials = new Map<string, string>();
-  for (const match of sql.matchAll(TABLE_BODY)) {
-    const [, name, body] = match;
-    if (name === undefined || body === undefined) continue;
-    credentials.set(name, body);
-  }
-  const credentialsBody = credentials.get('credentials');
+  const credentialsBody = tableBody(sql, 'credentials');
   if (credentialsBody === undefined) {
-    violations.push('table "credentials" is missing from the migration');
+    violations.push(
+      CREDENTIALS_TABLE.test(sql)
+        ? 'cannot parse the end of table "credentials"; check the CREATE TABLE format'
+        : 'table "credentials" is missing from the migration',
+    );
   } else if (!/"expiration_audited_at"\s+TIMESTAMP\(3\)/.test(credentialsBody)) {
     violations.push('column expiration_audited_at must belong to table "credentials"');
   }
