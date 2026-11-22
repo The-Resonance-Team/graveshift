@@ -55,9 +55,12 @@ services:
       GRAVESHIFT_API_INTERNAL_TOKEN: ${GRAVESHIFT_API_INTERNAL_TOKEN:-}
       GRAVESHIFT_API_URL: ${GRAVESHIFT_ACTUATOR_API_URL:-http://host.docker.internal:3000}
       GRAVESHIFT_MODE: ${GRAVESHIFT_MODE:-propose}
+      # Durable admission store. A named volume keeps consumed tokens across restart.
+      ACTUATOR_STATE_DIR: /data/graveshift-actuator
       BUN_RUNTIME_TRANSPILER_CACHE_PATH: '0'
     volumes:
       - ../../graveshift.config.yaml:/config/graveshift.config.yaml:ro
+      - actuator-state:/data/graveshift-actuator
     networks: [core, act]
     depends_on: [socket-proxy-actuator]
     healthcheck:
@@ -156,6 +159,7 @@ networks:
     name: candy
 
 volumes:
+  actuator-state:
   postgres-data:
   nats-data:
   prometheus-data:

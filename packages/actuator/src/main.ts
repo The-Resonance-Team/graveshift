@@ -49,8 +49,13 @@ try {
     () => Date.now(),
     requiredAudit,
   );
-} catch {
-  log('fatal', 'Durable admission store is unavailable; refusing to start');
+} catch (error) {
+  // Log only the error code. The store path is deployment-local, not log data.
+  const code =
+    error !== null && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
+      ? error.code
+      : 'UNKNOWN';
+  log('fatal', 'Durable admission store is unavailable; refusing to start', { code });
   process.exit(1);
 }
 const actuator = createActuator({
