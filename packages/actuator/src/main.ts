@@ -5,6 +5,7 @@ import type { RequiredAdmission } from './claims';
 import { createDockerRestarter, createKubeWriter } from './backends';
 import { createActuator } from './execute';
 import { createActionHandler, MAX_ACTION_BODY_BYTES } from './handler';
+import { admissionErrorCode } from './startup-error';
 import { MIN_SECRET_LENGTH } from './sign';
 import { ActuatorError, type KubeWriter, type RequiredAudit } from './types';
 
@@ -51,11 +52,9 @@ try {
   );
 } catch (error) {
   // Log only the error code. The store path is deployment-local, not log data.
-  const code =
-    error !== null && typeof error === 'object' && 'code' in error && typeof error.code === 'string'
-      ? error.code
-      : 'UNKNOWN';
-  log('fatal', 'Durable admission store is unavailable; refusing to start', { code });
+  log('fatal', 'Durable admission store is unavailable; refusing to start', {
+    code: admissionErrorCode(error),
+  });
   process.exit(1);
 }
 const actuator = createActuator({

@@ -4,6 +4,7 @@ import { join } from 'node:path';
 
 const root = join(import.meta.dir, '..', '..');
 const compose = readFileSync(join(root, 'deploy', 'compose', 'graveshift.compose.yml'), 'utf8');
+const dockerfile = readFileSync(join(root, 'deploy', 'compose', 'bun.Dockerfile'), 'utf8');
 
 function serviceBlock(name: string): string {
   const lines = compose.split('\n');
@@ -30,5 +31,20 @@ describe('Compose actuator state', () => {
     expect(compose).toMatch(/^volumes:\s*$/m);
     expect(compose).toMatch(/^\s{2}actuator-state:\s*$/m);
     expect(compose).not.toMatch(/tmpfs:[^\n]*graveshift-actuator/);
+    // The inherited /tmp tmpfs stays; only the state path must be persistent.
+    expect(compose).toMatch(/tmpfs: \[\/tmp\]/);
+  });
+
+  test('the image creates and owns the state directory before dropping privileges', () => {
+    const stateDir = '/data/graveshift-actuator';
+    const create = dockerfile
+      .split('\n')
+      .findIndex((line) =>
+        new RegExp(`RUN\\s+mkdir -p ${stateDir.replaceAll('/', '\\/')}`).test(line),
+      );
+    expect(create).toBeGreaterThanOrEqual(0);
+    expect(dockerfile.split('\n')[create]).toMatch(/chown\s+-R\s+bun:bun\s+\/data/);
+    const userIndex = dockerfile.split('\n').findIndex((line) => line === 'USER bun');
+    expect(userIndex).toBeGreaterThan(create);
   });
 });
