@@ -199,6 +199,22 @@ describe('prometheus collector', () => {
     expect(calls).toEqual([]);
   });
 
+  test('fail closed: a second start is rejected until stop runs', async () => {
+    const calls: FakeClientOptions['calls'] = [];
+    const collector = createPrometheusCollector({
+      client: fakeClient({ values: {}, calls }),
+      sleep: hangingSleep().sleep,
+      clock: fixedClock,
+    });
+    await collector.start(makeContext().context);
+    await expect(collector.start(makeContext().context)).rejects.toThrow(
+      'prometheus collector is already started',
+    );
+    await collector.stop();
+    await collector.start(makeContext().context);
+    await collector.stop();
+  });
+
   test('the poll loop repeats at the interval and stops on stop', async () => {
     const calls: FakeClientOptions['calls'] = [];
     let wake: (() => void) | undefined;

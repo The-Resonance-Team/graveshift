@@ -3,7 +3,7 @@ import { EventEnvelopeSchema } from '@graveshift/core';
 import { describe, expect, test } from 'bun:test';
 
 import { createK8sCollector } from './k8s';
-import { hangingSleep, makeContext, rejectingPublisher, flush } from './test-helpers';
+import { failures, hangingSleep, makeContext, rejectingPublisher, flush } from './test-helpers';
 
 const pod = 'api-6f7b9c8d5d-x2k4q';
 
@@ -181,13 +181,18 @@ describe('kubernetes collector', () => {
         signal.addEventListener('abort', () => resolve(), { once: true }),
       );
     };
-    const { collector, publisher } = await startedCollector(
+    const { collector, publisher, warnings } = await startedCollector(
       { batches: [[], warningEvents()], failFirstWith: new WatchExpiredError(), oomKilled: [pod] },
       sleep,
     );
     await flush();
     await flush();
     expect(publisher.envelopes).toHaveLength(5);
+    // the failed connect is reported to warn, not to the envelope stream
+    expect(warnings).toContain(
+      'kubernetes source disconnected: resourceVersion too old (410 Gone)',
+    );
+    expect(failures(warnings)).toEqual([]);
     await collector.stop();
   });
 
@@ -248,7 +253,23 @@ describe('kubernetes collector', () => {
     const { collector, publisher, warnings } = await startedCollector2(api);
     expect(publisher.envelopes).toHaveLength(1);
     expect(publisher.envelopes[0]?.type).toBe('runtime.restart-loop');
-    expect(warnings).toEqual([]);
+    // the enrichment error is reported to warn; the crash_loop observation stays published
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toContain(
+      'kubernetes oom enrichment failed for pod prod/api-6f7b9c8d5d-x2k4q',
+    );
+    expect(warnings[0]).toContain('kube api down');
+    await collector.stop();
+  });
+
+  test('fail closed: a second start is rejected until stop runs', async () => {
+    const collector = createK8sCollector({ api: fakeApi({ batches: [[]] }) });
+    await collector.start(makeContext().context);
+    expect(() => collector.start(makeContext().context)).toThrow(
+      'kubernetes collector is already started',
+    );
+    await collector.stop();
+    await collector.start(makeContext().context);
     await collector.stop();
   });
 

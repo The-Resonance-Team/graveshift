@@ -9,7 +9,7 @@ import {
 } from '@graveshift/sources-k8s';
 import { type Integration, validateContext } from '@graveshift/integrations';
 
-import { createObserver, signalObservation, type Sleep } from './publish';
+import { createObserver, reason, signalObservation, type Sleep } from './publish';
 
 export interface K8sCollectorOptions {
   /**
@@ -27,7 +27,8 @@ const SOURCE = 'collector.kubernetes';
 /**
  * Watch Kubernetes events and publish one envelope per observation for the
  * Grave named in Context.service. The host runs one Collector per Grave.
- * Fail closed at start on a bad context; fail open on every publish.
+ * Fail closed at start on a bad context or a second start; fail open on
+ * every publish. Call stop() before starting again.
  */
 export function createK8sCollector(options: K8sCollectorOptions): Integration {
   const warn = options.warn ?? (() => {});
@@ -39,6 +40,8 @@ export function createK8sCollector(options: K8sCollectorOptions): Integration {
 
     start(context) {
       validateContext(context);
+      // one live loop: a second start leaks the first unless stop() ran first
+      if (stopLoop) throw new Error('kubernetes collector is already started');
       const observer = createObserver(context, warn);
       let cursor: string | undefined;
       const seen = new Set<string>();
@@ -64,14 +67,24 @@ export function createK8sCollector(options: K8sCollectorOptions): Integration {
               reason: event.reason,
             }),
           );
-        } catch {
+        } catch (error) {
           // enrichment is best-effort; the crash_loop observation was already published
+          warn(
+            `kubernetes oom enrichment failed for pod ${event.namespace}/${event.involvedName}: ${reason(error)}`,
+          );
         }
       };
 
       stopLoop = startWatchLoop({
-        // Housekeeping events (source_disconnected, source_reconnected) stay out of the envelope stream.
-        emit: () => undefined,
+        // Housekeeping events stay out of the envelope stream and go to warn instead.
+        emit: (event) => {
+          if (event.kind === 'source_disconnected')
+            warn(`kubernetes source disconnected: ${event.reason}`);
+          else if (event.kind === 'source_reconnected')
+            warn(
+              `kubernetes source reconnected${event.cursor === undefined ? '' : ` at cursor ${event.cursor}`}`,
+            );
+        },
         ...(options.sleep ? { sleep: options.sleep } : {}),
         async connect(signal, connected) {
           // ponytail: after a 410 Gone the gap is not replayed, upgrade if lost events matter
@@ -82,6 +95,9 @@ export function createK8sCollector(options: K8sCollectorOptions): Integration {
               (event) => {
                 const key = event.uid + event.resourceVersion;
                 if (seen.has(key)) return;
+                // A cleared set can let a replayed event through. That is safe:
+                // the envelope id is stable, and the publisher deduplicates it by
+                // JetStream msgID.
                 if (seen.size > 1000) seen.clear();
                 seen.add(key);
                 cursor = event.resourceVersion;

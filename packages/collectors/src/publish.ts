@@ -33,7 +33,7 @@ export const abortableSleep: Sleep = (ms, signal) =>
 /** Publish one observation as one envelope. It never throws. */
 export type Observer = (observation: Observation) => void;
 
-const reason = (error: unknown): string =>
+export const reason = (error: unknown): string =>
   error instanceof Error ? error.message : 'unknown error';
 
 function redactValue(value: unknown): unknown {
@@ -56,7 +56,8 @@ function redactPayload(payload: Record<string, unknown>): Record<string, unknown
  * id and observedAt come from the observation, so a replayed observation
  * rebuilds the same envelope and the publisher deduplicates it by msgID.
  * Fail open: a bad observation or a failing publisher calls warn and the
- * Collector loop keeps running.
+ * Collector loop keeps running. A publisher that throws synchronously or
+ * returns a rejected promise is reported the same way and never escapes.
  */
 export function createObserver(context: Context, warn: (message: string) => void): Observer {
   return (observation) => {
@@ -81,9 +82,12 @@ export function createObserver(context: Context, warn: (message: string) => void
       warn(`collector dropped observation ${observation.id}: ${reason(error)}`);
       return;
     }
-    context.publisher.publish(envelope).catch((error: unknown) => {
-      warn(`collector publish failed for envelope ${envelope.id}: ${reason(error)}`);
-    });
+    // Promise.resolve().then also turns a synchronous throw into a rejection
+    Promise.resolve()
+      .then(() => context.publisher.publish(envelope))
+      .catch((error: unknown) => {
+        warn(`collector publish failed for envelope ${envelope.id}: ${reason(error)}`);
+      });
   };
 }
 

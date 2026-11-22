@@ -43,6 +43,11 @@ export function flush(ticks = 5): Promise<void> {
   return chain;
 }
 
+/** Only failure warnings. Housekeeping (source disconnect and reconnect) is excluded. */
+export function failures(warnings: string[]): string[] {
+  return warnings.filter((w) => !/\bsource (disconnected|reconnected)\b/.test(w));
+}
+
 /** A sleep fake that records backoff delays and resolves only when the signal aborts. */
 export function hangingSleep(): {
   sleep: (ms: number, signal: AbortSignal) => Promise<void>;

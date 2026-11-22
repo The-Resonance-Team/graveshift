@@ -3,7 +3,7 @@ import { EventEnvelopeSchema } from '@graveshift/core';
 import { describe, expect, test } from 'bun:test';
 
 import { createDockerCollector } from './docker';
-import { hangingSleep, makeContext, rejectingPublisher, flush } from './test-helpers';
+import { failures, hangingSleep, makeContext, rejectingPublisher, flush } from './test-helpers';
 
 const BASE = 'http://socket-proxy:2375';
 
@@ -77,7 +77,7 @@ describe('docker collector', () => {
       requests: [],
     });
 
-    expect(warnings).toEqual([]);
+    expect(failures(warnings)).toEqual([]);
     const envelopes = publisher.envelopes;
     expect(envelopes).toHaveLength(3);
     for (const envelope of envelopes)
@@ -180,8 +180,48 @@ describe('docker collector', () => {
     await flush();
 
     expect(publisher.attempted).toHaveLength(3);
-    expect(warnings).toHaveLength(1);
-    expect(warnings[0]).toContain('nats unavailable');
+    // one publish failure; the stream-end disconnect notice is housekeeping, not a failure
+    expect(failures(warnings)).toHaveLength(1);
+    expect(failures(warnings)[0]).toContain('nats unavailable');
+    await collector.stop();
+  });
+
+  test('forwards source disconnect and reconnect to warn', async () => {
+    let first = true;
+    const sleep = async (_ms: number, signal: AbortSignal): Promise<void> => {
+      if (signal.aborted) return;
+      if (first) {
+        first = false;
+        return;
+      }
+      await new Promise<void>((resolve) =>
+        signal.addEventListener('abort', () => resolve(), { once: true }),
+      );
+    };
+    const { collector, warnings } = await startedCollector(
+      { batches: [[], []], requests: [] },
+      sleep,
+    );
+    await flush();
+    expect(warnings).toContain('docker source disconnected: stream ended');
+    expect(warnings.some((w) => w.startsWith('docker source reconnected'))).toBe(true);
+    expect(failures(warnings)).toEqual([]);
+    await collector.stop();
+  });
+
+  test('fail closed: a second start is rejected until stop runs', async () => {
+    const setup = makeContext();
+    const collector = createDockerCollector({
+      baseUrl: BASE,
+      fetch: fakeDocker({ batches: [[]], requests: [] }),
+      sleep: hangingSleep().sleep,
+    });
+    await collector.start(setup.context);
+    expect(() => collector.start(makeContext().context)).toThrow(
+      'docker collector is already started',
+    );
+    await collector.stop();
+    await collector.start(setup.context);
     await collector.stop();
   });
 

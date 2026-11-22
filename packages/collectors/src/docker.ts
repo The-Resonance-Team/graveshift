@@ -22,7 +22,8 @@ const SOURCE = 'collector.docker';
 /**
  * Watch one Docker host and publish one envelope per observation for the
  * Grave named in Context.service. The host runs one Collector per Grave.
- * Fail closed at start on a bad context; fail open on every publish.
+ * Fail closed at start on a bad context or a second start; fail open on
+ * every publish. Call stop() before starting again.
  */
 export function createDockerCollector(options: DockerCollectorOptions): Integration {
   const warn = options.warn ?? (() => {});
@@ -34,6 +35,8 @@ export function createDockerCollector(options: DockerCollectorOptions): Integrat
 
     start(context) {
       validateContext(context);
+      // one live loop: a second start leaks the first unless stop() ran first
+      if (stopLoop) throw new Error('docker collector is already started');
       const api = new DockerApi(options.baseUrl, options.fetch);
       const observer = createObserver(context, warn);
       // ponytail: cursor dedupe mirrors createDockerSource, upgrade when the v1 source retires and this is the only reader
@@ -53,8 +56,15 @@ export function createDockerCollector(options: DockerCollectorOptions): Integrat
       };
 
       stopLoop = startWatchLoop({
-        // Housekeeping events (source_disconnected, source_reconnected) stay out of the envelope stream.
-        emit: () => undefined,
+        // Housekeeping events stay out of the envelope stream and go to warn instead.
+        emit: (event) => {
+          if (event.kind === 'source_disconnected')
+            warn(`docker source disconnected: ${event.reason}`);
+          else if (event.kind === 'source_reconnected')
+            warn(
+              `docker source reconnected${event.cursor === undefined ? '' : ` at cursor ${event.cursor}`}`,
+            );
+        },
         ...(options.sleep ? { sleep: options.sleep } : {}),
         async connect(signal, connected) {
           const stream = await api.events(cursor, signal, () =>

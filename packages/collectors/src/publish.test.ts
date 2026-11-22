@@ -1,8 +1,9 @@
 import { EventEnvelopeSchema, type Signal } from '@graveshift/core';
+import type { Publisher } from '@graveshift/events';
 import { describe, expect, test } from 'bun:test';
 
 import { createObserver, signalObservation } from './publish';
-import { makeContext, rejectingPublisher } from './test-helpers';
+import { flush, makeContext, rejectingPublisher } from './test-helpers';
 
 const signal = (kind: Signal['kind'], over: Partial<Signal> = {}): Signal => ({
   id: `docker:c1:1:${kind}`,
@@ -17,7 +18,7 @@ const signal = (kind: Signal['kind'], over: Partial<Signal> = {}): Signal => ({
 });
 
 describe('createObserver', () => {
-  test('publishes one envelope with the observation id and time', () => {
+  test('publishes one envelope with the observation id and time', async () => {
     const { context, publisher } = makeContext();
     createObserver(context, () => {})({
       id: 'obs-1',
@@ -29,6 +30,7 @@ describe('createObserver', () => {
       fingerprint: 'api:runtime.oom',
       payload: { containerId: 'c1' },
     });
+    await flush();
 
     expect(publisher.envelopes).toHaveLength(1);
     const [envelope] = publisher.envelopes;
@@ -47,7 +49,7 @@ describe('createObserver', () => {
     });
   });
 
-  test('redacts secrets in every payload string before publish', () => {
+  test('redacts secrets in every payload string before publish', async () => {
     const { context, publisher } = makeContext();
     createObserver(context, () => {})({
       id: 'obs-2',
@@ -66,6 +68,7 @@ describe('createObserver', () => {
         },
       },
     });
+    await flush();
 
     const [envelope] = publisher.envelopes;
     const text = JSON.stringify(envelope?.payload ?? {});
@@ -74,7 +77,7 @@ describe('createObserver', () => {
     expect(text).toContain('[REDACTED');
   });
 
-  test('a replayed observation rebuilds the same envelope id', () => {
+  test('a replayed observation rebuilds the same envelope id', async () => {
     const { context, publisher } = makeContext();
     const observation = {
       id: 'docker:c1:1:oom',
@@ -88,6 +91,7 @@ describe('createObserver', () => {
     const observer = createObserver(context, () => {});
     observer(observation);
     observer(observation);
+    await flush();
     const ids = publisher.envelopes.map((e) => e.id);
     expect(ids).toEqual(['docker:c1:1:oom', 'docker:c1:1:oom']);
   });
@@ -128,11 +132,41 @@ describe('createObserver', () => {
     };
     observer(observation);
     observer(observation);
-    expect(publisher.attempted).toHaveLength(2);
     // the rejected first publish is reported; the second still goes through
     return new Promise((r) => setTimeout(r, 0)).then(() => {
+      expect(publisher.attempted).toHaveLength(2);
       expect(warnings).toHaveLength(1);
       expect(warnings[0]).toContain('obs-3');
+    });
+  });
+  test('fail open: a publisher that throws synchronously calls warn and never throws', () => {
+    const attempted: string[] = [];
+    const publisher: Publisher = {
+      publish(envelope) {
+        attempted.push(envelope.id);
+        throw new Error('nats client closed');
+      },
+    };
+    const { context } = makeContext({ publisher });
+    const warnings: string[] = [];
+    const observer = createObserver(context, (m) => warnings.push(m));
+    expect(() =>
+      observer({
+        id: 'obs-sync',
+        observedAt: '2026-11-22T09:59:00.000Z',
+        traceId: 'trace-1',
+        source: 'collector.fake',
+        type: 'runtime.oom',
+        severity: 'critical' as const,
+        fingerprint: 'api:oom',
+      }),
+    ).not.toThrow();
+    // the synchronous throw became a rejection; the catch reports it
+    return new Promise((r) => setTimeout(r, 0)).then(() => {
+      expect(attempted).toHaveLength(1);
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toContain('obs-sync');
+      expect(warnings[0]).toContain('nats client closed');
     });
   });
 });

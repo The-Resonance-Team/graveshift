@@ -63,7 +63,8 @@ const reason = (error: unknown): string =>
  * Poll Prometheus for the Grave named in Context.service and publish one
  * info envelope per numeric sample. info events feed baselines and charts;
  * the daemon rule engine decides what to detect. Fail closed at start on a
- * bad context; fail open on every publish.
+ * bad context or a second start; fail open on every publish. Call stop()
+ * before starting again.
  */
 export function createPrometheusCollector(
   options: PrometheusCollectorOptions,
@@ -78,6 +79,7 @@ export function createPrometheusCollector(
   let observer: Observer | undefined;
   let grave: string | undefined;
   let controller: AbortController | undefined;
+  let running = false;
 
   const pollCycle = async (): Promise<void> => {
     const activeClient = client;
@@ -118,10 +120,13 @@ export function createPrometheusCollector(
 
     async start(context) {
       validateContext(context);
+      // one live cycle chain: a second start leaks the first unless stop() ran first
+      if (running) throw new Error('prometheus collector is already started');
       if (options.client) client = options.client;
       else if (options.baseUrl)
         client = createMetricsClient(options.baseUrl, options.fetch, options.timeoutMs);
       else throw new Error('prometheus collector needs a client or a baseUrl');
+      running = true;
       observer = createObserver(context, warn);
       grave = context.service;
       await pollCycle();
@@ -148,6 +153,7 @@ export function createPrometheusCollector(
       observer = undefined;
       client = undefined;
       grave = undefined;
+      running = false;
     },
   };
 }
