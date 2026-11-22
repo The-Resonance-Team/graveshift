@@ -114,11 +114,18 @@ describe('MCP client SDK against the real API endpoint (in-memory)', () => {
     // It has no authentication by design (ADR 0006), so no credential is passed.
     const stdioEntry = fileURLToPath(new URL('../src/stdio.ts', import.meta.url));
     const apiDir = fileURLToPath(new URL('../', import.meta.url));
-    const env = Object.fromEntries(
-      Object.entries(process.env).filter(
-        (entry): entry is [string, string] => typeof entry[1] === 'string',
-      ),
-    );
+    // Only PATH and the test-only boot vars from `test/setup.ts` reach the
+    // child. No other variable, and no secret of the host, is forwarded.
+    const env: Record<string, string> = {};
+    for (const name of [
+      'PATH',
+      'GRAVESHIFT_OAUTH_JWT_SECRET',
+      'GRAVESHIFT_OAUTH_CLIENTS',
+      'GRAVESHIFT_DAEMON_READ_TOKEN',
+    ] as const) {
+      const value = process.env[name];
+      if (value !== undefined) env[name] = value;
+    }
     const mcp = createGraveshiftMcp({
       transport: 'stdio',
       command: process.execPath,

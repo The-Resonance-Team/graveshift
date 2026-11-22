@@ -83,6 +83,8 @@ jobs:
         run: bun run --filter @graveshift/api prisma:validate
       - name: Check migration drift
         run: bun run migrate:drift:check
+      - name: Check MCP client drift
+        run: bun run mcp:drift:check
 
   typecheck:
     needs: changes

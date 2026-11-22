@@ -59,11 +59,13 @@ const mcp = createGraveshiftMcp({
 ## Drift check
 
 `src/catalog.ts` mirrors the endpoint's primitives. The API stays the
-authority. The test `src/drift.test.ts` and the script
+authority. The test `src/drift.test.ts` and the scripts
+`bun run mcp:drift:check` (root) and
 `bun run --filter @graveshift/mcp-client drift:check` compare the catalog with
 the `@Tool()`, `@Prompt()` and `@ResourceTemplate()` metadata of
-`apps/api/src/mcp` and fail closed on any mismatch. Update the catalog in the
-same PR that changes the endpoint.
+`apps/api/src/mcp` and fail closed on any mismatch. CI runs
+`bun run mcp:drift:check` in the `db` job beside the migration drift check.
+Update the catalog in the same PR that changes the endpoint.
 
 ## Tests
 
