@@ -60,18 +60,42 @@ describe('Event reader lifetime', () => {
     expect(connected.closes()).toBe(1);
   });
 
+  // The explicit timeout makes a regression fail fast instead of hanging CI.
   test('shutdown waits for pending acquisition and stops reads before using its handle', async () => {
-    const pending = Promise.withResolvers<NatsReaderHandle>();
+    let resolve: (value: NatsReaderHandle) => void = () => undefined;
+    const pending = new Promise<NatsReaderHandle>((done) => {
+      resolve = done;
+    });
     const connected = handle();
-    const source = new NatsEventSource(config, () => pending.promise);
-    const read = source.read(null, 1);
-    const assertion = expect(read).rejects.toThrow('Event reader is closed');
+    const source = new NatsEventSource(config, () => pending);
+    const read = source.read(null, 1).then(
+      () => 'resolved',
+      (error: unknown) => (error instanceof Error ? error.message : 'unknown'),
+    );
     const close = source.onModuleDestroy();
-    pending.resolve(connected.value);
-    await assertion;
+    resolve(connected.value);
+    expect(await read).toBe('Event reader is closed');
     await close;
     expect(connected.reads()).toBe(0);
     expect(connected.closes()).toBe(1);
     await expect(source.read(null, 1)).rejects.toThrow('Event reader is closed');
-  });
+  }, 5000);
+
+  test('shutdown is bounded when acquisition never settles, and closes a late handle once', async () => {
+    let resolve: (value: NatsReaderHandle) => void = () => undefined;
+    const pending = new Promise<NatsReaderHandle>((done) => {
+      resolve = done;
+    });
+    const connected = handle();
+    const source = new NatsEventSource(config, () => pending, undefined, 20);
+    const read = source.read(null, 1).catch(() => undefined);
+    await source.onModuleDestroy();
+    expect(connected.closes()).toBe(0);
+    resolve(connected.value);
+    await read;
+    await Bun.sleep(5);
+    expect(connected.closes()).toBe(1);
+    await source.onModuleDestroy();
+    expect(connected.closes()).toBe(1);
+  }, 5000);
 });

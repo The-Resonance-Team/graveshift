@@ -19,6 +19,9 @@ import type { EventReadResult, EventSource, StoredEvent } from './events.types';
 export const NATS_READER = Symbol('NATS_READER');
 export const NATS_READER_CONNECTOR = Symbol('NATS_READER_CONNECTOR');
 export const NATS_READER_CONNECT = Symbol('NATS_READER_CONNECT');
+/** Optional override of how long shutdown waits for a pending connection. */
+export const NATS_SHUTDOWN_WAIT_MS = Symbol('NATS_SHUTDOWN_WAIT_MS');
+const DEFAULT_SHUTDOWN_WAIT_MS = 5000;
 export type NatsReaderConnector = typeof connectNatsReader;
 export type ReaderConnector = (servers: string) => Promise<NatsReaderHandle>;
 
@@ -80,6 +83,7 @@ export class NatsEventSource implements EventSource, OnModuleDestroy {
   private readonly injected: EventsReader | undefined;
   private readonly connect: ReaderConnector;
   private readonly surfaceConnectError: boolean;
+  private readonly closedHandles = new WeakSet<NatsReaderHandle>();
 
   constructor(
     @Inject(EVENTS_CONFIG) private readonly config: EventsConfig,
@@ -89,6 +93,9 @@ export class NatsEventSource implements EventSource, OnModuleDestroy {
     @Optional()
     @Inject(NATS_READER_CONNECTOR)
     connectReader?: NatsReaderConnector,
+    @Optional()
+    @Inject(NATS_SHUTDOWN_WAIT_MS)
+    private readonly shutdownWaitMs: number = DEFAULT_SHUTDOWN_WAIT_MS,
   ) {
     if (typeof injectedOrConnect === 'function') {
       // The two-argument form binds the connector at the second position.
@@ -180,12 +187,37 @@ export class NatsEventSource implements EventSource, OnModuleDestroy {
     return this.fetch(reader, seqs, index + FETCH_CONCURRENCY, next);
   }
 
+  /** Close a handle at most once, however many paths reach it. */
+  private closeOnce(handle: NatsReaderHandle): Promise<void> {
+    if (this.closedHandles.has(handle)) return Promise.resolve();
+    this.closedHandles.add(handle);
+    return handle.close();
+  }
+
+  /** Wait for the pending connection, but never longer than the shutdown bound. */
+  private async settlePending(pending: Promise<NatsReaderHandle>) {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<undefined>((resolve) => {
+      timer = setTimeout(resolve, this.shutdownWaitMs, undefined);
+    });
+    try {
+      return await Promise.race([pending.catch(() => undefined), timeout]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   onModuleDestroy(): Promise<void> {
     this.closed = true;
     this.closing ??= (async () => {
-      const handle = this.pending ? await this.pending.catch(() => undefined) : undefined;
-      await handle?.close();
-      if (this.handle && this.handle !== handle) await this.handle.close();
+      const pending = this.pending;
+      if (pending) {
+        const handle = await this.settlePending(pending);
+        if (handle) await this.closeOnce(handle);
+        // A connection that settles after the bound is closed when it arrives.
+        else void pending.then((late) => this.closeOnce(late)).catch(() => undefined);
+      }
+      if (this.handle) await this.closeOnce(this.handle);
     })();
     return this.closing;
   }
