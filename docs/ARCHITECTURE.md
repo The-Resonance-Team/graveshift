@@ -181,7 +181,7 @@ The daemon wiring is still deferred. The rule engine is in `packages/core`, and 
 
 A **Plugin** is an in-process integration shipped into a client framework. A **Collector** is a daemon-side integration that reads infrastructure or cloud state. Both implement the `Integration` contract in `packages/integrations`: a name, a kind, `start()` and `stop()`. The host gives each one a `Context` with a `Publisher`, a `tenantId` and a `service`. The `service` names the **Grave** under watch. The contract also builds a valid **Event envelope** from `packages/core` with a `traceId`, `fingerprint` and severity. Its entry point imports no NATS client.
 
-Official Sentry SDKs replace framework-specific host plugins. The host changes the DSN host to the API and sets the numeric project id from its Credential. The API adapter verifies the key, resolves the Grave from the Credential's service binding, redacts the event, and publishes a canonical envelope. The host does not import a Graveshift plugin or hold a NATS credential.
+Official Sentry SDKs replace framework-specific host plugins. The host changes the DSN host to the API and sets the numeric project id from its Credential. The API adapter verifies the key, resolves the Grave from the Credential's service binding, redacts the event, and publishes a canonical envelope. The host does not import a Graveshift plugin or hold a NATS credential. For host setup with an official SDK, see the [Sentry SDK guide](guides/sentry-sdks.md).
 
 A Collector example lives in the contract tests: a fake source that publishes one envelope when started. Docker, Kubernetes, Prometheus and cloud Collectors are out of scope. Rule evaluation stays in the daemon. No Plugin or Collector evaluates a rule.
 
