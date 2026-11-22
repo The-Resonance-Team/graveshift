@@ -51,7 +51,7 @@ The SDK sends standard Sentry envelopes to this route:
 
 `POST /api/:projectId/envelope/`
 
-The host does not change how the SDK sends its key. The adapter accepts the `sentry_key` query parameter, the envelope `dsn` field and the `Authorization: Sentry <key>` header. If the SDK sends more than one key, the keys must be equal. The adapter does these steps:
+The host does not change how the SDK sends its key. The adapter accepts the `sentry_key` query parameter, the envelope `dsn` field and the `Authorization: Sentry <key>` header. If the SDK sends more than one key, the keys must be equal, or the adapter returns 403. The adapter does these steps:
 
 1. It checks the key and the number in the path.
 2. It finds the Grave from the `service` binding of the Credential.
@@ -60,7 +60,11 @@ The host does not change how the SDK sends its key. The adapter accepts the `sen
 
 The adapter returns 403 in these cases:
 
+- The SDK sends no key.
+- The envelope `dsn` field is not a valid `http` or `https` URL that has a key.
+- The SDK sends more than one key, and the keys are not equal.
 - The key is not 64 lowercase hex characters.
+- The key fails verification, because it is unknown, expired or revoked.
 - The Credential is not a plugin Credential that has only the `events:publish` scope.
 - The Credential has no `service` binding.
 - The `projectId` of the Credential is not equal to the number in the path.

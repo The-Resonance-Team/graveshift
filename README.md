@@ -118,13 +118,15 @@ The v2 daemon serves only `/healthz`, so the read tools return empty results tod
 
 ## API credential configuration
 
-To send telemetry from an official Sentry SDK, see [the Sentry SDK guide](docs/guides/sentry-sdks.md).
-
 The API reads its boot config from the environment. `GRAVESHIFT_OAUTH_JWT_SECRET` has no default and must be at least 32 characters. `GRAVESHIFT_OAUTH_CLIENTS` is a JSON map of client id to `{ "secret", "projectId", "scopes" }`; `POST /api/oauth/token` exchanges those values for a short-lived token. `GRAVESHIFT_OAUTH_ISSUER` and `GRAVESHIFT_OAUTH_AUDIENCE` set the token claims that the API checks.
 
 `GRAVESHIFT_CREDENTIAL_TTL_SECONDS` and `GRAVESHIFT_CREDENTIAL_MAX_TTL_SECONDS` bound issued credential lifetime. PostgreSQL stores credential hashes and the append-only, hash-chained audit log. Credential creation, revocation and expiry events share a transaction with the credential write. `GRAVESHIFT_EVENT_MAX_BYTES`, `GRAVESHIFT_EVENT_RATE_LIMIT` and `GRAVESHIFT_EVENT_RATE_TTL_MS` bound the event ingest route. `GRAVESHIFT_NATS_URL` enables NATS publish; without it, publish fails closed with 503. See `.env.example` for the full list.
 
 The public `@graveshift/core` and `@graveshift/events` packages contain the state and event contracts. Build both with `bun run build:contracts`; publish them from their package directories when a release is approved. This branch does not publish packages.
+
+## Guides
+
+- [Sentry SDK guide](docs/guides/sentry-sdks.md)
 
 ## Roadmap
 
