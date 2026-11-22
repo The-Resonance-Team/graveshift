@@ -235,7 +235,10 @@ export class OneShotBlobError extends Error {
 }
 
 // Each edited file must still have the blob the patch was made from. A missing file
-// counts as the empty blob, which is the base value for a new file.
+// counts as the empty blob, which is the base value for a new file. Deletions are
+// skipped here: the patch guard requires their baseBlobSha to be null, so there is
+// no blob to compare. The patch.baseSha equality check still binds each deletion
+// to one commit before any write.
 export async function assertPatchBlobs(
   patch: Patch,
   blobAt: (path: string) => Promise<string | undefined>,
