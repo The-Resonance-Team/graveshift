@@ -16,6 +16,12 @@ import {
   type SandboxConfig,
 } from '@graveshift/fixer';
 
+/**
+ * These tests run the committed checks (`bun check`, `bun test`) as real
+ * subprocesses, so they get a budget well above bun's 5 s default per-test limit.
+ */
+const REAL_SUBPROCESS_TIMEOUT_MS = 60_000;
+
 const committed = await loadGraveshiftConfig();
 
 /**
@@ -80,28 +86,36 @@ describe('the committed sandbox check commands', () => {
     expect(committed.fix.sandbox.pathDirs.every((dir) => dir.startsWith('/'))).toBe(true);
   });
 
-  test('every committed command starts and passes in the sandbox', async () => {
-    const workspace = createSandboxWorkspace({ runner });
-    const result = await workspace.verify(project(), patched, sandboxFrom([bunDir]));
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.checks).toHaveLength(committed.fix.sandbox.commands.length);
-    for (const check of result.checks) {
-      expect(check.exitCode).toBe(0);
-      expect(check.timedOut).toBe(false);
-    }
-    expect(result.checks.map((check) => check.command.join(' ')).join('\n')).toContain('bun');
-  });
+  test(
+    'every committed command starts and passes in the sandbox',
+    async () => {
+      const workspace = createSandboxWorkspace({ runner });
+      const result = await workspace.verify(project(), patched, sandboxFrom([bunDir]));
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.checks).toHaveLength(committed.fix.sandbox.commands.length);
+      for (const check of result.checks) {
+        expect(check.exitCode).toBe(0);
+        expect(check.timedOut).toBe(false);
+      }
+      expect(result.checks.map((check) => check.command.join(' ')).join('\n')).toContain('bun');
+    },
+    REAL_SUBPROCESS_TIMEOUT_MS,
+  );
 
-  test('the committed commands block the fix when PATH has no runtime directory', async () => {
-    const workspace = createSandboxWorkspace({ runner });
-    const result = await workspace.verify(project(), patched, sandboxFrom([]));
-    // Fail closed: the command cannot start, so it never reports success and no
-    // pull request follows. Under a jail the jail itself reports the failure.
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.checks.length).toBeGreaterThan(0);
-    expect(result.checks[0]!.exitCode).not.toBe(0);
-    expect(result.reason).not.toBe('');
-  });
+  test(
+    'the committed commands block the fix when PATH has no runtime directory',
+    async () => {
+      const workspace = createSandboxWorkspace({ runner });
+      const result = await workspace.verify(project(), patched, sandboxFrom([]));
+      // Fail closed: the command cannot start, so it never reports success and no
+      // pull request follows. Under a jail the jail itself reports the failure.
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.checks.length).toBeGreaterThan(0);
+      expect(result.checks[0]!.exitCode).not.toBe(0);
+      expect(result.reason).not.toBe('');
+    },
+    REAL_SUBPROCESS_TIMEOUT_MS,
+  );
 });

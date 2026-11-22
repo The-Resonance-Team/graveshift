@@ -14,6 +14,12 @@ import {
   type SpawnOutcome,
   type SpawnRequest,
 } from './spawn';
+
+/**
+ * Two tests here run a check through the production spawn runner, so they get a
+ * budget well above bun's 5 s default per-test limit.
+ */
+const REAL_SUBPROCESS_TIMEOUT_MS = 30_000;
 import type { BaseSnapshot } from './source';
 
 const sandbox: SandboxConfig = {
@@ -123,36 +129,44 @@ describe('createSandboxWorkspace', () => {
     expect(requests[0]!.env.PATH).toBe('/usr/bin:/bin:/opt/tools/bin:/usr/local/bin');
   });
 
-  test('a check whose program is outside the sandbox PATH cannot start and blocks the fix', async () => {
-    const workspace = createSandboxWorkspace({
-      createRunner: () => createSpawnRunner([]),
-    });
-    const result = await workspace.verify(base, patchFile('x\n'), {
-      commands: [[bunName, '--version']],
-      timeoutMs: 10_000,
-      pathDirs: [],
-    });
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.reason).toContain('not found');
-    expect(result.checks).toHaveLength(1);
-    expect(result.checks[0]!.exitCode).toBeNull();
-  });
+  test(
+    'a check whose program is outside the sandbox PATH cannot start and blocks the fix',
+    async () => {
+      const workspace = createSandboxWorkspace({
+        createRunner: () => createSpawnRunner([]),
+      });
+      const result = await workspace.verify(base, patchFile('x\n'), {
+        commands: [[bunName, '--version']],
+        timeoutMs: 10_000,
+        pathDirs: [],
+      });
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.reason).toContain('not found');
+      expect(result.checks).toHaveLength(1);
+      expect(result.checks[0]!.exitCode).toBeNull();
+    },
+    REAL_SUBPROCESS_TIMEOUT_MS,
+  );
 
-  test('the same check runs once the owner-set directory is on the sandbox PATH', async () => {
-    const workspace = createSandboxWorkspace({
-      createRunner: () => createSpawnRunner([]),
-    });
-    const result = await workspace.verify(base, patchFile('x\n'), {
-      commands: [[bunName, '--version']],
-      timeoutMs: 10_000,
-      pathDirs: [bunDir],
-    });
-    expect(result.ok).toBe(true);
-    if (!result.ok) return;
-    expect(result.checks[0]!.exitCode).toBe(0);
-    expect(result.checks[0]!.stdout).toMatch(/\d+\.\d+/);
-  });
+  test(
+    'the same check runs once the owner-set directory is on the sandbox PATH',
+    async () => {
+      const workspace = createSandboxWorkspace({
+        createRunner: () => createSpawnRunner([]),
+      });
+      const result = await workspace.verify(base, patchFile('x\n'), {
+        commands: [[bunName, '--version']],
+        timeoutMs: 10_000,
+        pathDirs: [bunDir],
+      });
+      expect(result.ok).toBe(true);
+      if (!result.ok) return;
+      expect(result.checks[0]!.exitCode).toBe(0);
+      expect(result.checks[0]!.stdout).toMatch(/\d+\.\d+/);
+    },
+    REAL_SUBPROCESS_TIMEOUT_MS,
+  );
 
   test('deleted files are removed before checks run', async () => {
     const { runner, requests } = recordingRunner();
