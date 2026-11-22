@@ -19,10 +19,12 @@ describe.skipIf(!dbTestEnabled)('Postgres audit integrity', () => {
 
   test('raw UPDATE and DELETE are rejected by the migrated Postgres triggers', async () => {
     await audit.append('project-1', draft);
-    await expect(db.$executeRaw`UPDATE audit_entries SET actor = 'forged'`).rejects.toThrow(
+    await expect(
+      Promise.resolve(db.$executeRaw`UPDATE audit_entries SET actor = 'forged'`),
+    ).rejects.toThrow('append-only');
+    await expect(Promise.resolve(db.$executeRaw`DELETE FROM audit_entries`)).rejects.toThrow(
       'append-only',
     );
-    await expect(db.$executeRaw`DELETE FROM audit_entries`).rejects.toThrow('append-only');
     expect(await audit.verifyChain('project-1')).toEqual({ ok: true, length: 1 });
   });
 

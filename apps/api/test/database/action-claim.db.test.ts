@@ -75,7 +75,7 @@ describe.skipIf(!dbTestEnabled)('Postgres durable ActionClaim foundation', () =>
     const data = await claimData();
     await db.actionClaim.create({ data });
     await expect(
-      db.actionClaim.create({ data: { ...data, tokenId: 'token-2' } }),
+      Promise.resolve(db.actionClaim.create({ data: { ...data, tokenId: 'token-2' } })),
     ).rejects.toHaveProperty('code', 'P2002');
     expect(
       await db.actionClaim.findUnique({

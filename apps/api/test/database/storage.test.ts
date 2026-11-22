@@ -113,8 +113,10 @@ describe('PostgreSQL credential and audit persistence', () => {
     const owner = principal();
     await service.issue(dto(), owner);
     await expect(
-      first.$executeRaw(
-        Prisma.sql`UPDATE audit_entries SET actor = 'changed' WHERE project_id = ${owner.projectId}`,
+      Promise.resolve(
+        first.$executeRaw(
+          Prisma.sql`UPDATE audit_entries SET actor = 'changed' WHERE project_id = ${owner.projectId}`,
+        ),
       ),
     ).rejects.toThrow('append-only');
     expect(await audit.verifyChain(owner.projectId)).toEqual({ ok: true, length: 1 });
@@ -124,8 +126,10 @@ describe('PostgreSQL credential and audit persistence', () => {
     const owner = principal();
     await service.issue(dto(), owner);
     await expect(
-      first.$executeRaw(
-        Prisma.sql`DELETE FROM audit_entries WHERE project_id = ${owner.projectId}`,
+      Promise.resolve(
+        first.$executeRaw(
+          Prisma.sql`DELETE FROM audit_entries WHERE project_id = ${owner.projectId}`,
+        ),
       ),
     ).rejects.toThrow('append-only');
     expect(await audit.verifyChain(owner.projectId)).toEqual({ ok: true, length: 1 });

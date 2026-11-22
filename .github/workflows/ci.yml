@@ -164,6 +164,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: ./.github/actions/setup-bun
       - name: Validate Compose files
         # Dummy values satisfy the ${VAR:?} guards. No broker or daemon starts.
         env:
