@@ -10,7 +10,7 @@ The file holds no secret value. Each Agent names its key with `apiKeyEnv`. The G
 
 The actuator loads the one file too. A bad Agent or fix block therefore stops the actuator as well, and the actuator depends on `@graveshift/config`, which imports the Agent schemas. The owner accepted this coupling when the merged config replaced the split loaders.
 
-ADR 0011 said the API had no config write endpoint. The owner now plans one authenticated write route. The correct rule is "no unauthenticated write endpoint". Ticket #73 carries the updated wording. The read-only view of validated config stays.
+ADR 0011 said the API had no config write endpoint. The owner now plans one authenticated write route. The correct rule is "no unauthenticated write endpoint". Ticket #73 carries the updated wording and owns the read routes and their response schemas. This ADR owns the rule. A read of the validated config is not public. Every read needs a bearer credential from the #63 token issuer, and the API denies an anonymous read. Scope `config:read` returns a sanitized view for the dashboard: no agent prompt, `baseUrl`, `allowedTools`, approver id, repo path or resolved env value. Scope `config:export` returns the full validated config, still with no secret value, and writes one audit event. No secret or resolved env value appears in any response or log.
 
 Rejected alternative: three separate input sources (env switch, agent file, policy file). That shape let the three values disagree at boot and made the fix path depend on which file a process happened to read.
 
