@@ -77,7 +77,7 @@ Dates are from the build run on 20 Nov 2026 (ICT). "Corrected" lists fixes made 
 
 | Task | Generated | Corrected |
 | --- | --- | --- |
-| Core | schemas, state machine, `RuntimeSource` contract, hash-chained audit log | `__proto__` payload hash mismatch found by a property test |
+| Core | schemas, state machine, `RuntimeSource` contract, hash-chained audit log | `__proto__` payload hash mismatch, now covered by example regression tests |
 | Policy and redactor | deny-first `decide()`, mode lattice, 12 detectors, policy CLI | none recorded |
 | Runtime sources and demo | Docker, Kubernetes and Prometheus clients, Haunted Candy Shop with five faults | Docker smoke test showed four scenarios behave as designed; OOM events seen |
 | Watcher | seven rules, dedupe, PromQL poller | none recorded |
