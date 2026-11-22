@@ -40,9 +40,6 @@ describe.skipIf(process.env.CI === 'true')('Sentry SDK loopback ingest', () => {
       dsn: `http://${TEST_KEY}@127.0.0.1:${address.port}/12345`,
       defaultIntegrations: false,
       tracesSampleRate: 0,
-      // makeNodeTransport sends no content type by default. Set the envelope
-      // type so the SDK's own HTTP transport reaches the raw envelope parser.
-      transportOptions: { headers: { 'content-type': 'application/x-sentry-envelope' } },
     });
     Sentry.captureEvent({
       event_id: 'fedcba9876543210fedcba9876543210',
