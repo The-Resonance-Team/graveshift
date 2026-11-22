@@ -37,9 +37,14 @@ export const FixConfigSchema = z
       .object({
         commands: z.array(z.array(z.string().min(1)).min(1)).default([]),
         timeoutMs: z.number().int().positive().default(60_000),
+        // Absolute directories appended to the sandbox PATH after /usr/bin:/bin,
+        // where the runtimes of the commands above live. The host PATH is never
+        // inherited, so a command whose program is outside these directories
+        // cannot start and no pull request opens.
+        pathDirs: z.array(z.string().startsWith('/')).default([]),
       })
       .strict()
-      .default({ commands: [], timeoutMs: 60_000 }),
+      .default({ commands: [], timeoutMs: 60_000, pathDirs: [] }),
     github: z
       .object({
         appIdEnv: z.string().regex(ENV_NAME),

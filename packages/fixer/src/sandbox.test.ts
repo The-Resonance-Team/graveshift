@@ -1,20 +1,19 @@
 import { readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { describe, expect, test } from 'bun:test';
 
+import { createSandboxWorkspace, type SandboxConfig } from './sandbox';
 import {
-  createSandboxWorkspace,
   createSpawnRunner,
-  jailWorks,
-  networkJail,
   SandboxUnavailableError,
   sandboxEnv,
+  SANDBOX_ENV_ALLOWLIST,
   type CommandRunner,
-  type SandboxConfig,
+  type SpawnOutcome,
   type SpawnRequest,
-} from './sandbox';
+} from './spawn';
 import type { BaseSnapshot } from './source';
 
 const sandbox: SandboxConfig = {
@@ -41,14 +40,32 @@ const base: BaseSnapshot = {
   ],
 };
 
+const outcome = (over: Partial<SpawnOutcome> = {}): SpawnOutcome => ({
+  exitCode: 0,
+  timedOut: false,
+  stdout: '',
+  stderr: '',
+  stdoutTruncated: false,
+  stderrTruncated: false,
+  ...over,
+});
+
 function recordingRunner(exit = 0) {
   const requests: SpawnRequest[] = [];
   const runner: CommandRunner = async (request) => {
     requests.push(request);
-    return { exitCode: exit, timedOut: false, stdout: 'ran', stderr: '' };
+    return outcome({ exitCode: exit, stdout: 'ran' });
   };
   return { runner, requests };
 }
+
+/** The host's own bun directory: the owner-set PATH entry a real check needs. */
+const bunDir = dirname(process.execPath);
+const bunName = process.execPath.slice(bunDir.length + 1);
+
+const patchFile = (content: string | null) => ({
+  files: [{ path: 'src/api.ts', content, linesChanged: 1 }],
+});
 
 describe('createSandboxWorkspace', () => {
   test('checks out the base tree, applies the patch and runs every command sandboxed', async () => {
@@ -60,28 +77,81 @@ describe('createSandboxWorkspace', () => {
         expect(written).toBe('export const price = 1;\n');
         const untouched = await readFile(join(request.cwd, 'docs/note.md'), 'utf8');
         expect(untouched).toBe('# note\n');
-        return { exitCode: 0, timedOut: false, stdout: '', stderr: '' };
+        return outcome();
       },
     });
-    const result = await workspace.verify(
-      base,
-      { files: [{ path: 'src/api.ts', content: 'export const price = 1;\n', linesChanged: 1 }] },
-      sandbox,
-    );
+    const result = await workspace.verify(base, patchFile('export const price = 1;\n'), sandbox);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.checks).toEqual([
-      { command: ['bun', 'test'], exitCode: 0, timedOut: false, stdout: '', stderr: '' },
+      {
+        command: ['bun', 'test'],
+        exitCode: 0,
+        timedOut: false,
+        stdout: '',
+        stderr: '',
+        stdoutTruncated: false,
+        stderrTruncated: false,
+      },
     ]);
     expect(seen).toHaveLength(1);
     const request = seen[0]!;
     expect(request.argv).toEqual(['bun', 'test']);
-    // No secrets: the exact environment is the allowlist. No network: the jail
+    // No secrets: the environment is the built PATH/HOME pair plus the named
+    // non-secret allowlist, never the host environment. No network: the jail
     // wraps the command (asserted in the spawn-runner tests).
     expect(request.env).toEqual(sandboxEnv(request.cwd));
-    expect(Object.keys(request.env).sort()).toEqual(['HOME', 'PATH']);
+    expect(request.env.PATH).toBe('/usr/bin:/bin');
+    expect(request.env.HOME).toBe(request.cwd);
+    for (const name of Object.keys(request.env)) {
+      expect(['PATH', 'HOME', ...SANDBOX_ENV_ALLOWLIST]).toContain(name);
+      expect(name).not.toMatch(/KEY|TOKEN|SECRET|PASSWORD/);
+    }
     expect(request.cwd).toStartWith(tmpdir());
     expect(request.timeoutMs).toBe(10_000);
+  });
+
+  test('the PATH is the system directories plus the owner-set runtime directories', async () => {
+    const { runner, requests } = recordingRunner();
+    const workspace = createSandboxWorkspace({ runner });
+    await workspace.verify(base, patchFile('x\n'), {
+      commands: [['bun', 'check']],
+      timeoutMs: 1_000,
+      pathDirs: ['/opt/tools/bin', ' /usr/local/bin ', '/opt/tools/bin'],
+    });
+    // Fixed order, no host PATH, no duplicates of the system directories.
+    expect(requests[0]!.env.PATH).toBe('/usr/bin:/bin:/opt/tools/bin:/usr/local/bin');
+  });
+
+  test('a check whose program is outside the sandbox PATH cannot start and blocks the fix', async () => {
+    const workspace = createSandboxWorkspace({
+      createRunner: () => createSpawnRunner([]),
+    });
+    const result = await workspace.verify(base, patchFile('x\n'), {
+      commands: [[bunName, '--version']],
+      timeoutMs: 10_000,
+      pathDirs: [],
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toContain('not found');
+    expect(result.checks).toHaveLength(1);
+    expect(result.checks[0]!.exitCode).toBeNull();
+  });
+
+  test('the same check runs once the owner-set directory is on the sandbox PATH', async () => {
+    const workspace = createSandboxWorkspace({
+      createRunner: () => createSpawnRunner([]),
+    });
+    const result = await workspace.verify(base, patchFile('x\n'), {
+      commands: [[bunName, '--version']],
+      timeoutMs: 10_000,
+      pathDirs: [bunDir],
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.checks[0]!.exitCode).toBe(0);
+    expect(result.checks[0]!.stdout).toMatch(/\d+\.\d+/);
   });
 
   test('deleted files are removed before checks run', async () => {
@@ -102,14 +172,13 @@ describe('createSandboxWorkspace', () => {
     const workspace = createSandboxWorkspace({
       runner: async () => {
         runs++;
-        return { exitCode: 1, timedOut: false, stdout: '', stderr: 'nope' };
+        return outcome({ exitCode: 1, stderr: 'nope' });
       },
     });
-    const result = await workspace.verify(
-      base,
-      { files: [{ path: 'src/api.ts', content: 'x\n', linesChanged: 1 }] },
-      { commands: [['a'], ['b']], timeoutMs: 1000 },
-    );
+    const result = await workspace.verify(base, patchFile('x\n'), {
+      commands: [['a'], ['b']],
+      timeoutMs: 1000,
+    });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toContain('check failed with exit 1');
@@ -117,15 +186,22 @@ describe('createSandboxWorkspace', () => {
     expect(runs).toBe(1);
   });
 
+  test('check output is redacted before it is kept for the audit trail', async () => {
+    const secret = `sk-ant-api03-${'AbCdEfGhIjKlMnOpQrStUvWx'.repeat(2)}`;
+    const workspace = createSandboxWorkspace({
+      runner: async () => outcome({ stdout: `token ${secret} leaked` }),
+    });
+    const result = await workspace.verify(base, patchFile('x\n'), sandbox);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.checks[0]!.stdout).not.toContain(secret);
+  });
+
   test('a timed-out check fails closed', async () => {
     const workspace = createSandboxWorkspace({
-      runner: async () => ({ exitCode: null, timedOut: true, stdout: '', stderr: '' }),
+      runner: async () => outcome({ exitCode: null, timedOut: true }),
     });
-    const result = await workspace.verify(
-      base,
-      { files: [{ path: 'src/api.ts', content: 'x\n', linesChanged: 1 }] },
-      sandbox,
-    );
+    const result = await workspace.verify(base, patchFile('x\n'), sandbox);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toContain('timed out');
@@ -133,11 +209,10 @@ describe('createSandboxWorkspace', () => {
 
   test('no configured checks means no verification: fail closed', async () => {
     const workspace = createSandboxWorkspace({ runner: recordingRunner().runner });
-    const result = await workspace.verify(
-      base,
-      { files: [{ path: 'src/api.ts', content: 'x\n', linesChanged: 1 }] },
-      { commands: [], timeoutMs: 1000 },
-    );
+    const result = await workspace.verify(base, patchFile('x\n'), {
+      commands: [],
+      timeoutMs: 1000,
+    });
     expect(result).toEqual({ ok: false, reason: 'no_check_commands_configured', checks: [] });
   });
 
@@ -153,108 +228,23 @@ describe('createSandboxWorkspace', () => {
     expect(requests).toHaveLength(0);
   });
 
-  test('a runner that throws (no jail) fails closed', async () => {
+  test('a runner that throws (no jail) fails closed and still records the check', async () => {
     const workspace = createSandboxWorkspace({
       runner: async () => {
         throw new SandboxUnavailableError('no jail');
       },
     });
-    const result = await workspace.verify(
-      base,
-      { files: [{ path: 'src/api.ts', content: 'x\n', linesChanged: 1 }] },
-      sandbox,
-    );
+    const result = await workspace.verify(base, patchFile('x\n'), sandbox);
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toContain('no jail');
-  });
-});
-
-describe('createSpawnRunner', () => {
-  test('runs a real command with the scrubbed environment and captures output', async () => {
-    const runner = createSpawnRunner([]);
-    const result = await runner({
-      argv: ['/usr/bin/env'],
-      cwd: '/',
-      env: { PATH: '/usr/bin:/bin', HOME: '/tmp' },
-      timeoutMs: 10_000,
-    });
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('PATH=/usr/bin:/bin');
-    expect(result.stdout).not.toContain('GRAVESHIFT_GITHUB_PRIVATE_KEY');
-    expect(result.stdout).not.toContain('ANTHROPIC_API_KEY');
-    expect(result.timedOut).toBe(false);
-  });
-
-  test('a hanging command is killed at the timeout', async () => {
-    const runner = createSpawnRunner([]);
-    const started = Date.now();
-    const result = await runner({
-      argv: ['/bin/sleep', '30'],
-      cwd: '/',
-      env: { PATH: '/usr/bin:/bin', HOME: '/tmp' },
-      timeoutMs: 120,
-    });
-    expect(result.timedOut).toBe(true);
-    expect(result.exitCode).toBeNull();
-    expect(Date.now() - started).toBeLessThan(5_000);
-  });
-
-  test('without a jail the runner refuses to spawn', async () => {
-    const runner = createSpawnRunner(null);
-    await expect(
-      runner({ argv: ['/bin/true'], cwd: '/', env: {}, timeoutMs: 100 }),
-    ).rejects.toBeInstanceOf(SandboxUnavailableError);
-  });
-
-  test('the production runner runs under the platform jail or fails closed', async () => {
-    const request = {
-      argv: ['/bin/echo', 'ok'],
-      cwd: '/tmp',
-      env: sandboxEnv('/tmp'),
-      timeoutMs: 15_000,
-    };
-    if (await jailWorks()) {
-      const result = await createSpawnRunner()(request);
-      expect(result.exitCode).toBe(0);
-      expect(result.stdout).toContain('ok');
-      return;
-    }
-    // A host that refuses the jail must block the check through the same entry
-    // point instead of running it with network.
-    await expect(createSpawnRunner()(request)).rejects.toBeInstanceOf(SandboxUnavailableError);
-  });
-
-  test('the network jail exists on this platform', () => {
-    expect(networkJail()).toBeDefined();
-  });
-
-  test('checks really run without network under the jail', async () => {
-    const jail = networkJail();
-    if (jail === null) return;
-    const bare = createSpawnRunner([]);
-    const canJail = await bare({
-      argv: [...jail, '/bin/true'],
-      cwd: '/tmp',
-      env: sandboxEnv('/tmp'),
-      timeoutMs: 10_000,
-    });
-    // Some hardened runners block the jail itself; the argv-level tests cover
-    // those platforms, the real spawn must not be faked here.
-    if (canJail.exitCode !== 0) return;
-    const runner = createSpawnRunner(jail);
-    const result = await runner({
-      argv: [
-        '/bin/sh',
-        '-c',
-        'if command -v curl >/dev/null 2>&1; then curl -s --max-time 2 http://93.184.216.34/ >/dev/null; echo blocked=$?; else echo blocked=missing; fi',
-      ],
-      cwd: '/tmp',
-      env: sandboxEnv('/tmp'),
-      timeoutMs: 15_000,
-    });
-    expect(result.exitCode).toBe(0);
-    expect(result.stdout).toContain('blocked=');
-    expect(result.stdout).not.toContain('blocked=0');
+    // The audit trail is complete: the check that could not run is recorded.
+    expect(result.checks).toHaveLength(1);
+    const check = result.checks[0]!;
+    expect(check.command).toEqual(['bun', 'test']);
+    expect(check.exitCode).toBeNull();
+    expect(check.timedOut).toBe(false);
+    expect(check.stderr).toContain('check runner failed');
+    expect(check.stderr).toContain('no jail');
   });
 });

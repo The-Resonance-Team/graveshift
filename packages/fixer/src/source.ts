@@ -11,6 +11,8 @@ export class SourceError extends GraveshiftError<'SOURCE_UNAVAILABLE'> {
 
 const MAX_FILE_BYTES = 1_048_576;
 const MAX_TREE_FILES = 5_000;
+/** Total blob bytes one base read may hold in memory. */
+export const MAX_TOTAL_SOURCE_BYTES = 32 * 1_048_576;
 
 export interface SourceFile {
   readonly path: string;
@@ -73,26 +75,34 @@ export function createGitHubSourceProvider(client: GitHubClient): SourceProvider
         seen.add(entry.path);
         return true;
       });
-      // Blobs are read one at a time: a recursive tree can hold thousands of
-      // files, and a bounded sequence keeps the request pressure on GitHub low.
-      const readFrom = async (index: number, acc: SourceFile[]): Promise<SourceFile[]> => {
-        if (index >= unique.length) return acc;
+      // Blobs are read one at a time into one array: a recursive tree can hold
+      // thousands of files, a bounded sequence keeps the request pressure on
+      // GitHub low, and the total stays under a fixed byte budget.
+      const files: SourceFile[] = [];
+      let totalBytes = 0;
+      const readFrom = async (index: number): Promise<void> => {
+        if (index >= unique.length) return;
         const entry = unique[index]!;
         const bytes = await client.getBlobBytes(repo, entry.blobSha);
         if (bytes.byteLength > MAX_FILE_BYTES) {
           throw new SourceError(`${entry.path}: blob exceeds ${MAX_FILE_BYTES} bytes`);
         }
-        return readFrom(index + 1, [
-          ...acc,
-          {
-            path: entry.path,
-            blobSha: entry.blobSha,
-            bytes,
-            text: isText(bytes) ? new TextDecoder('utf-8').decode(bytes) : null,
-          },
-        ]);
+        totalBytes += bytes.byteLength;
+        if (totalBytes > MAX_TOTAL_SOURCE_BYTES) {
+          throw new SourceError(
+            `${entry.path}: tree exceeds the ${MAX_TOTAL_SOURCE_BYTES} byte total cap`,
+          );
+        }
+        files.push({
+          path: entry.path,
+          blobSha: entry.blobSha,
+          bytes,
+          text: isText(bytes) ? new TextDecoder('utf-8').decode(bytes) : null,
+        });
+        return readFrom(index + 1);
       };
-      return { baseSha, treeSha, files: await readFrom(0, []) };
+      await readFrom(0);
+      return { baseSha, treeSha, files };
     },
     currentBaseSha(repo, branch) {
       return client.getBaseSha(repo, branch);

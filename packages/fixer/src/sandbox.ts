@@ -1,160 +1,49 @@
-import { existsSync } from 'node:fs';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
-import { GraveshiftError } from '@graveshift/core';
+import { redact } from '@graveshift/redactor';
 
 import { unsafePath } from './guard';
+import { createSpawnRunner, sandboxEnv, type CommandRunner, type SpawnOutcome } from './spawn';
 import type { BaseSnapshot, SourceFile } from './source';
 import type { Patch, PatchFile } from './types';
 
-export class SandboxUnavailableError extends GraveshiftError<'SANDBOX_UNAVAILABLE'> {
-  constructor(message: string) {
-    super('SANDBOX_UNAVAILABLE', message);
-  }
-}
-
-// Check commands come from the committed config file, never from the model or
-// the repository. The owner sets them per deployment.
+/**
+ * Check commands come from the committed config file, never from the model or
+ * the repository. The owner sets them per deployment.
+ */
 export interface SandboxConfig {
   readonly commands: readonly (readonly string[])[];
   readonly timeoutMs: number;
+  /**
+   * Owner-set absolute directories appended to the sandbox `PATH` after
+   * `/usr/bin:/bin`, such as the directory that holds `bun`. There is no
+   * implicit host `PATH`: a command whose program lives outside these
+   * directories cannot start, so the checks fail and no pull request opens.
+   */
+  readonly pathDirs?: readonly string[];
 }
 
+/** One recorded check. Output is capped and redacted at capture. */
 export interface CheckOutcome {
   readonly command: readonly string[];
   readonly exitCode: number | null;
   readonly timedOut: boolean;
   readonly stdout: string;
   readonly stderr: string;
+  readonly stdoutTruncated: boolean;
+  readonly stderrTruncated: boolean;
 }
 
 export type VerifyResult =
   | { ok: true; checks: readonly CheckOutcome[] }
   | { ok: false; reason: string; checks: readonly CheckOutcome[] };
 
-export interface SpawnRequest {
-  readonly argv: readonly string[];
-  readonly cwd: string;
-  readonly env: Readonly<Record<string, string>>;
-  readonly timeoutMs: number;
-}
-
-export interface SpawnOutcome {
-  readonly exitCode: number | null;
-  readonly timedOut: boolean;
-  readonly stdout: string;
-  readonly stderr: string;
-}
-
-export type CommandRunner = (request: SpawnRequest) => Promise<SpawnOutcome>;
-
 /** The injectable workspace seam. Production uses createSandboxWorkspace. */
 export interface FixWorkspace {
   /** Checkout base, apply the verified patch, then run every check command. */
   verify(base: BaseSnapshot, patch: Patch, sandbox: SandboxConfig): Promise<VerifyResult>;
-}
-
-const OUTPUT_CAP = 64_000;
-const SANDBOX_EXEC_PROFILE = '(version 1)(allow default)(deny network*)';
-
-const firstExisting = (paths: readonly string[]): string | undefined =>
-  paths.find((candidate) => existsSync(candidate));
-
-/**
- * The per-platform command prefix that blocks network access for a check
- * process. Null means this platform has no jail binary: the workspace then
- * fails closed instead of running checks with network. Linux asks for a user
- * namespace too (`-r`), so an unprivileged host needs no extra capability.
- */
-export function networkJail(
-  platform: NodeJS.Platform = process.platform,
-): readonly string[] | null {
-  if (platform === 'darwin') {
-    const jail = firstExisting(['/usr/bin/sandbox-exec']);
-    return jail === undefined ? null : [jail, '-p', SANDBOX_EXEC_PROFILE];
-  }
-  if (platform === 'linux') {
-    const jail = firstExisting(['/usr/bin/unshare', '/bin/unshare']);
-    return jail === undefined ? null : [jail, '-rn', '--'];
-  }
-  return null;
-}
-
-/**
- * True when the given jail prefix can start a process here. A host can have the
- * binary and still refuse the namespace, so a jail is proven, not assumed. The
- * probe inherits no environment, so no secret reaches it.
- */
-export async function jailWorks(jail: readonly string[] | null = networkJail()): Promise<boolean> {
-  if (jail === null) return false;
-  const probe = Bun.spawn([...jail, '/usr/bin/true'], {
-    env: {},
-    stdout: 'ignore',
-    stderr: 'ignore',
-  });
-  return (await probe.exited) === 0;
-}
-
-/**
- * The exact environment a check command may see: no inherited variables, so
- * no model key, GitHub App key or any other secret ever reaches the process.
- */
-export function sandboxEnv(homeDir: string): Record<string, string> {
-  return { PATH: '/usr/bin:/bin', HOME: homeDir };
-}
-
-/**
- * Run a check command under a jail.
- *
- * - No argument is the production shape: the platform jail is used and proven
- *   by a probe, and a jail that is missing or cannot start blocks every fix.
- * - An explicit jail (or null) is a caller choice and is used exactly as given,
- *   so a test pins the argv it expects.
- * - `requireJail` is true by default: without a jail the run then fails closed.
- *   Only a caller that accepts checks without the jail — the committed tests on
- *   a host that blocks user namespaces — passes `requireJail: false`.
- */
-export function createSpawnRunner(
-  jail?: readonly string[] | null,
-  options: { requireJail?: boolean } = {},
-): CommandRunner {
-  const requireJail = options.requireJail ?? true;
-  const explicit = jail !== undefined;
-  return async (request) => {
-    let chosen = explicit ? (jail ?? null) : networkJail();
-    if (chosen !== null && !explicit && !(await jailWorks(chosen))) {
-      if (requireJail) {
-        throw new SandboxUnavailableError(`the jail cannot start on ${process.platform}`);
-      }
-      chosen = null;
-    }
-    if (chosen === null && requireJail) {
-      throw new SandboxUnavailableError(`no jail is available on ${process.platform}`);
-    }
-    const child = Bun.spawn([...(chosen ?? []), ...request.argv], {
-      cwd: request.cwd,
-      env: { ...request.env },
-      stdout: 'pipe',
-      stderr: 'pipe',
-    });
-    let timedOut = false;
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill();
-    }, request.timeoutMs);
-    const exitCode = await child.exited;
-    clearTimeout(timer);
-    const stdout = await new Response(child.stdout).text();
-    const stderr = await new Response(child.stderr).text();
-    return {
-      exitCode: timedOut ? null : exitCode,
-      timedOut,
-      stdout: stdout.slice(-OUTPUT_CAP),
-      stderr: stderr.slice(-OUTPUT_CAP),
-    };
-  };
 }
 
 export interface SandboxWorkspaceOptions {
@@ -164,8 +53,33 @@ export interface SandboxWorkspaceOptions {
   createRunner?: () => CommandRunner;
 }
 
-// The sandbox never fails open: a missing jail, a failed check or a timeout
-// blocks the pull request. The temp directory is removed after every run.
+/** One check: the runner outcome, with output redacted and the command recorded. */
+const checkOf = (command: readonly string[], outcome: SpawnOutcome): CheckOutcome => ({
+  command: [...command],
+  ...outcome,
+  stdout: redact(outcome.stdout),
+  stderr: redact(outcome.stderr),
+});
+
+/** The check recorded when the command could not start at all. */
+const notRunCheck = (command: readonly string[], reason: string): CheckOutcome => ({
+  command: [...command],
+  exitCode: null,
+  timedOut: false,
+  stdout: '',
+  stderr: `check runner failed: ${reason}`,
+  stdoutTruncated: false,
+  stderrTruncated: false,
+});
+
+const failureReason = (command: readonly string[], check: CheckOutcome, timeoutMs: number) =>
+  check.timedOut
+    ? `check timed out after ${timeoutMs}ms: ${command.join(' ')}`
+    : `check failed with exit ${check.exitCode}: ${command.join(' ')}`;
+
+// The sandbox never fails open: a missing jail, a failed check, a timeout or a
+// command that cannot start blocks the pull request, and every one of them is
+// recorded. The temp directory is removed after every run.
 export function createSandboxWorkspace(options: SandboxWorkspaceOptions = {}): FixWorkspace {
   const runner = options.runner ?? (options.createRunner ?? createSpawnRunner)();
   return {
@@ -208,23 +122,18 @@ export function createSandboxWorkspace(options: SandboxWorkspaceOptions = {}): F
             outcome = await runner({
               argv: [...command],
               cwd: dir,
-              env: sandboxEnv(dir),
+              env: sandboxEnv(dir, sandbox.pathDirs ?? []),
               timeoutMs: sandbox.timeoutMs,
             });
           } catch (error) {
-            const reason = error instanceof Error ? error.message : 'check runner failed';
+            const reason = redact(error instanceof Error ? error.message : 'check runner failed');
+            checks.push(notRunCheck(command, reason));
             return { ok: false, reason, checks };
           }
-          const check: CheckOutcome = { command: [...command], ...outcome };
+          const check = checkOf(command, outcome);
           checks.push(check);
           if (check.timedOut || check.exitCode !== 0) {
-            return {
-              ok: false,
-              reason: check.timedOut
-                ? `check timed out after ${sandbox.timeoutMs}ms: ${command.join(' ')}`
-                : `check failed with exit ${check.exitCode}: ${command.join(' ')}`,
-              checks,
-            };
+            return { ok: false, reason: failureReason(command, check, sandbox.timeoutMs), checks };
           }
           return runFrom(index + 1);
         };

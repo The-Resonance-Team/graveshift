@@ -28,7 +28,8 @@ import {
   type FixFailureCode,
 } from './fix.types';
 
-// Every value below is request data. Wrapping keeps tags and secrets out of the PR body.
+// Every value below is request data. Wrapping keeps tags and secrets out of the
+// title, the commit subject and the branch slug, which use clean redacted text.
 function toIncidentAndDiagnosis(
   item: WorkItem,
   context: FixContext,
@@ -160,7 +161,21 @@ export class FixService {
       return blocked(decision.effect, decision.reason, 'policy_denied');
     }
 
-    const diagnosisText = item.description || item.title;
+    // The policy gate also rejects a service the config never maps for this
+    // repository, before any source read, model call or GitHub call. Today the
+    // client raises it only when the pull request is opened.
+    if (!repo.services.includes(item.service)) {
+      return blocked(
+        decision.effect,
+        `repo_not_allowed: no mapping for service ${item.service}`,
+        'policy_denied',
+      );
+    }
+
+    // The model's view of the problem. A Fix now note is a human hint for it and
+    // is wrapped as untrusted data with the rest; it never reaches the body.
+    const problem = item.description || item.title;
+    const diagnosisText = note === undefined ? problem : `${problem}\n\nFix now note: ${note}`;
 
     // Read the real repository at the base ref. Everything the model may use
     // comes from this snapshot: it never reaches for source itself.
@@ -196,7 +211,8 @@ export class FixService {
     }
 
     const { incident, diagnosis } = toIncidentAndDiagnosis(item, parsed.data, note);
-    // The wrapper stays in the body. Titles, subjects and slugs use clean redacted text.
+    // Titles, subjects and slugs use clean redacted text. The body carries
+    // identifiers, check results and diff stats only.
     const headline = redact(item.description || item.title)
       .replace(/\s+/g, ' ')
       .trim();

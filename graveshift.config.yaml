@@ -131,6 +131,13 @@ fix:
     commands:
       - ['bun', 'check']
       - ['bun', 'test']
+    # Absolute directories added to the sandbox PATH after /usr/bin:/bin, where
+    # the runtimes above live. The host PATH is never inherited, so a command
+    # whose program is outside these directories cannot start and no pull request
+    # opens. Keep this list short and fixed; the owner sets it per deployment.
+    pathDirs:
+      - /usr/local/bin
+      - /opt/homebrew/bin
     timeoutMs: 120000
   gateway:
     globalDailyBudgetUsd: 10

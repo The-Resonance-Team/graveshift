@@ -125,7 +125,15 @@ export function fakeWorkspace(over: { fail?: string; checks?: CheckOutcome[] } =
       return {
         ok: true,
         checks: over.checks ?? [
-          { command: ['true'], exitCode: 0, timedOut: false, stdout: '', stderr: '' },
+          {
+            command: ['true'],
+            exitCode: 0,
+            timedOut: false,
+            stdout: '',
+            stderr: '',
+            stdoutTruncated: false,
+            stderrTruncated: false,
+          },
         ],
       };
     },
@@ -144,6 +152,8 @@ export function serviceWith(
     snapshot?: BaseSnapshot;
     checksFail?: string;
     liveBaseSha?: string;
+    /** Overrides the services the repository config maps, for the policy gate. */
+    services?: string[];
   } = {},
 ) {
   const external: Call[] = [];
@@ -171,7 +181,7 @@ export function serviceWith(
   };
   const deps: FixDeps = {
     policy: policyWith(over.allow !== false),
-    repo,
+    repo: over.services === undefined ? repo : { ...repo, services: over.services },
     gateway: gatewayFake.gateway,
     client: clientFake.client,
     source: sourceFake.provider,

@@ -116,7 +116,17 @@ export function fakeFixDeps(over: { confidence?: number; throwOnLoad?: boolean }
       push('verify', patch, sandbox);
       return {
         ok: true,
-        checks: [{ command: ['true'], exitCode: 0, timedOut: false, stdout: '', stderr: '' }],
+        checks: [
+          {
+            command: ['true'],
+            exitCode: 0,
+            timedOut: false,
+            stdout: '',
+            stderr: '',
+            stdoutTruncated: false,
+            stderrTruncated: false,
+          },
+        ],
       };
     },
   };

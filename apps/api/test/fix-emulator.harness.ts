@@ -7,6 +7,7 @@ import { createSpawnRunner, type CommandRunner, jailWorks, networkJail } from '@
 import { GIT_EMPTY_BLOB_SHA } from '@graveshift/patch';
 import { parsePolicy, type Policy } from '@graveshift/policy';
 import request from 'supertest';
+import { dirname } from 'node:path';
 
 import { configureApp } from '../src/app.factory';
 import { AppModule } from '../src/app.module';
@@ -55,7 +56,7 @@ export const item: WorkItem = {
  * The committed suite starts every check as a real subprocess through the
  * production spawn runner. A host that blocks user namespaces (GitHub-hosted
  * Ubuntu) has no jail that can start, so there the checks run without the jail
- * prefix. `packages/fixer/src/sandbox.test.ts` holds the jail contract: the
+ * prefix. `packages/fixer/src/spawn.test.ts` holds the jail contract: the
  * argv prefix, the exact environment, the timeout kill and the fail-closed
  * default when no jail can run.
  */
@@ -111,7 +112,12 @@ export interface Harness {
 
 export async function harness(
   emu: Emulators,
-  over: { commands?: string[][]; commitAfterRead?: boolean; denyPolicy?: boolean } = {},
+  over: {
+    commands?: string[][];
+    commitAfterRead?: boolean;
+    denyPolicy?: boolean;
+    services?: string[];
+  } = {},
 ): Promise<Harness> {
   const { loadGraveshiftConfig } = await import('@graveshift/config');
   const config = await loadGraveshiftConfig();
@@ -144,9 +150,13 @@ export async function harness(
   const deps: FixDeps = {
     ...real,
     source,
+    repo: over.services === undefined ? real.repo : { ...real.repo, services: over.services },
     sandbox: {
       commands: over.commands?.map((argv) => [...argv]) ?? [checkCommand('')],
       timeoutMs: 60_000,
+      // The owner-set runtime directory, exactly as graveshift.config.yaml does:
+      // the host PATH is never inherited by a check.
+      pathDirs: [dirname(process.execPath)],
     },
     ...(over.denyPolicy ? { policy: denyAllPolicy(real.policy) } : {}),
   };
@@ -176,9 +186,13 @@ export function proposal(base: RepoBase): unknown {
   };
 }
 
-export async function fixNow(app: INestApplication): Promise<Record<string, unknown>> {
+export async function fixNow(
+  app: INestApplication,
+  note?: string,
+): Promise<Record<string, unknown>> {
   const response = await request(app.getHttpServer())
     .post('/api/work-items/wi-e2e/fix-now')
+    .send(note === undefined ? {} : { note })
     .expect(200);
   return response.body as Record<string, unknown>;
 }

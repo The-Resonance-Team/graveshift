@@ -34,7 +34,7 @@ describe('fix path over emulated GitHub and AI', () => {
     });
     const app = await buildApp(deps, store);
     try {
-      const body = await fixNow(app);
+      const body = await fixNow(app, 'raise the timeout to 30s');
       expect(body.ok).toBe(true);
       expect(body.failure).toBe('none');
       const pr = body.pr as { number: number; branch: string; headSha: string; openedAt: string };
@@ -56,6 +56,14 @@ describe('fix path over emulated GitHub and AI', () => {
       expect(text).toContain(': passed');
       expect(text).toContain('+1/-1');
       expect(text).not.toContain('test-only-key');
+      // Identifiers, check results and diff stats only: the title, the root
+      // cause and a Fix now note stay on the work item and in the API result.
+      expect(text).toContain('wi-e2e-diag-e2e');
+      expect(text).not.toContain('raise the timeout to 30s');
+      expect(text).not.toContain('Fix the null price on api');
+      expect(text).not.toContain('The checkout totals a null price.');
+      expect(text).not.toContain('Root cause');
+      expect(text).not.toContain('untrusted');
 
       // The head tree holds the applied diff, read back as real git objects.
       expect(await readFileAtCommit(urls().github, pr.headSha, 'src/api.ts')).toBe(API_AFTER);
@@ -94,6 +102,29 @@ describe('fix path over emulated GitHub and AI', () => {
       expect(await pushedFixBranches(urls().github)).toEqual([]);
       expect(await openPulls(urls().github)).toEqual([]);
       expect(await aiCalls(urls().ai)).toEqual([]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  test('a service the config never maps is rejected before the first source read', async () => {
+    const base = await seed(emu);
+    await cannedFixReply(emu, base);
+    const { deps, store, reads } = await harness(emu, {
+      commands: [checkCommand('export const price = 1;')],
+      services: ['billing'],
+    });
+    const app = await buildApp(deps, store);
+    try {
+      const body = await fixNow(app);
+      expect(body.ok).toBe(false);
+      expect(body.failure).toBe('policy_denied');
+      expect(String(body.reason)).toContain('repo_not_allowed');
+      // The policy gate stops it: no source read, no model call, no GitHub call.
+      expect(reads).toHaveLength(0);
+      expect(await aiCalls(urls().ai)).toEqual([]);
+      expect(await pushedFixBranches(urls().github)).toEqual([]);
+      expect(await openPulls(urls().github)).toEqual([]);
     } finally {
       await app.close();
     }

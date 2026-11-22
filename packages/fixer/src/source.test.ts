@@ -94,6 +94,33 @@ describe('createGitHubSourceProvider', () => {
     ).rejects.toBeInstanceOf(SourceError);
   });
 
+  test('the whole base read is bounded by a total byte cap', async () => {
+    const files = Array.from({ length: 33 }, (_, i) => ({
+      path: `big/${i}.bin`,
+      blobSha: `big-${i}`,
+    }));
+    const blobs: Record<string, Uint8Array> = {};
+    for (const file of files) blobs[file.blobSha] = new Uint8Array(1_048_576);
+    await expect(
+      sourceClient({ tree: files, blobs }).provider.readBase('r', 'main'),
+    ).rejects.toThrow(/total cap/);
+  });
+
+  test('every blob is read once and accumulated in one pass', async () => {
+    const files = Array.from({ length: 40 }, (_, i) => ({
+      path: `f/${i}.txt`,
+      blobSha: `b-${i}`,
+    }));
+    const blobs: Record<string, Uint8Array> = {};
+    for (const file of files) blobs[file.blobSha] = text(`${file.path}\n`);
+    const { provider, calls } = sourceClient({ tree: files, blobs });
+    const snapshot = await provider.readBase('r', 'main');
+    expect(snapshot.files.map((f) => f.path)).toEqual(files.map((f) => f.path));
+    const reads = calls.filter((call) => call.method === 'getBlobBytes');
+    expect(reads).toHaveLength(files.length);
+    expect(new Set(reads.map((call) => JSON.stringify(call.args))).size).toBe(reads.length);
+  });
+
   test('currentBaseSha reads the live ref for the stale-base re-check', async () => {
     const { provider, calls } = sourceClient({});
     expect(await provider.currentBaseSha('r', 'main')).toBe('base-sha');

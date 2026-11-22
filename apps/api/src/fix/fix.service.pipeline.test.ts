@@ -68,4 +68,28 @@ describe('fix pipeline', () => {
     expect(calls.some((call) => call.method === 'createBlob')).toBe(false);
     expect(calls.some((call) => call.method === 'createPullRequest')).toBe(false);
   });
+
+  test('a service the repository config never maps is rejected before the source read', async () => {
+    const { service, gatewayCalls, calls } = serviceWith({ services: ['billing'] });
+    const result = await service.fixNow(baseItem);
+    expect(result.ok).toBe(false);
+    expect(result.failure).toBe('policy_denied');
+    expect(result.reason).toContain('repo_not_allowed');
+    expect(result.reason).toContain('api');
+    // The policy gate holds: no source read, no model call, no GitHub call.
+    expect(gatewayCalls).toHaveLength(0);
+    expect(calls.some((call) => call.method === 'source.readBase')).toBe(false);
+    expect(calls.some((call) => call.method === 'createBlob')).toBe(false);
+  });
+
+  test('a Fix now note reaches the model and never the published body', async () => {
+    const { service, gatewayCalls, calls } = serviceWith();
+    const result = await service.fixNow(baseItem, { note: 'raise the timeout to 30s' });
+    expect(result.ok).toBe(true);
+    expect(gatewayCalls[0]?.prompt).toContain('Fix now note: raise the timeout to 30s');
+    const published = JSON.stringify(
+      calls.find((call) => call.method === 'createPullRequest')?.args ?? [],
+    );
+    expect(published).not.toContain('raise the timeout to 30s');
+  });
 });

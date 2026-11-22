@@ -84,8 +84,13 @@ export async function openDraftPr(input: OpenDraftPrInput): Promise<PrRef> {
 
   const title = `Exorcism: ${headline.slice(0, 70)}`;
   const body = renderPrBody({
-    ...input,
+    incident: input.incident,
+    category: input.category,
+    confidence: input.diagnosis.confidence,
+    dashboardUrl: input.dashboardUrl,
     files: patch.files.map((f) => f.path),
+    checks: input.checks,
+    diff: input.diff,
   });
   const pr = await client.createPullRequest(repo.repo, {
     title,
