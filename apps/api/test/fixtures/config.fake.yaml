@@ -1,0 +1,94 @@
+# Fake config for the API e2e suite. It holds no real secret. Every *_Env key names
+# an environment variable only; the test sets fake values for those names and proves
+# the config routes never return them.
+boot:
+  host: 127.0.0.1
+  port: 3100
+
+agents:
+  system:
+    - name: Test Agent
+      slug: test-agent
+      role: tester
+      description: 'Handles fake incidents for tests.'
+      prompt: 'Handle {{CASE}} for the fake Grave.'
+      params:
+        - CASE: 'fake case'
+      provider: '@ai-sdk/openai'
+      model: fake-test-model
+      baseUrl: https://fake.test.invalid/v1
+      apiKeyEnv: GRAVESHIFT_TEST_AGENT_API_KEY
+      allowedTools:
+        - query_metric
+      dailyBudgetUsd: 1
+  client:
+    - name: Client Agent
+      slug: client-agent
+      role: client-tester
+      description: 'Handles fake deployments for tests.'
+      prompt: 'Check fake deployment {{VERSION}}.'
+      params:
+        - VERSION: v0
+      provider: '@ai-sdk/openai-compatible'
+      model: fake-client-model
+      baseUrl: https://fake-client.test.invalid/v1
+      apiKeyEnv: GRAVESHIFT_TEST_CLIENT_API_KEY
+      allowedTools: []
+      dailyBudgetUsd: 0.5
+      escalateTo: test-agent
+
+policy:
+  version: 1
+  mode: dry-run
+  approvers:
+    discordUserIds: ['000000000000000001']
+    discordRoleIds: []
+  limits:
+    maxOpenPrsPerHour: 1
+    maxActionsPerServicePer10Min: 1
+    maxDiagnosisLoops: 1
+    llmDailyBudgetUsd: 0.5
+  llm:
+    minConfidenceForPr: 0.9
+    minConfidenceForAction: 0.95
+  github:
+    repos:
+      - repo: fake/ghost-repo
+        services: ['api']
+        baseBranch: main
+        branchPrefix: 'graveshift/'
+        draft: true
+        allowedPaths: ['src/**']
+        forbiddenPaths: ['.github/**', 'deploy/**']
+        maxFilesChanged: 3
+        maxLinesChanged: 50
+  rules:
+    - id: fake-deny-db
+      action: '*'
+      when: { services: [postgres] }
+      effect: deny
+  default: deny
+
+fix:
+  enabled: false
+  agent: Test Agent
+  promptTemplate: |
+    You are {{AGENT_NAME}}, the {{AGENT_ROLE}} Agent.
+    {{AGENT_DESCRIPTION}}
+    Standing prompt: {{AGENT_PROMPT}}
+    Model: {{MODEL}}. Provider: {{PROVIDER}}. Daily budget: {{DAILY_BUDGET_USD}} USD.
+    Propose a guarded patch: {{DIAGNOSIS}}
+    Repository rules:
+    {{RULES}}
+  gateway:
+    globalDailyBudgetUsd: 1
+    maxRetries: 0
+    timeoutMs: 1000
+    priceTableUsdPer1M:
+      fake-test-model: { in: 1, out: 1 }
+      fake-client-model: { in: 0.1, out: 0.2 }
+  github:
+    appIdEnv: GRAVESHIFT_TEST_GITHUB_APP_ID
+    privateKeyEnv: GRAVESHIFT_TEST_GITHUB_PRIVATE_KEY
+    installations:
+      fake/ghost-repo: 1

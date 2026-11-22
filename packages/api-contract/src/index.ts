@@ -47,3 +47,9 @@ export type PublishEventRequest =
 
 export type EventAcceptedResponse =
   paths['/api/events']['post']['responses'][202]['content']['application/json'];
+
+export type AgentsConfigResponse =
+  paths['/api/config/agents']['get']['responses'][200]['content']['application/json'];
+
+export type PolicyConfigResponse =
+  paths['/api/config/policy']['get']['responses'][200]['content']['application/json'];

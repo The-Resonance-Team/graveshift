@@ -3,8 +3,10 @@ import { describe, expect, test } from 'bun:test';
 import contractPackage from '../package.json';
 import {
   API_CONTRACT_VERSION,
+  type AgentsConfigResponse,
   type Assignee,
   type HealthResponse,
+  type PolicyConfigResponse,
   type TriageRequest,
   type WorkItemListResponse,
   type WorkItemResponse,
@@ -58,5 +60,26 @@ describe('api contract', () => {
     const assignee: Assignee = agent.assignee;
     expect(human.assignee).toBe('needs_human');
     expect(assignee).toBe('needs_agent_SRE Bot');
+  });
+
+  test('the config routes are read-only in the contract', () => {
+    const agents = openapi.paths['/api/config/agents'];
+    const policy = openapi.paths['/api/config/policy'];
+    expect(Object.keys(agents)).toEqual(['get']);
+    expect(Object.keys(policy)).toEqual(['get']);
+    // The response carries the env variable name, never a key or a resolved value.
+    expect(agents.get.responses['200'].content['application/json'].schema).not.toHaveProperty(
+      'apiKey',
+    );
+  });
+
+  test('exports the read-only config response types', () => {
+    // Compile-time check: these types come from the generated paths only.
+    type AgentsShape = Pick<AgentsConfigResponse, 'system' | 'client'>;
+    type PolicyShape = Pick<PolicyConfigResponse, 'version' | 'mode' | 'default'>;
+    const shape: AgentsShape = { system: [], client: [] };
+    const policyShape: PolicyShape = { version: 1, mode: 'dry-run', default: 'deny' };
+    expect(shape.system).toEqual([]);
+    expect(policyShape.mode).toBe('dry-run');
   });
 });

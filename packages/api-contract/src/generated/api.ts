@@ -11,6 +11,12 @@ export interface paths {
   "/api/rules/validate": {
     post: operations["RulesController_validate"];
   };
+  "/api/config/agents": {
+    get: operations["ConfigController_getAgents"];
+  };
+  "/api/config/policy": {
+    get: operations["ConfigController_getPolicy"];
+  };
   "/api/credentials": {
     get: operations["CredentialsController_list"];
     post: operations["CredentialsController_create"];
@@ -162,6 +168,120 @@ export interface operations {
       /** @description The request body is not valid. */
       422: {
         content: never;
+      };
+    };
+  };
+  ConfigController_getAgents: {
+    responses: {
+      /** @description The validated Agent config from boot. The client list overrides by name. */
+      200: {
+        content: {
+          "application/json": {
+            system: ({
+                name: string;
+                slug: string;
+                role: string;
+                description: string;
+                prompt: string;
+                params: {
+                    [key: string]: string;
+                  }[];
+                /** @enum {string} */
+                provider: "@ai-sdk/alibaba" | "@ai-sdk/amazon-bedrock" | "@ai-sdk/anthropic" | "@ai-sdk/anthropic-aws" | "@ai-sdk/assemblyai" | "@ai-sdk/azure" | "@ai-sdk/baseten" | "@ai-sdk/black-forest-labs" | "@ai-sdk/bytedance" | "@ai-sdk/cartesia" | "@ai-sdk/cerebras" | "@ai-sdk/cohere" | "@ai-sdk/deepgram" | "@ai-sdk/deepinfra" | "@ai-sdk/deepseek" | "@ai-sdk/elevenlabs" | "@ai-sdk/fal" | "@ai-sdk/fish-audio" | "@ai-sdk/fireworks" | "@ai-sdk/gateway" | "@ai-sdk/gladia" | "@ai-sdk/gmicloud" | "@ai-sdk/google" | "@ai-sdk/google-vertex" | "@ai-sdk/groq" | "@ai-sdk/heygen" | "@ai-sdk/huggingface" | "@ai-sdk/hume" | "@ai-sdk/klingai" | "@ai-sdk/liquid" | "@ai-sdk/luma" | "@ai-sdk/minimax" | "@ai-sdk/mistral" | "@ai-sdk/moonshotai" | "@ai-sdk/open-responses" | "@ai-sdk/openai" | "@ai-sdk/openai-compatible" | "@ai-sdk/parallel" | "@ai-sdk/perplexity" | "@ai-sdk/prodia" | "@ai-sdk/quiverai" | "@ai-sdk/replicate" | "@ai-sdk/revai" | "@ai-sdk/scaledown" | "@ai-sdk/tencent" | "@ai-sdk/togetherai" | "@ai-sdk/topaz" | "@ai-sdk/typesafe-ai" | "@ai-sdk/voyage" | "@ai-sdk/xai" | "@ai-sdk/zai";
+                model: string;
+                /** Format: uri */
+                baseUrl: string;
+                /** @description Name of the environment variable that holds the key; never a key value */
+                apiKeyEnv: string;
+                allowedTools: string[];
+                dailyBudgetUsd: number;
+                escalateTo?: string;
+              })[];
+            /** @default [] */
+            client: ({
+                name: string;
+                slug: string;
+                role: string;
+                description: string;
+                prompt: string;
+                params: {
+                    [key: string]: string;
+                  }[];
+                /** @enum {string} */
+                provider: "@ai-sdk/alibaba" | "@ai-sdk/amazon-bedrock" | "@ai-sdk/anthropic" | "@ai-sdk/anthropic-aws" | "@ai-sdk/assemblyai" | "@ai-sdk/azure" | "@ai-sdk/baseten" | "@ai-sdk/black-forest-labs" | "@ai-sdk/bytedance" | "@ai-sdk/cartesia" | "@ai-sdk/cerebras" | "@ai-sdk/cohere" | "@ai-sdk/deepgram" | "@ai-sdk/deepinfra" | "@ai-sdk/deepseek" | "@ai-sdk/elevenlabs" | "@ai-sdk/fal" | "@ai-sdk/fish-audio" | "@ai-sdk/fireworks" | "@ai-sdk/gateway" | "@ai-sdk/gladia" | "@ai-sdk/gmicloud" | "@ai-sdk/google" | "@ai-sdk/google-vertex" | "@ai-sdk/groq" | "@ai-sdk/heygen" | "@ai-sdk/huggingface" | "@ai-sdk/hume" | "@ai-sdk/klingai" | "@ai-sdk/liquid" | "@ai-sdk/luma" | "@ai-sdk/minimax" | "@ai-sdk/mistral" | "@ai-sdk/moonshotai" | "@ai-sdk/open-responses" | "@ai-sdk/openai" | "@ai-sdk/openai-compatible" | "@ai-sdk/parallel" | "@ai-sdk/perplexity" | "@ai-sdk/prodia" | "@ai-sdk/quiverai" | "@ai-sdk/replicate" | "@ai-sdk/revai" | "@ai-sdk/scaledown" | "@ai-sdk/tencent" | "@ai-sdk/togetherai" | "@ai-sdk/topaz" | "@ai-sdk/typesafe-ai" | "@ai-sdk/voyage" | "@ai-sdk/xai" | "@ai-sdk/zai";
+                model: string;
+                /** Format: uri */
+                baseUrl: string;
+                /** @description Name of the environment variable that holds the key; never a key value */
+                apiKeyEnv: string;
+                allowedTools: string[];
+                dailyBudgetUsd: number;
+                escalateTo?: string;
+              })[];
+          };
+        };
+      };
+    };
+  };
+  ConfigController_getPolicy: {
+    responses: {
+      /** @description The validated policy config from boot. Default deny stays in force. */
+      200: {
+        content: {
+          "application/json": {
+            /** @enum {number} */
+            version: 1;
+            /** @enum {string} */
+            mode: "dry-run" | "propose" | "act";
+            approvers: {
+              discordUserIds: string[];
+              discordRoleIds: string[];
+            };
+            limits: {
+              maxOpenPrsPerHour: number;
+              maxActionsPerServicePer10Min: number;
+              maxDiagnosisLoops: number;
+              llmDailyBudgetUsd: number;
+            };
+            llm: {
+              minConfidenceForPr: number;
+              minConfidenceForAction: number;
+            };
+            github: {
+              repos: {
+                  repo: string;
+                  services: string[];
+                  baseBranch: string;
+                  branchPrefix: string;
+                  /** @enum {boolean} */
+                  draft: true;
+                  allowedPaths: string[];
+                  forbiddenPaths: string[];
+                  maxFilesChanged: number;
+                  maxLinesChanged: number;
+                }[];
+            };
+            rules: ({
+                id: string;
+                action: string | string[];
+                when?: {
+                  category?: string[];
+                  services?: string[];
+                  signals?: string[];
+                };
+                params?: {
+                  replicas?: {
+                    min: number;
+                    max: number;
+                  };
+                };
+                /** @enum {string} */
+                effect: "allow" | "require_approval" | "deny";
+              })[];
+            /** @enum {string} */
+            default: "deny";
+          };
+        };
       };
     };
   };

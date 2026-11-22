@@ -8,7 +8,7 @@ The daemon at `apps/daemon` is an Effect v4 skeleton on Bun. ADR 0009 removed th
 
 | Component | Path | Role |
 | --- | --- | --- |
-| API | `apps/api` | NestJS app. The only external surface. Serves `GET /healthz`, the OpenAPI document, the Swagger UI, credential routes, native event ingest, Sentry envelope ingest and MCP at `/mcp`. |
+| API | `apps/api` | NestJS app. The only external surface. Serves `GET /healthz`, the OpenAPI document, the Swagger UI, the read-only config routes, credential routes, native event ingest, Sentry envelope ingest and MCP at `/mcp`. |
 | Config | `packages/config` and root `graveshift.config.yaml` | One committed config file with `boot`, `agents`, `policy` and `fix` blocks. Validated once at boot. |
 | Credentials | `apps/api/src/auth` | One component that issues, hashes, verifies, lists and revokes MCP credentials and event keys. Values are lowercase hex; PostgreSQL stores one-way hashes. |
 | API contract | `packages/api-contract` | Publishes generated TypeScript types and a version marker from the OpenAPI document. |
@@ -72,6 +72,8 @@ The API in `apps/api` is the only external surface. A client calls this API, nev
 | `GET /docs-json` | The OpenAPI document. |
 | `GET /docs` | The Swagger UI. |
 | `POST /api/rules/validate` | Override ids, warning and acceptance for a rule set. Validation only. |
+| `GET /api/config/agents` | The validated `agents` block from boot. Read-only. No secret value. |
+| `GET /api/config/policy` | The validated `policy` block from boot. Read-only. No secret value. |
 | `GET /api/work-items` | A paged list of work items for the table. |
 | `GET /api/work-items/:id` | One work item for the detail sheet. |
 | `POST /api/work-items/:id/triage` | The triaged work item. Updates the in-memory store. |
@@ -99,6 +101,8 @@ CI compares the SQL generated from `apps/api/prisma/schema.prisma` with the comm
 One committed root file, `graveshift.config.yaml`, is the config source of truth. It has four blocks: `boot` (host and port), `agents` (the strict Agent file shape), `policy` (the policy schema) and `fix`. The `fix` block holds the boot flag `enabled`, the Agent name, the one patch `promptTemplate`, the gateway budget and price table, and the GitHub App identity names. `packages/config` owns `GraveshiftConfigSchema` and the loader. The API, the actuator and the one-shot scripts load the same file. A missing or invalid file stops boot. No route reads a YAML file per request.
 
 The file holds no secret value. `apiKeyEnv`, `appIdEnv` and `privateKeyEnv` name environment variables. `DATABASE_URL` and the MCP token stay in the environment. The merge of Agent and policy config removes the old split inputs and is recorded in ADR 0015.
+
+`GET /api/config/agents` and `GET /api/config/policy` are the read-only view of the same validated config. `apps/api/src/config/config.controller.ts` serves the objects held by the injected boot provider (`GRAVESHIFT_CONFIG` in `GraveshiftConfigModule`). No route reads a YAML file per request. The routes have no write path: they expose `GET` only and no route writes a config file. A route that writes config is an authenticated route owned by a later ticket under #18. `AgentsFileSchema` from `packages/agents` and `PolicySchema` from `packages/policy` are the OpenAPI response schemas, so `packages/api-contract` publishes `AgentsConfigResponse` and `PolicyConfigResponse` as the wire contract. The response never holds a secret or a resolved environment value: `apiKeyEnv`, `appIdEnv` and `privateKeyEnv` stay variable names. The dashboard is owned by another frontend engineer; this repo ships contracts and endpoint definitions only.
 
 ## Work items
 
