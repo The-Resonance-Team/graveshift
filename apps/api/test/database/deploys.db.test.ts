@@ -7,6 +7,9 @@ import type { PrismaService } from '../../src/infra/prisma.service';
 import { ReleaseRepo } from '../../src/releases/release.repo';
 import { dbTestEnabled, openTestDatabase, resetDatabase } from './fixtures';
 
+/** PrismaPromise is lazy on Linux Bun; resolve it before handing it to a matcher. */
+const rejects = (promise: PromiseLike<unknown>) => expect(Promise.resolve(promise));
+
 describe.skipIf(!dbTestEnabled)('v3 deploy database rules', () => {
   let db: PrismaService;
   let audit: AuditRepo;
@@ -57,22 +60,22 @@ describe.skipIf(!dbTestEnabled)('v3 deploy database rules', () => {
 
   test('database rejects UPDATE and DELETE on deploys', async () => {
     const { deploy } = await seed();
-    await expect(
+    await rejects(
       db.deploy.update({ where: { id: deploy.id }, data: { name: 'changed' } }),
     ).rejects.toThrow(/append-only/);
-    await expect(db.deploy.delete({ where: { id: deploy.id } })).rejects.toThrow(/append-only/);
+    await rejects(db.deploy.delete({ where: { id: deploy.id } })).rejects.toThrow(/append-only/);
     expect(await db.deploy.count()).toBe(1);
   });
 
   test('database rejects UPDATE and DELETE on deploy project links', async () => {
     const { deploy } = await seed();
-    await expect(
+    await rejects(
       db.deployProject.update({
         where: { deployId_projectId: { deployId: deploy.id, projectId: '1001' } },
         data: { projectId: '1002' },
       }),
     ).rejects.toThrow(/append-only/);
-    await expect(
+    await rejects(
       db.deployProject.delete({
         where: { deployId_projectId: { deployId: deploy.id, projectId: '1001' } },
       }),
@@ -81,15 +84,15 @@ describe.skipIf(!dbTestEnabled)('v3 deploy database rules', () => {
 
   test('parent deletes cannot cascade away a deploy', async () => {
     const { orgA, release, environment } = await seed();
-    await expect(db.organization.delete({ where: { id: orgA.id } })).rejects.toThrow();
-    await expect(db.release.delete({ where: { id: release.id } })).rejects.toThrow();
-    await expect(db.environment.delete({ where: { id: environment.id } })).rejects.toThrow();
+    await rejects(db.organization.delete({ where: { id: orgA.id } })).rejects.toThrow();
+    await rejects(db.release.delete({ where: { id: release.id } })).rejects.toThrow();
+    await rejects(db.environment.delete({ where: { id: environment.id } })).rejects.toThrow();
     expect(await db.deploy.count()).toBe(1);
   });
 
   test('a Project linked to a Release or Deploy cannot be deleted', async () => {
     await seed();
-    await expect(db.project.delete({ where: { projectId: '1001' } })).rejects.toThrow();
+    await rejects(db.project.delete({ where: { projectId: '1001' } })).rejects.toThrow();
     expect(await db.project.count()).toBe(3);
   });
 
@@ -98,7 +101,7 @@ describe.skipIf(!dbTestEnabled)('v3 deploy database rules', () => {
     const foreignEnvironment = await db.environment.create({
       data: { orgId: orgB.id, name: 'foreign-env' },
     });
-    await expect(
+    await rejects(
       db.deploy.create({
         data: {
           orgId: orgB.id,
@@ -109,7 +112,7 @@ describe.skipIf(!dbTestEnabled)('v3 deploy database rules', () => {
         },
       }),
     ).rejects.toThrow(/deploy release belongs to another organization/);
-    await expect(
+    await rejects(
       db.deploy.create({
         data: {
           orgId: orgA.id,
@@ -120,29 +123,29 @@ describe.skipIf(!dbTestEnabled)('v3 deploy database rules', () => {
         },
       }),
     ).rejects.toThrow(/deploy environment belongs to another organization/);
-    await expect(
+    await rejects(
       db.projectRelease.create({ data: { releaseId: release.id, projectId: '2001' } }),
     ).rejects.toThrow(/another organization/);
-    await expect(
+    await rejects(
       db.deployProject.create({ data: { deployId: deploy.id, projectId: '2001' } }),
     ).rejects.toThrow(/another organization/);
   });
 
   test('organization scope columns and links are immutable on update', async () => {
     const { orgB, release, environment } = await seed();
-    await expect(
+    await rejects(
       db.release.update({ where: { id: release.id }, data: { orgId: orgB.id } }),
     ).rejects.toThrow(/immutable/);
-    await expect(
+    await rejects(
       db.environment.update({ where: { id: environment.id }, data: { orgId: orgB.id } }),
     ).rejects.toThrow(/immutable/);
-    await expect(
+    await rejects(
       db.projectRelease.update({
         where: { projectId_releaseId: { projectId: '1001', releaseId: release.id } },
         data: { projectId: '1002' },
       }),
     ).rejects.toThrow(/immutable/);
-    await expect(
+    await rejects(
       db.project.update({ where: { projectId: '1001' }, data: { orgId: orgB.id } }),
     ).rejects.toThrow(/immutable while linked/);
   });
@@ -171,7 +174,7 @@ describe.skipIf(!dbTestEnabled)('v3 deploy database rules', () => {
 
   test('a duplicate Release version is rejected by the database', async () => {
     const { orgA } = await seed();
-    await expect(
+    await rejects(
       db.release.create({ data: { orgId: orgA.id, version: 'v1' } }),
     ).rejects.toHaveProperty('code', 'P2002');
   });
