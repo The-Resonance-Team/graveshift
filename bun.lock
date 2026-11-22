@@ -54,6 +54,7 @@
         "zod": "4.6.7",
       },
       "devDependencies": {
+        "@graveshift/mcp-client": "workspace:*",
         "@modelcontextprotocol/client": "2.4.0",
         "@nestjs/testing": "12.6.0",
         "@sentry/core": "11.6.0",
@@ -214,6 +215,19 @@
       "dependencies": {
         "@graveshift/core": "workspace:*",
         "@graveshift/events": "workspace:*",
+      },
+    },
+    "packages/mcp-client": {
+      "name": "@graveshift/mcp-client",
+      "version": "0.1.0",
+      "dependencies": {
+        "@graveshift/core": "workspace:*",
+        "@modelcontextprotocol/client": "2.4.0",
+        "zod": "4.6.7",
+      },
+      "devDependencies": {
+        "@modelcontextprotocol/server": "2.4.0",
+        "reflect-metadata": "0.2.2",
       },
     },
     "packages/metrics": {
@@ -428,6 +442,8 @@
     "@graveshift/gateway": ["@graveshift/gateway@workspace:packages/gateway"],
 
     "@graveshift/integrations": ["@graveshift/integrations@workspace:packages/integrations"],
+
+    "@graveshift/mcp-client": ["@graveshift/mcp-client@workspace:packages/mcp-client"],
 
     "@graveshift/metrics": ["@graveshift/metrics@workspace:packages/metrics"],
 
