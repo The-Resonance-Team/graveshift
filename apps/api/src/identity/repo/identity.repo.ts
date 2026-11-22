@@ -259,14 +259,4 @@ export class PrismaIdentityRepo implements IdentityRepo {
   async addGrant(input: DaemonGrantRecord): Promise<void> {
     await this.db.daemonGrant.create({ data: input });
   }
-
-  async grantProject(name: string, projectId: string): Promise<void> {
-    const grant = await this.findGrant(name);
-    if (grant === undefined) return;
-    if (grant.projectIds.includes(projectId)) return;
-    await this.db.daemonGrant.update({
-      where: { name },
-      data: { projectIds: { push: projectId } },
-    });
-  }
 }

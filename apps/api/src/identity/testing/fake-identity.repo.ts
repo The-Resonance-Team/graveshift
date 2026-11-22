@@ -230,11 +230,4 @@ export class FakeIdentityRepo implements IdentityRepo {
   async addGrant(input: DaemonGrantRecord): Promise<void> {
     this.grants.set(input.name, input);
   }
-
-  async grantProject(name: string, projectId: string): Promise<void> {
-    const grant = this.grants.get(name);
-    if (grant !== undefined && !grant.projectIds.includes(projectId)) {
-      grant.projectIds.push(projectId);
-    }
-  }
 }

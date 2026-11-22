@@ -89,13 +89,18 @@ describe('CI workflows', () => {
     const ci = workflows.find((workflow) => workflow.name === 'ci.yml');
     expect(ci).toBeDefined();
     const blocks = jobBlocks(ci!.content);
-    const needsLine = blocks.get('verify')?.find((line) => /^\s+needs:\s*\[/.test(line));
-    expect(needsLine).toBeDefined();
+    const verifyLines = blocks.get('verify') ?? [];
+    const needsIndex = verifyLines.findIndex((line) => /^\s+needs:/.test(line));
+    expect(needsIndex).toBeGreaterThanOrEqual(0);
+    // A long dependency list is formatted across several lines. Read the whole
+    // needs block, not just its first line.
+    const needsBlock = verifyLines.slice(needsIndex).join('\n');
     const listed =
-      needsLine!
+      needsBlock
         .match(/\[([^\]]+)\]/)?.[1]
         ?.split(',')
-        .map((name) => name.trim()) ?? [];
+        .map((name) => name.trim())
+        .filter((name) => name.length > 0) ?? [];
     const expected = [...blocks.keys()].filter((name) => name !== 'verify');
     expect(listed.sort()).toEqual(expected.sort());
   });

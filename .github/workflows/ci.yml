@@ -122,6 +122,31 @@ jobs:
       - name: Test
         run: bun run test
 
+  test-database:
+    needs: changes
+    if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.ci-affected == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # A throwaway Postgres service is allowed. No Graveshift daemon runs here.
+    services:
+      postgres:
+        image: postgres:18.7
+        env:
+          POSTGRES_USER: ci_check
+          POSTGRES_PASSWORD: ci-check-only
+          POSTGRES_DB: ci_check
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: ./.github/actions/setup-bun
+      - name: Database tests
+        run: bun run test:database
+
   build:
     needs: changes
     if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.ci-affected == 'true' }}
@@ -168,7 +193,20 @@ jobs:
 
   verify:
     if: ${{ always() && (github.event_name == 'push' || github.event.pull_request.draft != true) }}
-    needs: [changes, format, lint, db, typecheck, test-types, test, build, ci-structure, compose]
+    needs:
+      [
+        changes,
+        format,
+        lint,
+        db,
+        typecheck,
+        test-types,
+        test,
+        test-database,
+        build,
+        ci-structure,
+        compose,
+      ]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

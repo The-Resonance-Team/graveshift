@@ -61,6 +61,9 @@ export class IdentityService {
         orgSlug: root.orgSlug,
       });
     } catch (error) {
+      // Two API instances may race on first boot. The loser sees the conflict
+      // from the one transaction and starts normally with the winner's seed.
+      if (error instanceof IdentityConflictError) return;
       throw this.toConflict(error);
     }
   }

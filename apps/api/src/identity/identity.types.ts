@@ -128,5 +128,4 @@ export interface IdentityRepo {
   findOAuthClient(clientId: string): Promise<OAuthClientRecord | undefined>;
   findGrant(name: string): Promise<DaemonGrantRecord | undefined>;
   addGrant(input: DaemonGrantRecord): Promise<void>;
-  grantProject(name: string, projectId: string): Promise<void>;
 }
