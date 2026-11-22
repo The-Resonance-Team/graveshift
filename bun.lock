@@ -99,6 +99,19 @@
         "openapi-typescript": "6.7.6",
       },
     },
+    "packages/collectors": {
+      "name": "@graveshift/collectors",
+      "version": "0.1.0",
+      "dependencies": {
+        "@graveshift/core": "workspace:*",
+        "@graveshift/events": "workspace:*",
+        "@graveshift/integrations": "workspace:*",
+        "@graveshift/metrics": "workspace:*",
+        "@graveshift/redactor": "workspace:*",
+        "@graveshift/sources-docker": "workspace:*",
+        "@graveshift/sources-k8s": "workspace:*",
+      },
+    },
     "packages/config": {
       "name": "@graveshift/config",
       "version": "0.1.0",
@@ -412,6 +425,8 @@
     "@graveshift/api": ["@graveshift/api@workspace:apps/api"],
 
     "@graveshift/api-contract": ["@graveshift/api-contract@workspace:packages/api-contract"],
+
+    "@graveshift/collectors": ["@graveshift/collectors@workspace:packages/collectors"],
 
     "@graveshift/config": ["@graveshift/config@workspace:packages/config"],
 

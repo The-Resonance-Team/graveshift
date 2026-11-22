@@ -4,4 +4,4 @@ export { createK8sSource, K8sSourceError } from './source';
 export type { K8sSourceOptions } from './source';
 export { WatchExpiredError } from './types';
 export type { DeploymentInfo, K8sEvent, KubeApi } from './types';
-export { backoffMs } from './watch';
+export { abortableSleep, backoffMs, startWatchLoop, type Sleep } from './watch';
