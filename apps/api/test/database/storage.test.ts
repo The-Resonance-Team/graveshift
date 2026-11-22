@@ -140,6 +140,8 @@ describe('PostgreSQL credential and audit persistence', () => {
       payload: { note: 'before restart' },
     });
     // A restart drops every connection and builds a new client, as a new API process does.
+    // This proves the data is in PostgreSQL and not in client memory.
+    // It does not start a new process.
     const restarted = new PrismaService(new ConfigService({ DATABASE_URL: url }));
     try {
       const reborn = new AuditRepo(restarted);
