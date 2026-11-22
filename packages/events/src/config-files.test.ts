@@ -12,6 +12,7 @@ const runbook = await Bun.file(
   join(here, '../../../docs/runbooks/nats-jetstream-backup.md'),
 ).text();
 const natsCompose = compose.match(/^  nats:\n([\s\S]*?)(?=^networks:)/m)?.[1] ?? '';
+const ci = await Bun.file(join(here, '../../../.github/workflows/ci.yml')).text();
 
 describe('declarative NATS config matches the code', () => {
   test('stream config matches the one stream definition', async () => {
@@ -110,6 +111,25 @@ describe('local config check', () => {
     expect(readme).toContain('GitHub Actions does not');
     const script = await Bun.file(join(here, '../../../scripts/check-nats-config.ts')).text();
     expect(script).toContain("'nats-server', '-t'");
+  });
+});
+
+describe('CI compose validation', () => {
+  test('supplies dummy NATS values without weakening the compose guards', () => {
+    for (const line of [
+      'NATS_PUBLISH_USER: ci-dummy-publish-user',
+      'NATS_PUBLISH_PASSWORD: ci-dummy-publish-password',
+      'NATS_READ_USER: ci-dummy-read-user',
+      'NATS_READ_PASSWORD: ci-dummy-read-password',
+    ]) {
+      expect(ci).toContain(line);
+    }
+    expect(natsCompose).not.toContain(':-}');
+  });
+
+  test('does not wire the local config guard into CI', () => {
+    expect(ci).not.toContain('check-nats-config');
+    expect(ci).not.toContain('nats-server -t');
   });
 });
 
