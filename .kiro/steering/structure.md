@@ -14,6 +14,7 @@ graveshift/
 ├── packages/
 │   ├── agents/                    # Agent config and routing
 │   ├── api-contract/              # Generated API types
+│   ├── config/                    # One GraveshiftConfigSchema and boot loader
 │   ├── core/                      # Zod schemas, state machine, rule engine
 │   ├── events/                    # Event publishing
 │   ├── integrations/              # Plugin and Collector contracts

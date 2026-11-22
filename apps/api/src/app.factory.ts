@@ -47,10 +47,7 @@ export function configureApp<T extends INestApplication>(app: T): T {
   return app;
 }
 
-export async function createApp(
-  beforeConfigure?: (app: INestApplication) => void,
-): Promise<INestApplication> {
+export async function createApp() {
   const app = await NestFactory.create(AppModule, { logger: false });
-  beforeConfigure?.(app);
   return configureApp(app);
 }

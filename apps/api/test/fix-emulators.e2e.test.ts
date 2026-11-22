@@ -102,26 +102,28 @@ async function realDeps(): Promise<FixDeps> {
 describe('fix path over emulated GitHub and AI', () => {
   test('Fix now opens one draft PR through the real collaborators', async () => {
     const app = await buildApp(await realDeps());
-    await app.init();
+    try {
+      await app.init();
 
-    const response = await request(app.getHttpServer())
-      .post('/api/work-items/wi-e2e/fix-now')
-      .expect(200);
-    expect(response.body.ok).toBe(true);
-    expect(response.body.failure).toBe('none');
-    expect(response.body.pr.number).toBeGreaterThan(0);
-    expect(response.body.pr.branch).toContain('graveshift/');
+      const response = await request(app.getHttpServer())
+        .post('/api/work-items/wi-e2e/fix-now')
+        .expect(200);
+      expect(response.body.ok).toBe(true);
+      expect(response.body.failure).toBe('none');
+      expect(response.body.pr.number).toBeGreaterThan(0);
+      expect(response.body.pr.branch).toContain('graveshift/');
 
-    const urls = emu.urls();
-    const pulls = await fetch(`${urls.github}/repos/xiro/haunted-candy-shop/pulls`).then((res) =>
-      res.json(),
-    );
-    expect(Array.isArray(pulls)).toBe(true);
-    expect((pulls as unknown[]).length).toBe(1);
-    const calls = await fetch(`${urls.ai}/_ai/calls`).then((res) => res.json());
-    expect(Array.isArray(calls)).toBe(true);
-    expect((calls as unknown[]).length).toBeGreaterThan(0);
-
-    await app.close();
+      const urls = emu.urls();
+      const pulls = (await fetch(`${urls.github}/repos/xiro/haunted-candy-shop/pulls`).then((res) =>
+        res.json(),
+      )) as Array<{ draft?: boolean }>;
+      expect(pulls).toHaveLength(1);
+      expect(pulls[0]?.draft).toBe(true);
+      const calls = await fetch(`${urls.ai}/_ai/calls`).then((res) => res.json());
+      expect(Array.isArray(calls)).toBe(true);
+      expect((calls as unknown[]).length).toBeGreaterThan(0);
+    } finally {
+      await app.close();
+    }
   });
 });

@@ -35,7 +35,7 @@ describe('createFixDeps', () => {
   test('builds the real gateway and GitHub client from the committed config', () => {
     const deps = createFixDeps(config, { env });
     expect(deps.agent).toBe('Exorcist');
-    expect(deps.autoFixEnabled).toBe(true);
+    expect(deps.autoFixEnabled).toBe(false);
     expect(deps.promptTemplate).toContain('{{DIAGNOSIS}}');
     expect(deps.agentMeta.role).toBe('exorcist');
     expect(deps.policy).toBe(config.policy);

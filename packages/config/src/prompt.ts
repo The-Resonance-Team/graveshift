@@ -27,11 +27,15 @@ export interface FixPromptValues {
   RULES: string;
 }
 
-const pattern = (name: FixPromptPlaceholder): RegExp => new RegExp(`\\{\\{${name}\\}\\}`, 'g');
+const PLACEHOLDER = /\{\{([A-Z][A-Z0-9_]*)\}\}/g;
+const allowed = new Set<string>(FIX_PROMPT_PLACEHOLDERS);
 
+// One pass over the template. A function replacer keeps $ sequences in a value
+// literal, and a single pass keeps a placeholder inside an inserted value from
+// being expanded by a later placeholder.
 export function renderFixPrompt(template: string, values: FixPromptValues): string {
-  return FIX_PROMPT_PLACEHOLDERS.reduce(
-    (text, name) => text.replace(pattern(name), String(values[name])),
-    template,
-  );
+  return template.replace(PLACEHOLDER, (match, name: string) => {
+    if (!allowed.has(name)) return match;
+    return String(values[name as FixPromptPlaceholder]);
+  });
 }

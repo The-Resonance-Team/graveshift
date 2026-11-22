@@ -103,7 +103,7 @@ policy:
   default: deny
 
 fix:
-  enabled: true
+  enabled: false
   agent: Exorcist
   promptTemplate: |
     You are {{AGENT_NAME}}, the {{AGENT_ROLE}} Agent.

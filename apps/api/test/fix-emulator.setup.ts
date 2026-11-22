@@ -18,6 +18,7 @@ export function useFixEmulators(): {
 } {
   let github: Emulator | undefined;
   let ai: Emulator | undefined;
+  const originalUrls: Record<string, string | undefined> = {};
 
   beforeAll(async () => {
     const seed: unknown = Bun.YAML.parse(await Bun.file(seedPath).text());
@@ -33,6 +34,8 @@ export function useFixEmulators(): {
         seed: { ai: (seed as Record<string, unknown>).ai },
       }),
     ]);
+    originalUrls[EMULATOR_URL_ENV.github] = process.env[EMULATOR_URL_ENV.github];
+    originalUrls[EMULATOR_URL_ENV.ai] = process.env[EMULATOR_URL_ENV.ai];
     process.env[EMULATOR_URL_ENV.github] = github.url;
     process.env[EMULATOR_URL_ENV.ai] = ai.url;
   });
@@ -43,7 +46,14 @@ export function useFixEmulators(): {
   });
 
   afterAll(async () => {
-    await Promise.all([github?.close(), ai?.close()]);
+    try {
+      await Promise.all([github?.close(), ai?.close()]);
+    } finally {
+      for (const [name, original] of Object.entries(originalUrls)) {
+        if (original === undefined) delete process.env[name];
+        else process.env[name] = original;
+      }
+    }
   });
 
   return {

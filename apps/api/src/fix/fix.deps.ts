@@ -17,9 +17,12 @@ import {
   type GatewayResult,
   type GatewayTask,
 } from '@graveshift/gateway';
-import type { PolicyContext } from '@graveshift/policy';
+import { ModeSchema } from '@graveshift/policy';
+import { z } from 'zod';
 
 import type { FixContextProvider, FixDeps } from './fix.types';
+
+const EnvModeSchema = z.object({ GRAVESHIFT_MODE: ModeSchema.optional() });
 
 export class FixConfigError extends GraveshiftError<'FIX_CONFIG_ERROR'> {
   constructor(message: string) {
@@ -114,6 +117,10 @@ class LazyGitHubClient implements GitHubClient {
 
 export function createFixDeps(config: GraveshiftConfig, options: FixDepsOptions = {}): FixDeps {
   const env = options.env ?? process.env;
+  const parsedEnv = EnvModeSchema.safeParse(env);
+  if (!parsedEnv.success) {
+    throw new FixConfigError(`GRAVESHIFT_MODE is invalid: ${parsedEnv.error.message}`);
+  }
   const agent = mergeAgentTemplates(config.agents.system, config.agents.client).find(
     (entry) => entry.name === config.fix.agent,
   );
@@ -173,8 +180,8 @@ export function createFixDeps(config: GraveshiftConfig, options: FixDepsOptions 
       provider: agent.provider,
       dailyBudgetUsd: agent.dailyBudgetUsd,
     },
-    ...(env.GRAVESHIFT_MODE === undefined
+    ...(parsedEnv.data.GRAVESHIFT_MODE === undefined
       ? {}
-      : { envMode: env.GRAVESHIFT_MODE as PolicyContext['envMode'] }),
+      : { envMode: parsedEnv.data.GRAVESHIFT_MODE }),
   };
 }

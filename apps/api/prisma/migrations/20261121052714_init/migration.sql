@@ -32,7 +32,6 @@ CREATE TABLE "work_items" (
     "severity" "WorkItemSeverity" NOT NULL,
     "service" TEXT NOT NULL,
     "diagnosis_ref" TEXT NOT NULL,
-    "auto_fix_allowed" BOOLEAN NOT NULL,
     "fix_priority" INTEGER NOT NULL,
     "draft_pr" JSONB,
     "version" INTEGER NOT NULL DEFAULT 0,
