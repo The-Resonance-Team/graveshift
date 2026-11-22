@@ -9,7 +9,9 @@ import request from 'supertest';
 
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.factory';
+import { CREDENTIAL_CONFIG, type AuthConfig } from '../src/auth/auth.types';
 import { AuditRepo, type AuditAppendInput } from '../src/audit/repo/audit.repo';
+import { TEST_CONFIG } from './fakes/auth-test-config';
 
 export const FAKE_CONFIG = new URL('./fixtures/config.fake.yaml', import.meta.url);
 export const FAKE_CONFIG_PATH = fileURLToPath(FAKE_CONFIG);
@@ -40,7 +42,12 @@ export const CLIENTS = {
 } as const;
 
 export const READ_ROUTES = ['/api/config/agents', '/api/config/policy'] as const;
-export const EXPORT_ROUTES = ['/api/config/agents/export', '/api/config/policy/export'] as const;
+export const WHOLE_EXPORT_ROUTE = '/api/config/export';
+export const EXPORT_ROUTES = [
+  '/api/config/agents/export',
+  '/api/config/policy/export',
+  WHOLE_EXPORT_ROUTE,
+] as const;
 
 function withFakeEnv(path: string): void {
   process.env.GRAVESHIFT_CONFIG_PATH = path;
@@ -71,14 +78,28 @@ export class FakeAuditRepo {
 // test sets it before building the app and restores it after every test.
 // The suite boots through @nestjs/testing: NestFactory.create exits the process on a
 // boot error, and the boot-validation tests must catch the error instead.
+// CREDENTIAL_CONFIG is pinned so the auth config (and with it the ThrottlerGuard limit,
+// which ThrottlerModule.forRootAsync injects) is explicit per app, as in buildAuthApp.
+// The OAuth client registry still comes from the test boot env, so the config clients of
+// apps/api/test/setup.ts can exchange tokens.
 export async function appFromConfigFile(
   path: string,
   audit: FakeAuditRepo = new FakeAuditRepo(),
+  credential: Partial<AuthConfig> = {},
 ): Promise<{ app: INestApplication; audit: FakeAuditRepo }> {
   withFakeEnv(path);
+  const credentialConfig: AuthConfig = {
+    ...TEST_CONFIG,
+    oauthClients: JSON.parse(
+      process.env.GRAVESHIFT_OAUTH_CLIENTS ?? '{}',
+    ) as AuthConfig['oauthClients'],
+    ...credential,
+  };
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(AuditRepo)
     .useValue(audit)
+    .overrideProvider(CREDENTIAL_CONFIG)
+    .useValue(credentialConfig)
     .compile();
   const app = configureApp(moduleRef.createNestApplication({ logger: false }));
   await app.init();
@@ -133,6 +154,7 @@ export const validated = parseGraveshiftConfig(Bun.YAML.parse(await Bun.file(FAK
 
 // The exact dashboard view the fake config must produce. Written by hand from the
 // fixture: a whitelist change in the projection that drops or leaks a field fails here.
+// `params` holds declared names only; the fixture values 'fake case' and 'v0' stay out.
 export const EXPECTED_AGENTS_VIEW = {
   system: [
     {
@@ -143,6 +165,7 @@ export const EXPECTED_AGENTS_VIEW = {
       provider: '@ai-sdk/openai',
       model: 'fake-test-model',
       dailyBudgetUsd: 1,
+      params: ['CASE'],
     },
   ],
   client: [
@@ -155,10 +178,12 @@ export const EXPECTED_AGENTS_VIEW = {
       model: 'fake-client-model',
       dailyBudgetUsd: 0.5,
       escalateTo: 'test-agent',
+      params: ['VERSION'],
     },
   ],
 };
 
+// Rules are identity and decision only: no when block and no replica bound.
 export const EXPECTED_POLICY_VIEW = {
   version: 1,
   mode: 'dry-run',
@@ -169,14 +194,18 @@ export const EXPECTED_POLICY_VIEW = {
     llmDailyBudgetUsd: 0.5,
   },
   llm: { minConfidenceForPr: 0.9, minConfidenceForAction: 0.95 },
-  rules: [{ id: 'fake-deny-db', action: '*', when: { services: ['postgres'] }, effect: 'deny' }],
+  rules: [
+    { id: 'fake-deny-db', action: '*', effect: 'deny' },
+    { id: 'fake-scale-up', action: 'scale_service', effect: 'require_approval' },
+  ],
   default: 'deny',
 };
 
-// The sanitized view must not carry these keys in any form.
+// The sanitized view must not carry these keys in any form. The sanitized Agent view is
+// the one place `params` appears, and there it holds names only, so `params` is checked
+// per route instead of in this shared list.
 export const SANITIZE_ABSENT_KEYS = [
   '"prompt"',
-  '"params"',
   '"baseUrl"',
   '"apiKeyEnv"',
   '"allowedTools"',
@@ -190,6 +219,21 @@ export const SANITIZE_ABSENT_KEYS = [
   '"branchPrefix"',
   '"allowedPaths"',
   '"forbiddenPaths"',
+  '"when"',
+  '"services"',
+  '"signals"',
+  '"category"',
+  '"replicas"',
+];
+
+// Values that stay in the full config: a param default, a rule condition value and a
+// replica bound. The sanitized view must not carry any of them.
+export const SANITIZE_ABSENT_VALUES = [
+  'fake case',
+  'v0',
+  'postgres',
+  'memory_pressure',
+  'infrastructure',
 ];
 
 // JSON round-trip mirrors the wire format: express serializes the same way and drops

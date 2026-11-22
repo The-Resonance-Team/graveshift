@@ -1,4 +1,4 @@
-import type { ConfigPolicyExportResponse } from '@graveshift/api-contract';
+import type { ConfigExportResponse, ConfigPolicyExportResponse } from '@graveshift/api-contract';
 import type { INestApplication } from '@nestjs/common';
 import { afterEach, describe, expect, test } from 'bun:test';
 import request from 'supertest';
@@ -9,6 +9,7 @@ import {
   INVALID_BOOT_CONFIG_PATH,
   UNKNOWN_SECRET_KEY,
   UNKNOWN_SECRET_VALUE,
+  WHOLE_EXPORT_ROUTE,
   appFromConfigFile,
   bearerToken,
   bootFailureFromConfigFile,
@@ -70,6 +71,10 @@ describe('config secret hygiene (e2e)', () => {
           .set('Authorization', `Bearer ${token}`)
           .expect(200),
         request(built.app.getHttpServer())
+          .get(WHOLE_EXPORT_ROUTE)
+          .set('Authorization', `Bearer ${token}`)
+          .expect(200),
+        request(built.app.getHttpServer())
           .get('/api/config/policy')
           .set('Authorization', `Bearer ${readToken}`)
           .expect(200),
@@ -78,7 +83,11 @@ describe('config secret hygiene (e2e)', () => {
       expect(bodies).not.toContain(UNKNOWN_SECRET_VALUE);
       expect(bodies).not.toContain(UNKNOWN_SECRET_KEY);
       // The stripped full response still equals the validated fixture policy.
-      expect(responses[1]?.body as ConfigPolicyExportResponse).toEqual(wire(validated.policy));
+      const [, policyExport, wholeExport] = responses;
+      expect(policyExport?.body as ConfigPolicyExportResponse).toEqual(wire(validated.policy));
+      // The whole-config export serves the same stripped policy object.
+      const wholeBody = wholeExport?.body as ConfigExportResponse | undefined;
+      expect(wholeBody?.policy).toEqual(wire(validated.policy));
     });
   });
 });

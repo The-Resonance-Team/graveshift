@@ -19,6 +19,11 @@ export type HttpConfigScope = (typeof HTTP_CONFIG_SCOPES)[number];
 
 export const ALL_SCOPES = [...MCP_READ_SCOPES, ...PLUGIN_SCOPES, ...HTTP_CONFIG_SCOPES] as const;
 
+// The scopes a credential of either kind can be issued with. The request DTO advertises
+// this list, not ALL_SCOPES: config:read and config:export are HTTP-only, so telling a
+// client it may ask for them would promise a scope the service always denies.
+export const CREDENTIAL_ISSUABLE_SCOPES = [...MCP_READ_SCOPES, ...PLUGIN_SCOPES] as const;
+
 // A client cannot grant these scopes, even when its own access token has them.
 export const FORBIDDEN_SCOPES = ['admin', 'tokens:manage'] as const;
 

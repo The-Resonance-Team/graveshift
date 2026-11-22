@@ -68,6 +68,17 @@ policy:
       action: '*'
       when: { services: [postgres] }
       effect: deny
+    # The sanitized view must drop when.* and params.replicas, so the fixture carries
+    # every one of those keys: a projection that leaks them shows up in the response.
+    - id: fake-scale-up
+      action: scale_service
+      when:
+        category: ['infrastructure']
+        services: ['api']
+        signals: ['memory_pressure']
+      params:
+        replicas: { min: 1, max: 3 }
+      effect: require_approval
   default: deny
 
 fix:

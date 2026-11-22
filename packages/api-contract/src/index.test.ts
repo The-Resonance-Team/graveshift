@@ -7,12 +7,12 @@ import {
   type ConfigAgentsExportResponse,
   type ConfigAgentsViewResponse,
   type ConfigPolicyExportResponse,
-  type ConfigPolicyViewResponse,
   type HealthResponse,
   type TriageRequest,
   type WorkItemListResponse,
   type WorkItemResponse,
 } from './index';
+import { compiledAssertions } from './config-contract-assertions';
 import openapi from './openapi.json';
 
 describe('api contract', () => {
@@ -70,59 +70,39 @@ describe('api contract', () => {
       '/api/config/policy',
       '/api/config/agents/export',
       '/api/config/policy/export',
+      '/api/config/export',
     ] as const;
     for (const path of configRoutes) {
       expect(Object.keys(openapi.paths[path] ?? {})).toEqual(['get']);
     }
   });
 
-  test('the sanitized and full config response types are distinct', () => {
-    // The sanitized (config:read) types carry the whitelist fields only.
-    type AgentsViewShape = Pick<
-      ConfigAgentsViewResponse['system'][number],
-      'name' | 'slug' | 'role' | 'description' | 'provider' | 'model' | 'dailyBudgetUsd'
-    >;
-    type PolicyViewShape = Pick<
-      ConfigPolicyViewResponse,
-      'version' | 'mode' | 'limits' | 'llm' | 'rules' | 'default'
-    >;
-    // The full (config:export) types keep apiKeyEnv as a variable name.
-    type AgentsExportShape = Pick<ConfigAgentsExportResponse['system'][number], 'apiKeyEnv'>;
-    const view: AgentsViewShape = {
-      name: 'Test Agent',
-      slug: 'test-agent',
-      role: 'tester',
-      description: 'd',
-      provider: '@ai-sdk/openai',
-      model: 'm',
-      dailyBudgetUsd: 1,
-    };
-    const policyView: PolicyViewShape = {
-      version: 1,
-      mode: 'dry-run',
-      limits: {
-        maxOpenPrsPerHour: 0,
-        maxActionsPerServicePer10Min: 0,
-        maxDiagnosisLoops: 0,
-        llmDailyBudgetUsd: 0,
-      },
-      llm: { minConfidenceForPr: 1, minConfidenceForAction: 1 },
-      rules: [],
-      default: 'deny',
-    };
-    const exported: AgentsExportShape = { apiKeyEnv: 'GRAVESHIFT_TEST_AGENT_API_KEY' };
-    expect(view.slug).toBe('test-agent');
-    expect(policyView.default).toBe('deny');
-    expect(exported.apiKeyEnv).toBe('GRAVESHIFT_TEST_AGENT_API_KEY');
+  test('the create-credential request advertises credential scopes only', () => {
+    // The document must not offer config:read or config:export: the service denies them
+    // for every credential kind, so advertising them would promise the impossible.
+    const enumValues = openapi.components.schemas.CreateCredentialDto.properties.scopes.items.enum;
+    expect(enumValues).toEqual([
+      'incidents:read',
+      'diagnoses:read',
+      'audit:read',
+      'logs:read',
+      'metrics:read',
+      'fix:propose',
+      'events:publish',
+    ]);
+    expect(enumValues.filter((scope) => scope.startsWith('config:'))).toEqual([]);
+  });
+});
 
-    // The sanitized Agent view type has no prompt, baseUrl, apiKeyEnv or allowedTools,
-    // and the sanitized policy view has no approvers or github block.
-    type ForbiddenAgentKeys = 'prompt' | 'params' | 'baseUrl' | 'apiKeyEnv' | 'allowedTools';
-    type ForbiddenPolicyKeys = 'approvers' | 'github';
-    type AgentViewKeys = keyof ConfigAgentsViewResponse['system'][number];
-    type PolicyViewKeys = keyof ConfigPolicyViewResponse;
-    // Compile-time: these assignments fail if a forbidden key ever enters the types.
-    const noAgentLeak: Exclude<AgentViewKeys, ForbiddenAgentKeys>[] = [
+// The compile-time half of the sanitized/full contract lives in
+// src/config-contract-assertions.ts, where `bun run typecheck` enforces it.
+
+describe('config response document', () => {
+  test('the sanitized schemas publish the whitelist and nothing else', () => {
+    const agentSchema =
+      openapi.paths['/api/config/agents'].get.responses['200'].content['application/json'].schema
+        .properties.system.items.properties;
+    expect(Object.keys(agentSchema)).toEqual([
       'name',
       'slug',
       'role',
@@ -131,21 +111,102 @@ describe('api contract', () => {
       'model',
       'dailyBudgetUsd',
       'escalateTo',
-    ];
-    const noPolicyLeak: Exclude<PolicyViewKeys, ForbiddenPolicyKeys>[] = [
+      'params',
+    ]);
+    // Param names only: the sanitized item is a plain string, not a key-value map.
+    expect(agentSchema.params.items.type).toBe('string');
+    for (const key of ['prompt', 'baseUrl', 'apiKeyEnv', 'allowedTools']) {
+      expect(agentSchema).not.toHaveProperty(key);
+    }
+    expect(
+      openapi.paths['/api/config/agents/export'].get.responses['200'].content['application/json']
+        .schema.properties.system.items.properties,
+    ).toHaveProperty('apiKeyEnv');
+
+    const policySchema =
+      openapi.paths['/api/config/policy'].get.responses['200'].content['application/json'].schema;
+    expect(Object.keys(policySchema.properties)).toEqual([
       'version',
       'mode',
       'limits',
       'llm',
       'rules',
       'default',
-    ];
-    // Counter-check: the full export type keeps approvers and github, so the check
-    // above really distinguishes the two surfaces instead of a broken schema.
-    type ExportPolicyKeys = keyof ConfigPolicyExportResponse;
-    const fullKeeps: Extract<ExportPolicyKeys, 'approvers' | 'github'>[] = ['approvers', 'github'];
-    expect(fullKeeps.length).toBe(2);
-    expect(noAgentLeak).toContain('name');
-    expect(noPolicyLeak).toContain('default');
+    ]);
+    expect(policySchema.properties).not.toHaveProperty('approvers');
+    expect(policySchema.properties).not.toHaveProperty('github');
+    expect(Object.keys(policySchema.properties.rules.items.properties)).toEqual([
+      'id',
+      'action',
+      'effect',
+    ]);
+    // Counter-check: the full policy export keeps what the sanitized view drops.
+    const fullPolicy =
+      openapi.paths['/api/config/policy/export'].get.responses['200'].content['application/json']
+        .schema.properties;
+    expect(Object.keys(fullPolicy)).toEqual(
+      expect.arrayContaining(['approvers', 'github', 'rules']),
+    );
+    expect(Object.keys(fullPolicy.rules.items.properties)).toEqual(
+      expect.arrayContaining(['id', 'action', 'when', 'params', 'effect']),
+    );
+  });
+
+  test('the whole-config export schema carries every block', () => {
+    const schema =
+      openapi.paths['/api/config/export'].get.responses['200'].content['application/json'].schema;
+    expect(Object.keys(schema.properties)).toEqual(['boot', 'agents', 'policy', 'fix']);
+    expect(Object.keys(schema.properties.boot.properties)).toEqual(['host', 'port']);
+    expect(Object.keys(schema.properties.fix.properties)).toEqual([
+      'enabled',
+      'agent',
+      'promptTemplate',
+      'gateway',
+      'github',
+    ]);
+    // The three credential fields stay environment variable names in the document.
+    expect(Object.keys(schema.properties.fix.properties.github.properties)).toEqual([
+      'appIdEnv',
+      'privateKeyEnv',
+      'installations',
+    ]);
+    expect(schema.properties.fix.properties.github.properties).not.toHaveProperty('privateKey');
+    expect(
+      openapi.paths['/api/config/export'].get.responses['200'].content['application/json'].schema
+        .properties.agents.properties.system.items.properties,
+    ).toHaveProperty('apiKeyEnv');
+  });
+
+  test('the sanitized and full response types stay distinct at compile time', () => {
+    expect(compiledAssertions.every((assertion) => assertion === true)).toBe(true);
+    const sanitizedAgent: ConfigAgentsViewResponse['system'][number] = {
+      name: 'Test Agent',
+      slug: 'test-agent',
+      role: 'tester',
+      description: 'd',
+      provider: '@ai-sdk/openai',
+      model: 'm',
+      dailyBudgetUsd: 1,
+      params: ['CASE'],
+    };
+    const exportedAgent: ConfigAgentsExportResponse['system'][number] = {
+      ...sanitizedAgent,
+      prompt: 'Handle {{CASE}}',
+      params: [{ CASE: 'fake case' }],
+      baseUrl: 'https://fake.test.invalid/v1',
+      apiKeyEnv: 'GRAVESHIFT_TEST_AGENT_API_KEY',
+      allowedTools: ['query_metric'],
+    };
+    // The two shapes are not interchangeable: the sanitized item has no prompt field.
+    expect(Object.keys(exportedAgent)).toContain('apiKeyEnv');
+    expect(Object.keys(sanitizedAgent)).not.toContain('apiKeyEnv');
+    expect(sanitizedAgent.params).toEqual(['CASE']);
+    const exportedPolicy: ConfigPolicyExportResponse['rules'][number] = {
+      id: 'fake-deny-db',
+      action: '*',
+      when: { services: ['postgres'] },
+      effect: 'deny',
+    };
+    expect(Object.keys(exportedPolicy)).toContain('when');
   });
 });

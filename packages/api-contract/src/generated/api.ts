@@ -23,6 +23,9 @@ export interface paths {
   "/api/config/policy/export": {
     get: operations["ConfigController_exportPolicy"];
   };
+  "/api/config/export": {
+    get: operations["ConfigController_exportConfig"];
+  };
   "/api/credentials": {
     get: operations["CredentialsController_list"];
     post: operations["CredentialsController_create"];
@@ -81,7 +84,7 @@ export interface components {
       kind: "mcp" | "plugin";
       /** @description A display name chosen by the client. */
       name: string;
-      scopes: ("incidents:read" | "diagnoses:read" | "audit:read" | "logs:read" | "metrics:read" | "fix:propose" | "events:publish" | "config:read" | "config:export")[];
+      scopes: ("incidents:read" | "diagnoses:read" | "audit:read" | "logs:read" | "metrics:read" | "fix:propose" | "events:publish")[];
       /** @description Optional Grave or service binding. Plugin keys only. */
       service?: string;
       /** @description Lifetime in seconds. The config default applies when absent. */
@@ -179,7 +182,7 @@ export interface operations {
   };
   ConfigController_getAgents: {
     responses: {
-      /** @description The sanitized Agent view from boot, for the dashboard. Requires config:read. */
+      /** @description The sanitized Agent view from boot, for the dashboard. Param names only, no values. Requires config:read. */
       200: {
         content: {
           "application/json": {
@@ -193,6 +196,7 @@ export interface operations {
                 model: string;
                 dailyBudgetUsd: number;
                 escalateTo?: string;
+                params: string[];
               })[];
             client: ({
                 name: string;
@@ -204,6 +208,7 @@ export interface operations {
                 model: string;
                 dailyBudgetUsd: number;
                 escalateTo?: string;
+                params: string[];
               })[];
           };
         };
@@ -216,11 +221,15 @@ export interface operations {
       403: {
         content: never;
       };
+      /** @description The client exceeded the rate limit. */
+      429: {
+        content: never;
+      };
     };
   };
   ConfigController_getPolicy: {
     responses: {
-      /** @description The sanitized policy view from boot, for the dashboard. No approver id, repo name, branch name or allowed/forbidden path. Requires config:read. */
+      /** @description The sanitized policy view from boot, for the dashboard. No approver id, repo name, branch name, allowed or forbidden path, rule condition or replica bound. Requires config:read. */
       200: {
         content: {
           "application/json": {
@@ -241,17 +250,6 @@ export interface operations {
             rules: ({
                 id: string;
                 action: string | string[];
-                when?: {
-                  category?: string[];
-                  services?: string[];
-                  signals?: string[];
-                };
-                params?: {
-                  replicas?: {
-                    min: number;
-                    max: number;
-                  };
-                };
                 /** @enum {string} */
                 effect: "allow" | "require_approval" | "deny";
               })[];
@@ -266,6 +264,10 @@ export interface operations {
       };
       /** @description The token does not hold config:read. */
       403: {
+        content: never;
+      };
+      /** @description The client exceeded the rate limit. */
+      429: {
         content: never;
       };
     };
@@ -326,6 +328,10 @@ export interface operations {
       };
       /** @description The token does not hold config:export. */
       403: {
+        content: never;
+      };
+      /** @description The client exceeded the rate limit. */
+      429: {
         content: never;
       };
     };
@@ -396,6 +402,156 @@ export interface operations {
       };
       /** @description The token does not hold config:export. */
       403: {
+        content: never;
+      };
+      /** @description The client exceeded the rate limit. */
+      429: {
+        content: never;
+      };
+    };
+  };
+  ConfigController_exportConfig: {
+    responses: {
+      /** @description The whole validated config from boot: boot, agents, policy and fix. apiKeyEnv, appIdEnv and privateKeyEnv stay variable names, and no environment value is resolved. Writes exactly one config.exported audit entry. Requires config:export. */
+      200: {
+        content: {
+          "application/json": {
+            boot: {
+              host: string;
+              port: number;
+            };
+            agents: {
+              system: ({
+                  name: string;
+                  slug: string;
+                  role: string;
+                  description: string;
+                  prompt: string;
+                  params: {
+                      [key: string]: string;
+                    }[];
+                  /** @enum {string} */
+                  provider: "@ai-sdk/alibaba" | "@ai-sdk/amazon-bedrock" | "@ai-sdk/anthropic" | "@ai-sdk/anthropic-aws" | "@ai-sdk/assemblyai" | "@ai-sdk/azure" | "@ai-sdk/baseten" | "@ai-sdk/black-forest-labs" | "@ai-sdk/bytedance" | "@ai-sdk/cartesia" | "@ai-sdk/cerebras" | "@ai-sdk/cohere" | "@ai-sdk/deepgram" | "@ai-sdk/deepinfra" | "@ai-sdk/deepseek" | "@ai-sdk/elevenlabs" | "@ai-sdk/fal" | "@ai-sdk/fish-audio" | "@ai-sdk/fireworks" | "@ai-sdk/gateway" | "@ai-sdk/gladia" | "@ai-sdk/gmicloud" | "@ai-sdk/google" | "@ai-sdk/google-vertex" | "@ai-sdk/groq" | "@ai-sdk/heygen" | "@ai-sdk/huggingface" | "@ai-sdk/hume" | "@ai-sdk/klingai" | "@ai-sdk/liquid" | "@ai-sdk/luma" | "@ai-sdk/minimax" | "@ai-sdk/mistral" | "@ai-sdk/moonshotai" | "@ai-sdk/open-responses" | "@ai-sdk/openai" | "@ai-sdk/openai-compatible" | "@ai-sdk/parallel" | "@ai-sdk/perplexity" | "@ai-sdk/prodia" | "@ai-sdk/quiverai" | "@ai-sdk/replicate" | "@ai-sdk/revai" | "@ai-sdk/scaledown" | "@ai-sdk/tencent" | "@ai-sdk/togetherai" | "@ai-sdk/topaz" | "@ai-sdk/typesafe-ai" | "@ai-sdk/voyage" | "@ai-sdk/xai" | "@ai-sdk/zai";
+                  model: string;
+                  /** Format: uri */
+                  baseUrl: string;
+                  /** @description Name of the environment variable that holds the key; never a key value */
+                  apiKeyEnv: string;
+                  allowedTools: string[];
+                  dailyBudgetUsd: number;
+                  escalateTo?: string;
+                })[];
+              /** @default [] */
+              client: ({
+                  name: string;
+                  slug: string;
+                  role: string;
+                  description: string;
+                  prompt: string;
+                  params: {
+                      [key: string]: string;
+                    }[];
+                  /** @enum {string} */
+                  provider: "@ai-sdk/alibaba" | "@ai-sdk/amazon-bedrock" | "@ai-sdk/anthropic" | "@ai-sdk/anthropic-aws" | "@ai-sdk/assemblyai" | "@ai-sdk/azure" | "@ai-sdk/baseten" | "@ai-sdk/black-forest-labs" | "@ai-sdk/bytedance" | "@ai-sdk/cartesia" | "@ai-sdk/cerebras" | "@ai-sdk/cohere" | "@ai-sdk/deepgram" | "@ai-sdk/deepinfra" | "@ai-sdk/deepseek" | "@ai-sdk/elevenlabs" | "@ai-sdk/fal" | "@ai-sdk/fish-audio" | "@ai-sdk/fireworks" | "@ai-sdk/gateway" | "@ai-sdk/gladia" | "@ai-sdk/gmicloud" | "@ai-sdk/google" | "@ai-sdk/google-vertex" | "@ai-sdk/groq" | "@ai-sdk/heygen" | "@ai-sdk/huggingface" | "@ai-sdk/hume" | "@ai-sdk/klingai" | "@ai-sdk/liquid" | "@ai-sdk/luma" | "@ai-sdk/minimax" | "@ai-sdk/mistral" | "@ai-sdk/moonshotai" | "@ai-sdk/open-responses" | "@ai-sdk/openai" | "@ai-sdk/openai-compatible" | "@ai-sdk/parallel" | "@ai-sdk/perplexity" | "@ai-sdk/prodia" | "@ai-sdk/quiverai" | "@ai-sdk/replicate" | "@ai-sdk/revai" | "@ai-sdk/scaledown" | "@ai-sdk/tencent" | "@ai-sdk/togetherai" | "@ai-sdk/topaz" | "@ai-sdk/typesafe-ai" | "@ai-sdk/voyage" | "@ai-sdk/xai" | "@ai-sdk/zai";
+                  model: string;
+                  /** Format: uri */
+                  baseUrl: string;
+                  /** @description Name of the environment variable that holds the key; never a key value */
+                  apiKeyEnv: string;
+                  allowedTools: string[];
+                  dailyBudgetUsd: number;
+                  escalateTo?: string;
+                })[];
+            };
+            policy: {
+              /** @enum {number} */
+              version: 1;
+              /** @enum {string} */
+              mode: "dry-run" | "propose" | "act";
+              approvers: {
+                discordUserIds: string[];
+                discordRoleIds: string[];
+              };
+              limits: {
+                maxOpenPrsPerHour: number;
+                maxActionsPerServicePer10Min: number;
+                maxDiagnosisLoops: number;
+                llmDailyBudgetUsd: number;
+              };
+              llm: {
+                minConfidenceForPr: number;
+                minConfidenceForAction: number;
+              };
+              github: {
+                repos: {
+                    repo: string;
+                    services: string[];
+                    baseBranch: string;
+                    branchPrefix: string;
+                    /** @enum {boolean} */
+                    draft: true;
+                    allowedPaths: string[];
+                    forbiddenPaths: string[];
+                    maxFilesChanged: number;
+                    maxLinesChanged: number;
+                  }[];
+              };
+              rules: ({
+                  id: string;
+                  action: string | string[];
+                  when?: {
+                    category?: string[];
+                    services?: string[];
+                    signals?: string[];
+                  };
+                  params?: {
+                    replicas?: {
+                      min: number;
+                      max: number;
+                    };
+                  };
+                  /** @enum {string} */
+                  effect: "allow" | "require_approval" | "deny";
+                })[];
+              /** @enum {string} */
+              default: "deny";
+            };
+            fix: {
+              enabled: boolean;
+              agent: string;
+              promptTemplate: string;
+              gateway: {
+                globalDailyBudgetUsd: number;
+                maxRetries: number;
+                timeoutMs: number;
+                priceTableUsdPer1M: {
+                  [key: string]: {
+                    in: number;
+                    out: number;
+                  };
+                };
+              };
+              github: {
+                appIdEnv: string;
+                privateKeyEnv: string;
+                installations: {
+                  [key: string]: number;
+                };
+              };
+            };
+          };
+        };
+      };
+      /** @description No valid bearer credential was presented. */
+      401: {
+        content: never;
+      };
+      /** @description The token does not hold config:export. */
+      403: {
+        content: never;
+      };
+      /** @description The client exceeded the rate limit. */
+      429: {
         content: never;
       };
     };

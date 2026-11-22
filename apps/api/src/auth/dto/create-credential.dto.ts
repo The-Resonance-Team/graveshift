@@ -16,7 +16,7 @@ import {
   Validate,
 } from 'class-validator';
 
-import { ALL_SCOPES, type CredentialKind } from '../scopes';
+import { CREDENTIAL_ISSUABLE_SCOPES, type CredentialKind } from '../scopes';
 import { NoMcpServiceConstraint } from './no-mcp-service.constraint';
 
 export class CreateCredentialDto {
@@ -31,11 +31,13 @@ export class CreateCredentialDto {
   @MaxLength(120)
   name!: string;
 
-  @ApiProperty({ enum: ALL_SCOPES, isArray: true })
+  // Only credential scopes are advertised and accepted here. The HTTP-only config
+  // scopes are outside this list, so the document never offers a scope that issue denies.
+  @ApiProperty({ enum: CREDENTIAL_ISSUABLE_SCOPES, isArray: true })
   @IsArray()
   @ArrayNotEmpty()
   @IsString({ each: true })
-  @IsIn(ALL_SCOPES, { each: true })
+  @IsIn(CREDENTIAL_ISSUABLE_SCOPES, { each: true })
   scopes!: string[];
 
   @ApiPropertyOptional({

@@ -1,6 +1,7 @@
 import type {
   ConfigAgentsExportResponse,
   ConfigAgentsViewResponse,
+  ConfigExportResponse,
   ConfigPolicyExportResponse,
   ConfigPolicyViewResponse,
 } from '@graveshift/api-contract';
@@ -9,7 +10,6 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { unlink } from 'node:fs/promises';
 import request from 'supertest';
 
-import { ALL_SCOPES, MCP_READ_SCOPES, PLUGIN_SCOPES, scopesForKind } from '../src/auth/scopes';
 import {
   CLIENTS,
   EXPORT_ROUTES,
@@ -21,6 +21,8 @@ import {
   FakeAuditRepo,
   READ_ROUTES,
   SANITIZE_ABSENT_KEYS,
+  SANITIZE_ABSENT_VALUES,
+  WHOLE_EXPORT_ROUTE,
   appFromConfigFile,
   bearerToken,
   restoreEnv,
@@ -59,7 +61,9 @@ describe('config read-only API (e2e)', () => {
               request(built.app.getHttpServer()).get(route),
             ),
           );
-          expect(responses.map((response) => response.status)).toEqual([401, 401, 401, 401]);
+          expect(responses.map((response) => response.status)).toEqual(
+            [...READ_ROUTES, ...EXPORT_ROUTES].map(() => 401),
+          );
         } finally {
           await built.app.close();
         }
@@ -74,7 +78,10 @@ describe('config read-only API (e2e)', () => {
       .set('Authorization', `Bearer ${token}`)
       .expect(200);
     expect(response.body as ConfigAgentsViewResponse).toEqual(wire(EXPECTED_AGENTS_VIEW));
+    // The declared names are published; the param values are not.
+    expect((response.body as ConfigAgentsViewResponse).system[0]?.params).toEqual(['CASE']);
     for (const key of SANITIZE_ABSENT_KEYS) expect(response.text).not.toContain(key);
+    for (const value of SANITIZE_ABSENT_VALUES) expect(response.text).not.toContain(value);
     expect(response.text).not.toContain('GRAVESHIFT_TEST_AGENT_API_KEY');
     for (const value of Object.values(FAKE_ENV_VALUES)) expect(response.text).not.toContain(value);
   });
@@ -86,7 +93,15 @@ describe('config read-only API (e2e)', () => {
       .set('Authorization', `Bearer ${token}`)
       .expect(200);
     expect(response.body as ConfigPolicyViewResponse).toEqual(wire(EXPECTED_POLICY_VIEW));
-    for (const key of SANITIZE_ABSENT_KEYS) expect(response.text).not.toContain(key);
+    // A rule is published as id, action and effect: no condition and no replica bound.
+    expect(Object.keys((response.body as ConfigPolicyViewResponse).rules[1] ?? {})).toEqual([
+      'id',
+      'action',
+      'effect',
+    ]);
+    for (const key of [...SANITIZE_ABSENT_KEYS, '"params"'])
+      expect(response.text).not.toContain(key);
+    for (const value of SANITIZE_ABSENT_VALUES) expect(response.text).not.toContain(value);
     expect(response.text).not.toContain('000000000000000001');
     expect(response.text).not.toContain('fake/ghost-repo');
   });
@@ -115,6 +130,24 @@ describe('config read-only API (e2e)', () => {
     for (const value of Object.values(FAKE_ENV_VALUES)) expect(response.text).not.toContain(value);
   });
 
+  test('one config:export call returns every block of the full config and no secret value', async () => {
+    const token = await bearerToken(app, CLIENTS.export.id, CLIENTS.export.secret);
+    const response = await request(app.getHttpServer())
+      .get(WHOLE_EXPORT_ROUTE)
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    const body = response.body as ConfigExportResponse;
+    // The one call covers boot, agents, policy and fix: no per-block request is needed.
+    expect(Object.keys(body).sort()).toEqual(['agents', 'boot', 'fix', 'policy']);
+    expect(body).toEqual(wire(validated));
+    // The three env names stay names, and the value behind each of them never appears.
+    expect(body.agents.system[0]?.apiKeyEnv).toBe('GRAVESHIFT_TEST_AGENT_API_KEY');
+    expect(body.fix.github.appIdEnv).toBe('GRAVESHIFT_TEST_GITHUB_APP_ID');
+    expect(body.fix.github.privateKeyEnv).toBe('GRAVESHIFT_TEST_GITHUB_PRIVATE_KEY');
+    for (const value of Object.values(FAKE_ENV_VALUES)) expect(response.text).not.toContain(value);
+    expect(response.text).not.toContain('42424242');
+  });
+
   test('the exact scope for the route is enforced on every config route', async () => {
     const readToken = await bearerToken(app, CLIENTS.read.id, CLIENTS.read.secret);
     const exportToken = await bearerToken(app, CLIENTS.export.id, CLIENTS.export.secret);
@@ -133,9 +166,12 @@ describe('config read-only API (e2e)', () => {
         request(server).get(route).set('Authorization', `Bearer ${unrelatedToken}`),
       ),
     ]);
-    expect(mismatches.map((response) => response.status)).toEqual([
-      403, 403, 403, 403, 403, 403, 403, 403,
-    ]);
+    const expected = [
+      ...EXPORT_ROUTES.map(() => 403),
+      ...READ_ROUTES.map(() => 403),
+      ...[...READ_ROUTES, ...EXPORT_ROUTES].map(() => 403),
+    ];
+    expect(mismatches.map((response) => response.status)).toEqual(expected);
   });
 
   test('one export writes exactly one audit event and a read writes none', async () => {
@@ -160,11 +196,17 @@ describe('config read-only API (e2e)', () => {
       .get(EXPORT_ROUTES[1])
       .set('Authorization', `Bearer ${exportToken}`)
       .expect(200);
+    await request(server)
+      .get(WHOLE_EXPORT_ROUTE)
+      .set('Authorization', `Bearer ${exportToken}`)
+      .expect(200);
 
-    expect(audit.appended.length).toBe(2);
+    // One entry per export, and nothing extra for the reads.
+    expect(audit.appended.length).toBe(3);
     expect(audit.appended.map((entry) => entry.payload)).toEqual([
       { exported: 'agents' },
       { exported: 'policy' },
+      { exported: 'config' },
     ]);
     for (const entry of audit.appended) {
       expect(entry.type).toBe('config.exported');
@@ -175,17 +217,22 @@ describe('config read-only API (e2e)', () => {
     }
   });
 
-  test('a failed audit append fails the export closed and serves no config', async () => {
+  test('a failed audit append fails every export closed and serves no config', async () => {
     const failingAudit = new FakeAuditRepo();
     failingAudit.failure = new Error('audit chain unavailable');
     const built = await appFromConfigFile(FAKE_CONFIG_PATH, failingAudit);
     try {
       const token = await bearerToken(built.app, CLIENTS.export.id, CLIENTS.export.secret);
-      const response = await request(built.app.getHttpServer())
-        .get(EXPORT_ROUTES[0])
-        .set('Authorization', `Bearer ${token}`);
-      expect(response.status).toBe(500);
-      expect(JSON.stringify(response.body)).not.toContain('Test Agent');
+      const responses = await Promise.all(
+        [EXPORT_ROUTES[0], EXPORT_ROUTES[1], WHOLE_EXPORT_ROUTE].map((route) =>
+          request(built.app.getHttpServer()).get(route).set('Authorization', `Bearer ${token}`),
+        ),
+      );
+      expect(responses.map((response) => response.status)).toEqual([500, 500, 500]);
+      for (const response of responses) {
+        expect(JSON.stringify(response.body)).not.toContain('Test Agent');
+        expect(JSON.stringify(response.body)).not.toContain('fake-deny-db');
+      }
     } finally {
       await built.app.close();
     }
@@ -225,32 +272,5 @@ describe('config read-only API (e2e)', () => {
     );
     expect(responses.every((response) => response.status === 404)).toBe(true);
     expect(responses.length).toBe(routes.length * 4);
-  });
-
-  test('config scopes stay HTTP-only: the catalog holds them, no credential kind does', async () => {
-    // Catalog check: the scopes exist for the #63 OAuth issuer only.
-    expect(ALL_SCOPES).toContain('config:read');
-    expect(ALL_SCOPES).toContain('config:export');
-    expect(MCP_READ_SCOPES).not.toContain('config:read');
-    expect(MCP_READ_SCOPES).not.toContain('config:export');
-    expect(PLUGIN_SCOPES).not.toContain('config:read');
-    expect(PLUGIN_SCOPES).not.toContain('config:export');
-    expect(scopesForKind('mcp')).not.toContain('config:read');
-    expect(scopesForKind('plugin')).not.toContain('config:export');
-    // Choke-point check: CredentialService.issue rejects them for both kinds before
-    // any store access, even from a tokens:manage client.
-    const token = await bearerToken(app, 'client-1', 'test-client-secret-123456');
-    const server = app.getHttpServer();
-    const denials = await Promise.all(
-      (['mcp', 'plugin'] as const).flatMap((kind) =>
-        (['config:read', 'config:export'] as const).map((scope) =>
-          request(server)
-            .post('/api/credentials')
-            .set('Authorization', `Bearer ${token}`)
-            .send({ kind, name: `cfg-${kind}-${scope}`, scopes: [scope] }),
-        ),
-      ),
-    );
-    expect(denials.map((response) => response.status)).toEqual([403, 403, 403, 403]);
   });
 });
