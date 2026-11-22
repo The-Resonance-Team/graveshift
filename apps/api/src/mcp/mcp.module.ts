@@ -2,9 +2,11 @@ import { Module, UseGuards } from '@nestjs/common';
 import { McpModule } from '@nestjs/mcp';
 import { ApiExcludeController } from '@nestjs/swagger';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
-import { loadPolicy, parsePolicy, type Policy } from '@graveshift/policy';
+import type { GraveshiftConfig } from '@graveshift/config';
+import type { Policy } from '@graveshift/policy';
 
 import { AuthModule } from '../auth/auth.module';
+import { GRAVESHIFT_CONFIG } from '../config/config.provider';
 import { DaemonReadClientModule, DaemonReadConfigModule } from './daemon-read.config';
 import { EventsBridge } from './events/events.bridge';
 import { EventPollService } from './events/events.service';
@@ -17,22 +19,6 @@ import { McpHttpScopeGuard } from './mcp-http-scope.guard';
 import { McpBearerGuard, McpTokenVerifierService } from './mcp-token.verifier';
 import { MCP_BACKEND, MCP_ENV_MODE, MCP_POLICY } from './mcp.types';
 import { McpTools } from './mcp.tools';
-
-const DEFAULT_POLICY: Policy = parsePolicy({
-  version: 1,
-  mode: 'propose',
-  approvers: { discordUserIds: [], discordRoleIds: [] },
-  limits: {
-    maxOpenPrsPerHour: 0,
-    maxActionsPerServicePer10Min: 0,
-    maxDiagnosisLoops: 0,
-    llmDailyBudgetUsd: 0,
-  },
-  llm: { minConfidenceForPr: 1, minConfidenceForAction: 1 },
-  github: { repos: [] },
-  rules: [],
-  default: 'deny',
-});
 
 /** The MCP primitives. Kept separate so tests can override the backend and policy. */
 @Module({
@@ -49,10 +35,8 @@ const DEFAULT_POLICY: Policy = parsePolicy({
     { provide: MCP_BACKEND, useClass: HttpMcpBackend },
     {
       provide: MCP_POLICY,
-      useFactory: async (): Promise<Policy> => {
-        const path = process.env.POLICY_PATH;
-        return path ? loadPolicy(path) : DEFAULT_POLICY;
-      },
+      useFactory: (config: GraveshiftConfig): Policy => config.policy,
+      inject: [GRAVESHIFT_CONFIG],
     },
     { provide: MCP_ENV_MODE, useFactory: () => process.env.GRAVESHIFT_MODE },
   ],

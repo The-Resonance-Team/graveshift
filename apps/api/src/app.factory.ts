@@ -1,5 +1,6 @@
 import 'reflect-metadata';
 import { type INestApplication, HttpStatus, ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { NestFactory } from '@nestjs/core';
 import { SwaggerModule } from '@nestjs/swagger';
@@ -36,13 +37,20 @@ export function configureApp<T extends INestApplication>(app: T): T {
   // does not apply. The metadata keeps the generated contract request types intact.
   // The UI is a local development aid. In production it is not exposed as an extra
   // surface; the generated contract document stays available through the build step.
-  if (process.env.NODE_ENV !== 'production') {
+  // NODE_ENV comes from the parsed boot schema, not a raw env read, so a value such
+  // as Production or prod also closes the UI.
+  const nodeEnv = app.get(ConfigService).getOrThrow<string>('NODE_ENV');
+  const isProduction = ['production', 'prod'].includes(nodeEnv.trim().toLowerCase());
+  if (!isProduction) {
     SwaggerModule.setup('docs', app, createOpenApiDocument(app));
   }
   return app;
 }
 
-export async function createApp() {
+export async function createApp(
+  beforeConfigure?: (app: INestApplication) => void,
+): Promise<INestApplication> {
   const app = await NestFactory.create(AppModule, { logger: false });
+  beforeConfigure?.(app);
   return configureApp(app);
 }

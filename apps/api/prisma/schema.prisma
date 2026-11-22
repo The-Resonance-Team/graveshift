@@ -56,7 +56,6 @@ model WorkItem {
   severity        WorkItemSeverity
   service         String
   diagnosisRef    String           @map("diagnosis_ref")
-  autoFixAllowed  Boolean          @map("auto_fix_allowed")
   fixPriority     Int              @map("fix_priority")
   draftPr         Json?            @map("draft_pr")
   version         Int              @default(0)

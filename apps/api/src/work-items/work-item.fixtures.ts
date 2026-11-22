@@ -21,7 +21,6 @@ function workItem(id: string, title: string, overrides: Partial<WorkItem> = {}):
     severity: 'warning',
     service: 'api',
     diagnosisRef: 'diag-1',
-    autoFixAllowed: false,
     fixPriority: 100,
     draftPr: null,
     ...overrides,

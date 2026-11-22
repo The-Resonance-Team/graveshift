@@ -17,7 +17,7 @@ import { signPolicyDecision } from '../scripts/actions/policy-signature';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const applyScript = join(root, 'scripts', 'actions', 'apply-patch.ts');
-const policyFile = join(root, 'policy.example.yaml');
+const configFile = join(root, 'graveshift.config.yaml');
 
 type Sandbox = { dir: string; work: string; remote: string; env: Record<string, string> };
 
@@ -63,7 +63,7 @@ const sandbox = async (): Promise<Sandbox> => {
   await git(['init', '--initial-branch=main', '-q'], work, setupEnv);
   mkdirSync(join(work, 'src'));
   writeFileSync(join(work, 'src', 'hello.txt'), 'hello\n');
-  copyFileSync(policyFile, join(work, 'policy.example.yaml'));
+  copyFileSync(configFile, join(work, 'graveshift.config.yaml'));
   await git(['add', '-A'], work, setupEnv);
   await git(['commit', '-qm', 'base'], work, setupEnv);
   await git(['remote', 'add', 'origin', remote], work, setupEnv);
@@ -130,7 +130,7 @@ const sandbox = async (): Promise<Sandbox> => {
       PR_TITLE: binding.prTitle,
       PR_TOKEN: 'dummy-token',
       GITHUB_REPOSITORY: 'xiro/haunted-candy-shop',
-      POLICY_PATH: 'policy.example.yaml',
+      GRAVESHIFT_CONFIG_PATH: 'graveshift.config.yaml',
     },
   };
 };

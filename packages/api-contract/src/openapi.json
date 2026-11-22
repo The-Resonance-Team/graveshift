@@ -705,9 +705,6 @@
                             "type": "string",
                             "minLength": 1
                           },
-                          "autoFixAllowed": {
-                            "type": "boolean"
-                          },
                           "fixPriority": {
                             "type": "integer",
                             "minimum": 0,
@@ -769,7 +766,6 @@
                           "severity",
                           "service",
                           "diagnosisRef",
-                          "autoFixAllowed",
                           "fixPriority",
                           "draftPr"
                         ],
@@ -981,9 +977,6 @@
                       "type": "string",
                       "minLength": 1
                     },
-                    "autoFixAllowed": {
-                      "type": "boolean"
-                    },
                     "fixPriority": {
                       "type": "integer",
                       "minimum": 0,
@@ -1045,7 +1038,6 @@
                     "severity",
                     "service",
                     "diagnosisRef",
-                    "autoFixAllowed",
                     "fixPriority",
                     "draftPr"
                   ],
@@ -1248,9 +1240,6 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "autoFixAllowed": {
-                          "type": "boolean"
-                        },
                         "fixPriority": {
                           "type": "integer",
                           "minimum": 0,
@@ -1312,7 +1301,6 @@
                         "severity",
                         "service",
                         "diagnosisRef",
-                        "autoFixAllowed",
                         "fixPriority",
                         "draftPr"
                       ],
@@ -1571,9 +1559,6 @@
                           "type": "string",
                           "minLength": 1
                         },
-                        "autoFixAllowed": {
-                          "type": "boolean"
-                        },
                         "fixPriority": {
                           "type": "integer",
                           "minimum": 0,
@@ -1635,7 +1620,6 @@
                         "severity",
                         "service",
                         "diagnosisRef",
-                        "autoFixAllowed",
                         "fixPriority",
                         "draftPr"
                       ],

@@ -11,7 +11,6 @@ export const WORK_ITEM_STATUSES = ['todo', 'in_progress', 'in_review', 'done'] a
 export const WorkItemStatusSchema = z.enum(WORK_ITEM_STATUSES);
 export type WorkItemStatus = z.infer<typeof WorkItemStatusSchema>;
 
-// A terminal work item cannot be reassigned or have autoFixAllowed rewritten.
 export const TERMINAL_WORK_ITEM_STATUSES = ['done'] as const;
 
 export const WORK_ITEM_PRIORITIES = ['low', 'medium', 'high', 'critical'] as const;
@@ -95,7 +94,6 @@ export const WorkItemSchema = z.object({
   severity: WorkItemSeveritySchema,
   service: id,
   diagnosisRef: id,
-  autoFixAllowed: z.boolean(),
   // Lower values sit nearer the front of the fix queue. Zero is the front.
   fixPriority: z.number().int().min(0),
   // Set when a fix opened a draft pull request. Null means no PR was opened yet.
@@ -114,14 +112,13 @@ export function withDraftPr(item: WorkItem, pr: PrRef): WorkItem {
   return { ...item, draftPr: pr };
 }
 
-// Client config decides whether a work item may be fixed without a Fix now action.
-export const WorkItemClientConfigSchema = z
-  .object({ autoFixAllowed: z.boolean().default(false) })
-  .strict();
+// Auto-fix is a boot flag in graveshift.config.yaml, not a work-item field.
+// The client config stays an empty, strict shape for the triage helper signature.
+export const WorkItemClientConfigSchema = z.object({}).strict();
 export type WorkItemClientConfig = z.infer<typeof WorkItemClientConfigSchema>;
 
-export function applyClientConfig(item: WorkItem, clientConfig: WorkItemClientConfig): WorkItem {
-  return { ...item, autoFixAllowed: clientConfig.autoFixAllowed };
+export function applyClientConfig(item: WorkItem, _clientConfig: WorkItemClientConfig): WorkItem {
+  return item;
 }
 
 // Assignees stay strings on the wire. Neither helper calls a model or changes shared state.

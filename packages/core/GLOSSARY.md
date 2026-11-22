@@ -8,7 +8,7 @@ Core holds the pure domain schemas and helpers. It owns the work item and triage
 The record created when an incident is defined and verified. It carries triage, fix state and subtasks.
 
 **Triage**:
-The step that assigns a Work item to a human or an Agent and sets its auto-fix flag.
+The step that assigns a Work item to a human or an Agent.
 
 **assignee**:
 The field that names who handles a Work item. Its value is `needs_human` or `needs_agent_<name>`.
@@ -19,11 +19,11 @@ An assignee value that names a human owner.
 **`needs_agent_<name>`**:
 An assignee value that names the Agent with that name.
 
-**auto-fix**:
-The client setting that starts a fix for a Work item without a Fix now action.
+**Auto-fix**:
+An Exorcism that starts without a person's action when the boot config sets `fix.enabled: true`. _Avoid_: automatic fix.
 
 **Fix now**:
-The user action that moves a Work item to the front of the fix queue, or triggers a fix when auto-fix is disabled.
+The user action that starts an Exorcism and, on success, moves the Work item to the front of the fix queue. It is the manual trigger and stays available when Auto-fix is off.
 
 **`fixPriority`**:
 The number that orders the fix queue. A lower number sits nearer the front.

@@ -132,6 +132,18 @@ export function fakeFixDeps(over: { confidence?: number; throwOnLoad?: boolean }
         };
       },
     },
-    agent: 'SRE Bot',
+    agent: 'Exorcist',
+    autoFixEnabled: true,
+    promptTemplate:
+      '{{AGENT_NAME}} {{AGENT_ROLE}} {{AGENT_DESCRIPTION}} {{AGENT_PROMPT}} {{MODEL}} {{PROVIDER}} {{DAILY_BUDGET_USD}} {{DIAGNOSIS}} {{RULES}}',
+    agentMeta: {
+      name: 'Exorcist',
+      role: 'exorcist',
+      description: 'Proposes a guarded patch.',
+      prompt: 'Propose one minimal patch.',
+      model: 'test-model',
+      provider: '@ai-sdk/anthropic',
+      dailyBudgetUsd: 10,
+    },
   };
 }

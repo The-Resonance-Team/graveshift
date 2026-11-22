@@ -177,17 +177,17 @@ describe('prompt params', () => {
   });
 });
 
-describe('example config file', () => {
-  test('reads no secret value from YAML', async () => {
-    const path = fileURLToPath(new URL('../../../agents.example.yaml', import.meta.url));
+describe('committed config file', () => {
+  test('reads Agent blocks with no secret value from YAML', async () => {
+    const path = fileURLToPath(new URL('../../../graveshift.config.yaml', import.meta.url));
     const raw: unknown = Bun.YAML.parse(await Bun.file(path).text());
-    const file = AgentsFileSchema.parse(raw);
+    const block = (raw as { agents: unknown }).agents;
+    const file = AgentsFileSchema.parse(block);
     const agents = mergeAgentTemplates(file.system, file.client);
 
-    expect(agents.map((agent) => agent.name)).toEqual(['SRE Bot', 'DevOps Bot']);
-    expect(agents[0]?.provider).toBe('@ai-sdk/google');
-    expect(agents[1]?.provider).toBe('@ai-sdk/anthropic');
-    expect(JSON.stringify(raw)).not.toContain('sk-');
+    expect(agents.map((agent) => agent.name)).toEqual(['Exorcist', 'SRE Agent', 'DevOps Agent']);
+    expect(agents[0]?.role).toBe('exorcist');
+    expect(JSON.stringify(block)).not.toContain('sk-');
     expect(JSON.stringify(file)).not.toContain('"apiKey"');
     for (const agent of agents) {
       expect(agent.apiKeyEnv).toMatch(/_API_KEY$/);

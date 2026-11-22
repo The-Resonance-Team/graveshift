@@ -241,8 +241,8 @@ describe('policy behavior', () => {
 });
 
 describe('loader', () => {
-  test('loads policy.example.yaml', async () => {
-    const policy = await loadPolicy(`${import.meta.dir}/../../../policy.example.yaml`);
+  test('loads the checked-in policy fixture', async () => {
+    const policy = await loadPolicy(`${import.meta.dir}/../fixtures/policy.yaml`);
     expect(policy.rules.map((r) => r.id)).toContain('never-touch-db');
   });
 

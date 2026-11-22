@@ -45,7 +45,6 @@ describe('api contract', () => {
       severity: 'critical',
       service: 'api',
       diagnosisRef: 'diag-1',
-      autoFixAllowed: false,
       fixPriority: 100,
       draftPr: null,
     };

@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test';
 
 import { main } from './cli';
 
-const example = `${import.meta.dir}/../../../policy.example.yaml`;
+const example = `${import.meta.dir}/../fixtures/policy.yaml`;
 
 test('policy check accepts the example policy', async () => {
   expect(await main(['policy', 'check', example])).toBe(0);

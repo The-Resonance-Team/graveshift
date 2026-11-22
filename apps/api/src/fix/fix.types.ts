@@ -50,5 +50,16 @@ export interface FixDeps {
   readonly client: GitHubClient;
   readonly context: FixContextProvider;
   readonly agent: string;
+  readonly autoFixEnabled: boolean;
+  readonly promptTemplate: string;
+  readonly agentMeta: {
+    readonly name: string;
+    readonly role: string;
+    readonly description: string;
+    readonly prompt: string;
+    readonly model: string;
+    readonly provider: string;
+    readonly dailyBudgetUsd: number;
+  };
   readonly envMode?: PolicyContext['envMode'];
 }

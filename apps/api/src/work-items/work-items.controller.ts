@@ -116,11 +116,11 @@ export class WorkItemsController {
           );
     if (!result.ok) throw new UnprocessableEntityException(result.error.message);
 
-    // Triage is the real auto-fix trigger: client config sets autoFixAllowed here.
+    // Auto-fix starts only when the boot flag is on. Fix now stays available.
     // A failed auto-fix is reported in the result; the triage state is still saved.
     let final = result.value;
     let autoFix: TriageResultResponse['autoFix'] = null;
-    if (result.value.autoFixAllowed) {
+    if (this.policy.autoFixEnabled) {
       try {
         const fixed = await this.fixer.autoFix(result.value);
         final = fixed.item;

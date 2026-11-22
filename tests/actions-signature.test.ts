@@ -1,5 +1,5 @@
+import { loadGraveshiftConfig } from '@graveshift/config';
 import { describe, expect, test } from 'bun:test';
-import { loadPolicy } from '@graveshift/policy';
 
 import { evaluateSignedPolicyAllow } from '../scripts/actions/one-shot';
 import { signPolicyDecision, verifyPolicySignature } from '../scripts/actions/policy-signature';
@@ -26,7 +26,7 @@ const raw = JSON.stringify({ effect: 'allow', action: 'open_pr', context });
 
 describe('signed policy decision', () => {
   test('verifies a platform signature and rechecks policy using the recorded context', async () => {
-    const policy = await loadPolicy(new URL('../policy.example.yaml', import.meta.url).pathname);
+    const policy = (await loadGraveshiftConfig()).policy;
     const signed = signPolicyDecision(raw, binding, secret);
     expect(
       evaluateSignedPolicyAllow(signed.policyDecision, signed.signature, secret, binding, policy)

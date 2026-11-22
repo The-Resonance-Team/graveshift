@@ -121,9 +121,9 @@ describe('CI workflows', () => {
     expect(references).toEqual([]);
   });
 
-  test('root tests, policy and Bun config changes run the CI gates', () => {
+  test('root tests, config and Bun changes run the CI gates', () => {
     const content = workflows.find((workflow) => workflow.name === 'ci.yml')?.content ?? '';
-    for (const input of ['tests/**', 'policy.example.yaml', 'bunfig.toml']) {
+    for (const input of ['tests/**', 'graveshift.config.yaml', 'bunfig.toml']) {
       expect(content).toContain(`- '${input}'`);
     }
   });

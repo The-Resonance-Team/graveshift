@@ -1,0 +1,1 @@
+export const GRAVESHIFT_CONFIG = Symbol('GRAVESHIFT_CONFIG');

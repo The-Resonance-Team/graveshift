@@ -47,7 +47,6 @@ export const baseItem: WorkItem = {
   severity: 'critical',
   service: 'api',
   diagnosisRef: 'diag-1',
-  autoFixAllowed: true,
   fixPriority: 100,
   draftPr: null,
 };
@@ -149,6 +148,7 @@ export function serviceWith(
     patch?: Patch | 'unavailable';
     context?: FixContext | 'unavailable' | 'malformed';
     prError?: Error;
+    autoFixEnabled?: boolean;
   } = {},
 ) {
   const gatewayFake = fakeGateway(over.patch === undefined ? patch : over.patch);
@@ -165,7 +165,25 @@ export function serviceWith(
     gateway: gatewayFake.gateway,
     client: clientFake.client,
     context: { load },
-    agent: 'SRE Bot',
+    agent: 'Exorcist',
+    autoFixEnabled: over.autoFixEnabled ?? true,
+    promptTemplate: [
+      'You are {{AGENT_NAME}}, the {{AGENT_ROLE}} Agent.',
+      '{{AGENT_DESCRIPTION}}',
+      '{{AGENT_PROMPT}}',
+      '{{DIAGNOSIS}}',
+      '{{RULES}}',
+      '{{MODEL}} {{PROVIDER}} {{DAILY_BUDGET_USD}}',
+    ].join('\n'),
+    agentMeta: {
+      name: 'Exorcist',
+      role: 'exorcist',
+      description: 'Proposes a guarded patch.',
+      prompt: 'Propose one minimal patch.',
+      model: 'test-model',
+      provider: '@ai-sdk/anthropic',
+      dailyBudgetUsd: 10,
+    },
   };
   return { service: new FixService(deps), gatewayCalls: gatewayFake.calls, ...clientFake };
 }

@@ -1,4 +1,4 @@
-import { loadPolicy } from '@graveshift/policy';
+import { loadGraveshiftConfig } from '@graveshift/config';
 
 import { createActuator } from './execute';
 import { createBreaker } from './guards';
@@ -6,7 +6,7 @@ import { signRequest } from './sign';
 import type { ActionRequest, UnsignedRequest } from './types';
 
 export const SECRET = 's'.repeat(40);
-export const policy = await loadPolicy(`${import.meta.dir}/../../../policy.example.yaml`);
+export const policy = (await loadGraveshiftConfig()).policy;
 export const APPROVER = policy.approvers.discordUserIds[0] ?? '';
 export const T0 = Date.parse('2026-11-20T10:00:00.000Z');
 export const iso = (ms: number) => new Date(ms).toISOString();

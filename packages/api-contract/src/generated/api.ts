@@ -396,7 +396,6 @@ export interface operations {
                 severity: "info" | "warning" | "critical";
                 service: string;
                 diagnosisRef: string;
-                autoFixAllowed: boolean;
                 fixPriority: number;
                 draftPr: {
                   repo: string;
@@ -456,7 +455,6 @@ export interface operations {
             severity: "info" | "warning" | "critical";
             service: string;
             diagnosisRef: string;
-            autoFixAllowed: boolean;
             fixPriority: number;
             draftPr: {
               repo: string;
@@ -522,7 +520,6 @@ export interface operations {
               severity: "info" | "warning" | "critical";
               service: string;
               diagnosisRef: string;
-              autoFixAllowed: boolean;
               fixPriority: number;
               draftPr: {
                 repo: string;
@@ -605,7 +602,6 @@ export interface operations {
               severity: "info" | "warning" | "critical";
               service: string;
               diagnosisRef: string;
-              autoFixAllowed: boolean;
               fixPriority: number;
               draftPr: {
                 repo: string;

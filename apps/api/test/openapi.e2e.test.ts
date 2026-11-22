@@ -1,4 +1,5 @@
 import type { INestApplication } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import request from 'supertest';
 
@@ -39,17 +40,26 @@ describe('OpenAPI document (e2e)', () => {
   });
 
   test('hides the Swagger UI at /docs when NODE_ENV is production', async () => {
-    const previous = process.env.NODE_ENV;
-    process.env.NODE_ENV = 'production';
-    let prodApp: INestApplication | undefined;
+    const prodApp = await createApp((instance) =>
+      instance.get(ConfigService).set('NODE_ENV', 'production'),
+    );
     try {
-      prodApp = await createApp();
       await prodApp.init();
       await request(prodApp.getHttpServer()).get('/docs').expect(404);
     } finally {
-      await prodApp?.close();
-      if (previous === undefined) delete process.env.NODE_ENV;
-      else process.env.NODE_ENV = previous;
+      await prodApp.close();
+    }
+  });
+
+  test('hides the Swagger UI at /docs when NODE_ENV is a non-lowercase production value', async () => {
+    const prodApp = await createApp((instance) =>
+      instance.get(ConfigService).set('NODE_ENV', 'Production'),
+    );
+    try {
+      await prodApp.init();
+      await request(prodApp.getHttpServer()).get('/docs').expect(404);
+    } finally {
+      await prodApp.close();
     }
   });
 });

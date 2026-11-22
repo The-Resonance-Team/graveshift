@@ -16,9 +16,11 @@
   "dependencies": {
     "@graveshift/agents": "workspace:*",
     "@graveshift/api-contract": "workspace:*",
+    "@graveshift/config": "workspace:*",
     "@graveshift/core": "workspace:*",
     "@graveshift/events": "workspace:*",
     "@graveshift/fixer": "workspace:*",
+    "@graveshift/gateway": "workspace:*",
     "@graveshift/patch": "workspace:*",
     "@graveshift/policy": "workspace:*",
     "@graveshift/redactor": "workspace:*",

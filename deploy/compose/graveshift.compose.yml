@@ -51,10 +51,10 @@ services:
     environment:
       DOCKER_PROXY_URL: http://socket-proxy-actuator:2375
       ACTUATOR_HMAC_SECRET: ${ACTUATOR_HMAC_SECRET:-}
-      POLICY_PATH: /config/policy.yaml
+      GRAVESHIFT_CONFIG_PATH: /config/graveshift.config.yaml
       BUN_RUNTIME_TRANSPILER_CACHE_PATH: '0'
     volumes:
-      - ../../policy.example.yaml:/config/policy.yaml:ro
+      - ../../graveshift.config.yaml:/config/graveshift.config.yaml:ro
     networks: [core, act]
     depends_on: [socket-proxy-actuator]
     healthcheck:
