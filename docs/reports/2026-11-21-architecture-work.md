@@ -48,7 +48,7 @@ Every candidate has an implementation and a regression test at its owning module
 | 25 | Gateway completion and audit | gateway, durable audit adapter | Done |
 | 26 | Patch correction protocol | patch, gateway | Done |
 | 27 | Untrusted text framing | agents, diagnoser, gateway | Done |
-| 28 | Plugin registration and capture | plugin-nestjs | Done |
+| 28 | Plugin registration and capture | plugin-nestjs | Superseded by ADR 0014 (official Sentry SDKs) and base PR #91, which removed the package |
 | 29 | Rule override confirmation | pure rule module, request adapter | Done |
 | 30 | Understood Diagnosis and Autopsy facts | MCP read seam | Done |
 | 31 | Metadata bootstrap | generated contract, runtime assembly | Done |
