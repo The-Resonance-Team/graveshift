@@ -47,6 +47,7 @@ reject | Banish | Trục xuất | Reject a runtime action
 silence | Salt line | Vòng muối | Silence signals for a service
 postmortem | Autopsy | Khám nghiệm | Postmortem report
 dashboard | Graveyard | Nghĩa địa | Dashboard that shows every watched service
+organization identity model | Organization | Tổ chức | The group that owns Projects and Memberships
 diagnosis | Diagnosis | Chẩn đoán | Stated root cause with evidence and confidence
 audit log | Audit chain | Chuỗi kiểm toán | Ordered, tamper-evident record of decisions
 agent | Ghost | Hồn ma | An AI agent in the crew

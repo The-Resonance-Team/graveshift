@@ -1,6 +1,9 @@
 # Project-scoped state
 
 Status: accepted
+Superseded in part by: ADR 0023 (scope root and tenant model), ADR 0025 (Project id value and user slug)
+
+> [ADR 0023](0023-organization-is-the-tenant-root.md) supersedes the scope part of this decision. [ADR 0025](0025-project-id-and-slug.md) refines the Project id rule. The Project definition and the deployment corrections from commit `c40d208` stay in force.
 
 The owner replaced `tenantId` with one field named `projectId`. The old `tenantId` value is now the `projectId` value. This ADR supersedes the `tenantId` clauses in ADR 0003, ADR 0005, ADR 0012 and ADR 0017.
 

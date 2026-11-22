@@ -3,6 +3,8 @@
 Status: accepted
 
 > [ADR 0018](0018-project-scoped-state.md) supersedes the `tenantId` clause here. `projectId` replaces it.
+>
+> [ADR 0023](0023-organization-is-the-tenant-root.md) sets the current scope model. One deployment serves many Organizations, and each Organization owns its Projects directly. This topology record stays as history.
 
 Date: 2026-11-22.
 

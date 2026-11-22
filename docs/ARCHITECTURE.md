@@ -1,6 +1,6 @@
 # Architecture
 
-Graveshift v2 uses one external NestJS process, one Effect v4 daemon and NATS JetStream on the same host. PostgreSQL holds durable state. A separate actuator handles privileged runtime actions. [ADRs 0004–0022](adr/) record these decisions.
+Graveshift v2 uses one external NestJS process, one Effect v4 daemon and NATS JetStream on the same host. PostgreSQL holds durable state. A separate actuator handles privileged runtime actions. [ADRs 0004–0026](adr/) record these decisions.
 
 The daemon at `apps/daemon` is an Effect v4 skeleton on Bun. ADR 0009 removed the reference daemon and the separate diagnosis gateway.
 
@@ -98,10 +98,6 @@ Wraith takes only Event envelopes. The pure Rule override engine remains distinc
 | `POST /api/events` | Accepts a native `EventEnvelope` and publishes it. Returns 202. |
 | `POST /api/:projectId/envelope/` | Accepts Sentry event items and publishes `EventEnvelope` records. Returns `{ "id": "..." }`. |
 | `POST /mcp` | Streamable HTTP MCP endpoint. Requires `Authorization: Bearer <issued MCP token>`. |
-| `GET /api/config/agents` | The validated source Agent configuration for management clients. |
-| `GET /api/config/policy` | The validated source policy for management clients. |
-
-`GET /api/config/agents` and `GET /api/config/policy` expose the validated source configuration to management clients. The private config view supplies the daemon with effective Agents, policy and gateway settings. It omits credentials and resolved environment values.
 
 ## Work items and Routing
 
@@ -340,5 +336,9 @@ The system-wide decisions are in `docs/adr/`, in this order:
 - `0020-local-daemon-transport.md`
 - `0021-work-item-routing-and-assignment.md`
 - `0022-durable-model-audit.md`
+- `0023-organization-is-the-tenant-root.md` — Organization is the tenant root
+- `0024-identity-and-root-admin.md` — Identity and root admin
+- `0025-project-id-and-slug.md` — Numeric Project id and user slug
+- `0026-open-source-with-cloud-subscription.md` — Open source with a Cloud subscription option
 
 Gateway budget counters remain process-local with a documented reservation/persistence upgrade trigger. Temporal detection assumes ordered observations per Grave. Kubernetes watch expiry can leave a source gap. Banshee, push/webhook delivery, separate-host deployment and the dashboard remain outside this v2 architecture effort.

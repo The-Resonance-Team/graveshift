@@ -1,6 +1,6 @@
 # Deployment topology and the daemon link (ticket #61)
 
-> Historical record. [ADR 0018](../adr/0018-project-scoped-state.md) supersedes the old `tenantId` text in this report. `projectId` replaces it.
+> Historical record. [ADR 0018](../adr/0018-project-scoped-state.md) supersedes the old `tenantId` text in this report. `projectId` replaces it. [ADR 0023](../adr/0023-organization-is-the-tenant-root.md) sets the current scope model: one deployment serves many Organizations, and each Organization owns its Projects directly.
 
 Date: 2026-11-22. Status: done for v2.
 
@@ -67,5 +67,7 @@ No ADR number was reused. ADR 0017 is the only ADR created.
 
 ## Recheck trigger
 
-Review the decision when the read API moves into the durable store, when v3
-needs a remote link or more than one project, or when Kubernetes mode is built.
+Review the decision when the read API moves into the durable store, when one
+deployment must serve more than one console-created Project, when the
+deployment-local project bootstrap is replaced by console identity, or when a
+remote link or Kubernetes mode is built.

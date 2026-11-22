@@ -1,6 +1,6 @@
 # Self-hosted NATS JetStream for v2 (ticket 57)
 
-> Historical record. [ADR 0018](../adr/0018-project-scoped-state.md) supersedes the old `tenantId` text in this report. `projectId` replaces it.
+> Historical record. [ADR 0018](../adr/0018-project-scoped-state.md) supersedes the old `tenantId` text in this report. `projectId` replaces it. [ADR 0023](../adr/0023-organization-is-the-tenant-root.md) supersedes the one-project scope statements below: one deployment serves many Organizations, and each Organization owns its Projects directly.
 
 Date: 2026-11-22. Status: proposed for v2. Research only. No code changed.
 
@@ -47,8 +47,8 @@ room for the JSON form.
 
 ### Single node first, cluster later
 
-v2 uses one NATS server with one replica (R1). One project uses the platform in v2.
-One server is enough for the load. One server has no quorum problem and no extra
+v2 used one NATS server with one replica (R1). At that time one project used the platform.
+One server was enough for the load. One server had no quorum problem and no extra
 cluster port to protect.
 
 The upgrade path to high availability is a JetStream cluster of three or five servers.
@@ -111,7 +111,8 @@ is not in the subject. The v2 target adds the Grave token:
 graveshift.<projectId>.<lane>.<grave>.<type>
 ```
 
-- `projectId` — one token. v2 has one project; the token keeps v3 ready.
+- `projectId` — one token. The v2 record assumed one project at that time; the
+  token was meant to keep v3 ready without a rewrite.
 - `lane` — `telemetry` or `detection`. `laneFor` maps `info` to `telemetry` and
   `warning` or `critical` to `detection`.
 - `grave` — the service under watch. It must be one safe token: `^[A-Za-z0-9_-]+$`.
@@ -279,8 +280,8 @@ a second issuer or verifier.
   open-pr. It validates a signed policy decision and opens a draft PR. It opens no
   NATS connection, starts no long-running server and holds no model key. Backups and
   upgrades run on the self-hosted platform, not in Actions.
-- Clustering, mirrors and multi-tenancy are not v2 work. The subject and the envelope
-  keep the project so v3 needs no rewrite.
+- Clustering, mirrors and a multi-Organization scope were not v2 work. The subject
+  and the envelope keep the project so a later scope change needs no rewrite.
 
 ## Implementation work proposed
 
@@ -299,6 +300,6 @@ This research changes no code. The linked implementation issue covers:
 ## Recheck triggers
 
 Review this report before the first production envelope is written, when a second
-project is added, when one server reaches its age or size limit, or when a named client
-needs a delivery mode other than poll. Recheck the backup format when the NATS server
-version changes.
+console-created Project is added, when one server reaches its age or size limit,
+or when a named client needs a delivery mode other than poll. Recheck the backup
+format when the NATS server version changes.
