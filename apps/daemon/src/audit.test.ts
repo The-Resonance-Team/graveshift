@@ -8,8 +8,7 @@ import { agent } from './flow-fixtures';
 
 // The deployment-local Project the daemon's grant covers, and the client that asked. A test
 // binds them the way `createWorkCommands` binds an authenticated command.
-// Numeric like every real Project id: the durable grant check accepts only decimal ids.
-const scope = { projectId: '12345', actor: 'client-1' };
+const scope = { projectId: 'local', actor: 'client-1' };
 
 const selected = agent();
 const adapter: ModelAdapter = {
@@ -118,7 +117,7 @@ describe('durable model audit acknowledgement', () => {
     const result = await run(direct);
     expect(result.status).toBe('ok');
     expect(posted).toMatchObject([
-      { path: '/internal/audit', body: { projectId: '12345', draft: { type: 'model.call' } } },
+      { path: '/internal/audit', body: { projectId: 'local', draft: { type: 'model.call' } } },
     ]);
   });
 });

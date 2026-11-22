@@ -28,7 +28,7 @@ export const WORK_TEST_AGENTS = [false, true].map((autoFix) =>
 );
 
 export function workCaller(commandId = 'command-1'): WorkCaller {
-  return { projectId: '12345', actor: 'fixture', commandId };
+  return { projectId: 'project-1', actor: 'fixture', commandId };
 }
 
 export function attemptFence(snapshot: WorkSnapshot) {
@@ -48,7 +48,7 @@ export function setupWorkDatabase() {
   beforeAll(async () => {
     db = await openTestDatabase();
     audit = new AuditRepo(db);
-    repo = new WorkItemRepo(db, audit, WORK_TEST_AGENTS, testProjectGrant(['12345']));
+    repo = new WorkItemRepo(db, audit, WORK_TEST_AGENTS, testProjectGrant(['project-1']));
   });
   beforeEach(async () => {
     await resetDatabase(db);
@@ -69,7 +69,7 @@ export function setupWorkDatabase() {
       return db.workItem.create({ data: { ...workItemData(), ...overrides } });
     },
     async read() {
-      return repo.read({ projectId: '12345', id: 'work-1' });
+      return repo.read({ projectId: 'project-1', id: 'work-1' });
     },
     async claim(caller = workCaller()) {
       return repo.claim({
