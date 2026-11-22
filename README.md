@@ -2,7 +2,7 @@
 
 A self-hosted crew of AI Agents that watches a stack, builds a Diagnosis and prepares draft pull requests. It never merges a fix. Privileged runtime actions require a separate human Blessing.
 
-Graveshift v2 uses a NestJS external API, an Effect v4 daemon on Bun, NATS JetStream and PostgreSQL on one host. The dashboard belongs to a separate project. Discord Banshee and push/webhook delivery remain deferred.
+Graveshift v2 uses a NestJS external API, an Effect v4 daemon on Bun, NATS JetStream and PostgreSQL on one host. The dashboard belongs to a separate project. Discord Banshee and push/webhook delivery remain deferred. The v2 records describe a one-project host bootstrap. [ADR 0023](docs/adr/0023-organization-is-the-tenant-root.md) now sets the product model: one deployment serves many Organizations, and each Organization owns its Projects directly.
 
 ## How it works
 
@@ -22,7 +22,7 @@ See [Architecture](docs/ARCHITECTURE.md), [Security](docs/SECURITY.md), [Glossar
 
 ## Local setup
 
-Requires Bun 1.4.4 and Docker. Configure an untracked `.env` using `.env.example`. Set `DATABASE_URL`, `GRAVESHIFT_PROJECT_ID`, two distinct strong internal tokens (`GRAVESHIFT_API_INTERNAL_TOKEN` and `GRAVESHIFT_DAEMON_INTERNAL_TOKEN`), and a separate `GRAVESHIFT_OAUTH_JWT_SECRET`.
+Requires Bun 1.4.4 and Docker. Configure an untracked `.env` using `.env.example`. Set `DATABASE_URL`, the v2 bootstrap value `GRAVESHIFT_PROJECT_ID`, two distinct strong internal tokens (`GRAVESHIFT_API_INTERNAL_TOKEN` and `GRAVESHIFT_DAEMON_INTERNAL_TOKEN`), and a separate `GRAVESHIFT_OAUTH_JWT_SECRET`. The bootstrap value binds this host in the v2 setup; it is not the product model. [ADR 0023](docs/adr/0023-organization-is-the-tenant-root.md) sets the scope model, and the implementation will take project identity from the authenticated request.
 
 ```sh
 bun install
@@ -51,7 +51,7 @@ See the root `graveshift.config.yaml` for the one committed config. It holds the
 
 Agent and policy config live in the one committed root `graveshift.config.yaml`. The file is validated once at boot. A change requires restart. Keys stay only in the environment named by `apiKeyEnv`.
 
-Each Agent has an `autoFix` setting. Client entries replace whole system Agents by name. The effective set must have unique slugs and valid escalation targets. Read-only management routes expose `/api/config/agents` and `/api/config/policy`; no config write route exists.
+Each Agent has an `autoFix` setting. Client entries replace whole system Agents by name. The effective set must have unique slugs and valid escalation targets. The one config endpoint is `GET /api/config/export` with scope `config:export`. It returns the validated config and writes one audit entry. No config write route exists today. See [ADR 0015](docs/adr/0015-one-config-file-at-boot.md).
 
 Credentials are named, scoped, revocable PostgreSQL records. Their values are returned once and never stored. `POST /api/oauth/token` exchanges a registered client's credentials for a management JWT. `POST /api/credentials` creates an MCP or Plugin Credential. `POST /api/events` accepts authorized Plugin telemetry. Cold and warm requests use the same throttle identity rule.
 

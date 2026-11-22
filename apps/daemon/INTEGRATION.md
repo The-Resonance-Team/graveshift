@@ -4,7 +4,11 @@ The daemon owns `WorkCommands`. `@graveshift/work` owns all command and state co
 The API owns each durable `WorkRuntime` transition at `workPath(id, action)`.
 The daemon sends the canonical request schemas and validates the canonical responses.
 
-Private HTTP uses two dedicated internal credentials. The daemon presents `GRAVESHIFT_API_INTERNAL_TOKEN` to the API, which checks it with its InternalGuard. The API presents `GRAVESHIFT_DAEMON_INTERNAL_TOKEN` to the daemon, which checks it in the command and read handlers. The two values must differ. The daemon checks the configured project on each hop.
+Private HTTP uses two dedicated internal credentials. The daemon presents `GRAVESHIFT_API_INTERNAL_TOKEN` to the API, which checks it with its InternalGuard. The API presents `GRAVESHIFT_DAEMON_INTERNAL_TOKEN` to the daemon, which checks it in the command and read handlers. The two values must differ. In the v2 setup the daemon checked the configured
+project on each hop. That host-level check was a deployment bootstrap, not the
+product model. [ADR 0023](../../docs/adr/0023-organization-is-the-tenant-root.md)
+sets the current model: one deployment serves many Organizations, and the
+implementation will take project identity from the authenticated request.
 The API origin defaults to `http://127.0.0.1:3000`. The daemon listens on loopback port 2602.
 
 The daemon uses these API contracts:
@@ -77,7 +81,7 @@ All inputs include `projectId`. The incident input adds `id`; the context input 
 
 ## Daemon environment
 
-Transport requires `GRAVESHIFT_PROJECT_ID`, `GRAVESHIFT_API_INTERNAL_TOKEN`, and `GRAVESHIFT_DAEMON_INTERNAL_TOKEN`. Optional
+The v2 transport setup requires the bootstrap value `GRAVESHIFT_PROJECT_ID`, `GRAVESHIFT_API_INTERNAL_TOKEN`, and `GRAVESHIFT_DAEMON_INTERNAL_TOKEN`. [ADR 0023](../../docs/adr/0023-organization-is-the-tenant-root.md) supersedes that bootstrap. Optional
 settings are `GRAVESHIFT_API_URL`, `GRAVESHIFT_DAEMON_URL`, `GRAVESHIFT_NATS_URL`,
 `GRAVESHIFT_COMMAND_TIMEOUT_MS`, `GRAVESHIFT_API_TIMEOUT_MS`, and `GRAVESHIFT_BODY_MAX_BYTES`.
 The API boot config supplies the NATS stream. Both HTTP origins must use loopback.

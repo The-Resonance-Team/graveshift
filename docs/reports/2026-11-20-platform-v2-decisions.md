@@ -1,6 +1,6 @@
 # Platform v2 decisions — draft for grilling
 
-> Historical record. [ADR 0018](../adr/0018-project-scoped-state.md) later replaced `tenantId` with `projectId`. [ADR 0021](../adr/0021-work-item-routing-and-assignment.md) later replaced the two "Fix now" cases in Q4 below.
+> Historical record. [ADR 0018](../adr/0018-project-scoped-state.md) later replaced `tenantId` with `projectId`. [ADR 0021](../adr/0021-work-item-routing-and-assignment.md) later replaced the two "Fix now" cases in Q4 below. [ADR 0023](../adr/0023-organization-is-the-tenant-root.md) supersedes the one-tenant scope statements in this report.
 
 Date: 2026-11-20
 Status: draft — recorded as stated by the owner; not accepted until grilling ends.
@@ -76,7 +76,7 @@ The owner replied "agree remain". This is read as agreement with the recommendat
 
 ### Q2 — tenancy
 
-Support single tenant first. Prepare to adapt to multi-tenant in v3. The cloud option also arrives in v3. The owner did not state whether `tenantId` enters the event envelope in v2 or only in v3. Open.
+At the time the owner planned a single-tenant start and a later multi-tenant, cloud-capable model. The owner did not state whether `tenantId` would enter the event envelope in v2 or only in v3. That question was open. [ADR 0023](../adr/0023-organization-is-the-tenant-root.md) now sets the scope model.
 
 ### Q3 — agent config fields
 
@@ -149,7 +149,7 @@ Round 1 Q2 to Q9 are agreed, with gateway controls on every model call. PR #17 c
 
 ### Q2 — agreed
 
-`tenantId` enters the event envelope and every stored record in v2. Deployment stays single-tenant. Multi-tenant and cloud arrive in v3.
+The owner agreed that `tenantId` entered the event envelope and every stored record in v2. At that time deployment stayed single-tenant, and a multi-tenant model and cloud were expected in v3. [ADR 0023](../adr/0023-organization-is-the-tenant-root.md) now supersedes that scope statement.
 
 ### Q3 — agreed with a concrete params shape
 
