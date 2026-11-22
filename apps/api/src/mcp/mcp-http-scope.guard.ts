@@ -39,7 +39,7 @@ interface McpCall {
 }
 
 interface McpHttpRequest {
-  authInfo?: AuthInfo & { tenantId?: string };
+  authInfo?: AuthInfo & { projectId?: string };
   body?: McpCall | McpCall[];
 }
 
@@ -61,7 +61,7 @@ export class McpHttpScopeGuard implements CanActivate {
       const method = call.method ?? '';
       if (method.startsWith('notifications/') || PROTOCOL_METHODS.has(method)) continue;
       if (method === 'events/list') {
-        if (!auth.tenantId) throw new ForbiddenException();
+        if (!auth.projectId) throw new ForbiddenException();
         continue;
       }
       const required = this.requiredScope(method, call, scopes);

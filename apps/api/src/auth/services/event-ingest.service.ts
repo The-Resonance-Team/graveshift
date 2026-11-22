@@ -31,7 +31,8 @@ export class EventIngestService {
     principal: VerifiedCredential,
   ): Promise<{ accepted: true; id: string }> {
     if (!principal.scopes.includes(EVENTS_PUBLISH_SCOPE)) throw new ForbiddenException();
-    if (principal.tenantId !== body.tenantId) throw new ForbiddenException('Tenant binding failed');
+    if (principal.projectId !== body.projectId)
+      throw new ForbiddenException('Project binding failed');
     if (principal.service !== null && principal.service !== body.service) {
       throw new ForbiddenException('Service binding failed');
     }

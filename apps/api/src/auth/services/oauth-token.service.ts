@@ -24,7 +24,7 @@ export class OAuthTokenService {
     }
     const payload = {
       sub: clientId,
-      tenantId: entry.tenantId,
+      projectId: entry.projectId,
       scope: [...entry.scopes],
       jti: randomUUID(),
     };

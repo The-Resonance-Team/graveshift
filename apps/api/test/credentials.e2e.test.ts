@@ -83,6 +83,29 @@ describe('credential routes (e2e)', () => {
     }).expect(422);
   });
 
+  test('POST rejects a service-bound plugin key when the client projectId is not numeric', async () => {
+    const nonNumeric = accessToken(ctx.jwt, ['tokens:manage', 'events:publish'], {
+      clientId: 'client-2',
+      projectId: 'project-2',
+    });
+    await post(nonNumeric, {
+      kind: 'plugin',
+      name: 'sentry',
+      scopes: ['events:publish'],
+      service: 'api',
+    }).expect(422);
+  });
+
+  test('POST rejects a client-supplied projectId with 422', async () => {
+    await post(manageToken, {
+      kind: 'plugin',
+      name: 'sentry',
+      scopes: ['events:publish'],
+      service: 'api',
+      projectId: '12345',
+    }).expect(422);
+  });
+
   test('POST rejects forbidden scopes at the DTO', async () => {
     await post(manageToken, {
       kind: 'mcp',
@@ -125,7 +148,7 @@ describe('credential routes (e2e)', () => {
   test('GET lists only the caller credentials', async () => {
     const other = accessToken(ctx.jwt, ['tokens:manage'], {
       clientId: 'client-2',
-      tenantId: 'tenant-2',
+      projectId: 'project-2',
     });
     const response = await request(app.getHttpServer())
       .get('/api/credentials')
@@ -209,19 +232,19 @@ describe('credential routes (e2e)', () => {
     await limited.app.close();
   });
 
-  test('a client in another tenant cannot revoke this credential', async () => {
+  test('a client in another project cannot revoke this credential', async () => {
     const created = await post(manageToken, {
       kind: 'mcp',
       name: 'owned',
       scopes: ['incidents:read'],
     }).expect(201);
-    const otherTenant = accessToken(ctx.jwt, ['tokens:manage'], {
+    const otherProject = accessToken(ctx.jwt, ['tokens:manage'], {
       clientId: 'client-2',
-      tenantId: 'tenant-2',
+      projectId: 'project-2',
     });
     await request(app.getHttpServer())
       .delete(`/api/credentials/${created.body.id}`)
-      .set('authorization', `Bearer ${otherTenant}`)
+      .set('authorization', `Bearer ${otherProject}`)
       .expect(404);
   });
 });

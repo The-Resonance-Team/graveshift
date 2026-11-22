@@ -69,20 +69,20 @@ describe('detection consumer', () => {
 });
 
 describe('dead-letter subject', () => {
-  test('uses the tenant and the safe Grave token', () => {
+  test('uses the project and the safe Grave token', () => {
     expect(deadLetterSubject('acme', 'checkout')).toBe('graveshift.acme.dlq.checkout');
     expect(deadLetterSubject('acme', 'checkout.api')).toBe('graveshift.acme.dlq.checkout_api');
   });
 
-  test('rejects an unsafe tenantId', () => {
-    for (const tenantId of ['a.b', 'a*b', 'a>b', 'a b', '']) {
-      expect(() => deadLetterSubject(tenantId, 'checkout')).toThrow('tenantId');
+  test('rejects an unsafe projectId', () => {
+    for (const projectId of ['a.b', 'a*b', 'a>b', 'a b', '']) {
+      expect(() => deadLetterSubject(projectId, 'checkout')).toThrow('projectId');
     }
   });
 
-  test('maps an unsafe Grave token but keeps the tenant check', () => {
+  test('maps an unsafe Grave token but keeps the project check', () => {
     expect(deadLetterSubject('acme', 'check out')).toBe('graveshift.acme.dlq.check_out');
-    expect(() => deadLetterSubject('bad.tenant', 'check out')).toThrow('tenantId');
+    expect(() => deadLetterSubject('bad.project', 'check out')).toThrow('projectId');
   });
 
   test('does not match the detection consumer filter', () => {

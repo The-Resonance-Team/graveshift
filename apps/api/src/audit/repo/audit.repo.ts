@@ -14,7 +14,7 @@ import { PrismaService } from '../../infra/prisma.service';
 type AuditTransaction = Prisma.TransactionClient;
 
 export interface AuditAppendInput extends AuditInput {
-  tenantId: string;
+  projectId: string;
 }
 
 const toEntry = (row: PrismaAuditEntry) =>
@@ -35,7 +35,7 @@ export class AuditRepo {
   constructor(private readonly prisma: PrismaService) {}
 
   append(input: AuditAppendInput) {
-    return this.transaction((tx) => this.appendInTransaction(tx, input.tenantId, input));
+    return this.transaction((tx) => this.appendInTransaction(tx, input.projectId, input));
   }
 
   async transaction<T>(write: (tx: AuditTransaction) => Promise<T>, attempt = 0): Promise<T> {
@@ -56,17 +56,17 @@ export class AuditRepo {
     }
   }
 
-  async appendInTransaction(tx: AuditTransaction, tenantId: string, input: AuditInput) {
+  async appendInTransaction(tx: AuditTransaction, projectId: string, input: AuditInput) {
     await tx.$queryRaw(
-      Prisma.sql`SELECT 1 FROM pg_advisory_xact_lock(hashtextextended(${tenantId}, 0))`,
+      Prisma.sql`SELECT 1 FROM pg_advisory_xact_lock(hashtextextended(${projectId}, 0))`,
     );
-    const last = await tx.auditEntry.findFirst({ where: { tenantId }, orderBy: { seq: 'desc' } });
+    const last = await tx.auditEntry.findFirst({ where: { projectId }, orderBy: { seq: 'desc' } });
     const prevHash = last?.hash ?? GENESIS_HASH;
     const entry = makeAuditEntry((last?.seq ?? 0) + 1, new Date().toISOString(), input, prevHash);
     return toEntry(
       await tx.auditEntry.create({
         data: {
-          tenantId,
+          projectId,
           seq: entry.seq,
           at: new Date(entry.at),
           actor: entry.actor,
@@ -80,18 +80,18 @@ export class AuditRepo {
     );
   }
 
-  async list(tenantId: string, { afterSeq = 0, limit = 100 } = {}) {
+  async list(projectId: string, { afterSeq = 0, limit = 100 } = {}) {
     const rows = await this.prisma.auditEntry.findMany({
-      where: { tenantId, seq: { gt: afterSeq } },
+      where: { projectId, seq: { gt: afterSeq } },
       orderBy: { seq: 'asc' },
       take: limit,
     });
     return rows.map(toEntry);
   }
 
-  async verifyChain(tenantId: string): Promise<VerifyResult> {
+  async verifyChain(projectId: string): Promise<VerifyResult> {
     const rows = await this.prisma.auditEntry.findMany({
-      where: { tenantId },
+      where: { projectId },
       orderBy: { seq: 'asc' },
     });
     return verifyEntries(rows.map(toEntry));

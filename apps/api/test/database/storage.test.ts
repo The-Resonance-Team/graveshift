@@ -27,7 +27,7 @@ const otherRepo = new PrismaCredentialRepo(second, otherAudit);
 const service = new CredentialService(repo, TEST_CONFIG);
 const otherService = new CredentialService(otherRepo, TEST_CONFIG);
 const principal = () => ({
-  tenantId: `test_${randomUUID()}`,
+  projectId: `test_${randomUUID()}`,
   clientId: 'test-client',
   scopes: ['tokens:manage', 'logs:read'],
 });
@@ -49,11 +49,11 @@ describe('PostgreSQL credential and audit persistence', () => {
     expect(rows[0]).not.toHaveProperty('value');
     await otherService.revoke(issued.id, owner);
     await expect(service.verify(issued.value)).rejects.toThrow();
-    expect((await audit.list(owner.tenantId)).map((entry) => entry.type)).toEqual([
+    expect((await audit.list(owner.projectId)).map((entry) => entry.type)).toEqual([
       'credential.created',
       'credential.revoked',
     ]);
-    expect(await audit.verifyChain(owner.tenantId)).toEqual({ ok: true, length: 2 });
+    expect(await audit.verifyChain(owner.projectId)).toEqual({ ok: true, length: 2 });
   });
 
   test('the ten-credential cap holds across concurrent instances', async () => {
@@ -68,15 +68,15 @@ describe('PostgreSQL credential and audit persistence', () => {
     expect(rejected).toHaveLength(10);
     for (const result of rejected)
       if (result.status === 'rejected') expect(result.reason.status).toBe(409);
-    expect(await first.credential.count({ where: { tenantId: owner.tenantId } })).toBe(10);
-    expect(await audit.verifyChain(owner.tenantId)).toEqual({ ok: true, length: 10 });
+    expect(await first.credential.count({ where: { projectId: owner.projectId } })).toBe(10);
+    expect(await audit.verifyChain(owner.projectId)).toEqual({ ok: true, length: 10 });
   });
 
   test('audit failure rolls back a credential write', async () => {
     class FailingAudit extends AuditRepo {
       override async appendInTransaction(
         _tx: Prisma.TransactionClient,
-        _tenantId: string,
+        _projectId: string,
         _input: AuditInput,
       ): Promise<never> {
         throw new Error('test audit write failed');
@@ -88,7 +88,7 @@ describe('PostgreSQL credential and audit persistence', () => {
       TEST_CONFIG,
     );
     await expect(failing.issue(dto(), owner)).rejects.toThrow('test audit write failed');
-    expect(await first.credential.count({ where: { tenantId: owner.tenantId } })).toBe(0);
+    expect(await first.credential.count({ where: { projectId: owner.projectId } })).toBe(0);
   });
 
   test('records expiry once, including when two instances observe it', async () => {
@@ -103,7 +103,7 @@ describe('PostgreSQL credential and audit persistence', () => {
       otherService.verify(issued.value),
     ]);
     expect(attempts.every((attempt) => attempt.status === 'rejected')).toBe(true);
-    const entries = await audit.list(owner.tenantId);
+    const entries = await audit.list(owner.projectId);
     expect(entries.map((entry) => entry.type)).toEqual([
       'credential.created',
       'credential.expired',
@@ -116,25 +116,27 @@ describe('PostgreSQL credential and audit persistence', () => {
     await service.issue(dto(), owner);
     await expect(
       first.$executeRaw(
-        Prisma.sql`UPDATE audit_entries SET actor = 'changed' WHERE tenant_id = ${owner.tenantId}`,
+        Prisma.sql`UPDATE audit_entries SET actor = 'changed' WHERE project_id = ${owner.projectId}`,
       ),
     ).rejects.toThrow('append-only');
-    expect(await audit.verifyChain(owner.tenantId)).toEqual({ ok: true, length: 1 });
+    expect(await audit.verifyChain(owner.projectId)).toEqual({ ok: true, length: 1 });
   });
 
   test('a direct DELETE on audit_entries fails and leaves the chain intact', async () => {
     const owner = principal();
     await service.issue(dto(), owner);
     await expect(
-      first.$executeRaw(Prisma.sql`DELETE FROM audit_entries WHERE tenant_id = ${owner.tenantId}`),
+      first.$executeRaw(
+        Prisma.sql`DELETE FROM audit_entries WHERE project_id = ${owner.projectId}`,
+      ),
     ).rejects.toThrow('append-only');
-    expect(await audit.verifyChain(owner.tenantId)).toEqual({ ok: true, length: 1 });
+    expect(await audit.verifyChain(owner.projectId)).toEqual({ ok: true, length: 1 });
   });
 
   test('an audit entry survives an API restart', async () => {
     const owner = principal();
     const appended = await audit.append({
-      tenantId: owner.tenantId,
+      projectId: owner.projectId,
       actor: owner.clientId,
       type: 'restart.probe',
       payload: { note: 'before restart' },
@@ -145,16 +147,16 @@ describe('PostgreSQL credential and audit persistence', () => {
     const restarted = new PrismaService(new ConfigService({ DATABASE_URL: url }));
     try {
       const reborn = new AuditRepo(restarted);
-      expect(await reborn.list(owner.tenantId)).toEqual([appended]);
-      expect(await reborn.verifyChain(owner.tenantId)).toEqual({ ok: true, length: 1 });
+      expect(await reborn.list(owner.projectId)).toEqual([appended]);
+      expect(await reborn.verifyChain(owner.projectId)).toEqual({ ok: true, length: 1 });
       const next = await reborn.append({
-        tenantId: owner.tenantId,
+        projectId: owner.projectId,
         actor: owner.clientId,
         type: 'restart.after',
         payload: {},
       });
       expect(next).toMatchObject({ seq: 2, prevHash: appended.hash });
-      expect(await reborn.verifyChain(owner.tenantId)).toEqual({ ok: true, length: 2 });
+      expect(await reborn.verifyChain(owner.projectId)).toEqual({ ok: true, length: 2 });
     } finally {
       await restarted.onModuleDestroy();
     }
@@ -165,16 +167,16 @@ describe('PostgreSQL credential and audit persistence', () => {
     await Promise.all(
       Array.from({ length: 8 }, (_, index) =>
         (index % 2 ? audit : otherAudit).append({
-          tenantId: owner.tenantId,
+          projectId: owner.projectId,
           actor: owner.clientId,
           type: 'test',
           payload: JSON.parse('{"__proto__":{"safe":true},"value":1}'),
         }),
       ),
     );
-    expect(await audit.verifyChain(owner.tenantId)).toEqual({ ok: true, length: 8 });
+    expect(await audit.verifyChain(owner.projectId)).toEqual({ ok: true, length: 8 });
     expect(
-      (await audit.list(owner.tenantId, { afterSeq: 2, limit: 2 })).map((entry) => entry.seq),
+      (await audit.list(owner.projectId, { afterSeq: 2, limit: 2 })).map((entry) => entry.seq),
     ).toEqual([3, 4]);
   });
 });

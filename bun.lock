@@ -54,6 +54,7 @@
         "zod": "4.6.7",
       },
       "devDependencies": {
+        "@graveshift/mcp-client": "workspace:*",
         "@modelcontextprotocol/client": "2.4.0",
         "@nestjs/testing": "12.6.0",
         "@sentry/core": "11.6.0",
@@ -97,6 +98,19 @@
       "version": "0.1.0",
       "devDependencies": {
         "openapi-typescript": "6.7.6",
+      },
+    },
+    "packages/collectors": {
+      "name": "@graveshift/collectors",
+      "version": "0.1.0",
+      "dependencies": {
+        "@graveshift/core": "workspace:*",
+        "@graveshift/events": "workspace:*",
+        "@graveshift/integrations": "workspace:*",
+        "@graveshift/metrics": "workspace:*",
+        "@graveshift/redactor": "workspace:*",
+        "@graveshift/sources-docker": "workspace:*",
+        "@graveshift/sources-k8s": "workspace:*",
       },
     },
     "packages/config": {
@@ -214,6 +228,19 @@
       "dependencies": {
         "@graveshift/core": "workspace:*",
         "@graveshift/events": "workspace:*",
+      },
+    },
+    "packages/mcp-client": {
+      "name": "@graveshift/mcp-client",
+      "version": "0.1.0",
+      "dependencies": {
+        "@graveshift/core": "workspace:*",
+        "@modelcontextprotocol/client": "2.4.0",
+        "zod": "4.6.7",
+      },
+      "devDependencies": {
+        "@modelcontextprotocol/server": "2.4.0",
+        "reflect-metadata": "0.2.2",
       },
     },
     "packages/metrics": {
@@ -413,6 +440,8 @@
 
     "@graveshift/api-contract": ["@graveshift/api-contract@workspace:packages/api-contract"],
 
+    "@graveshift/collectors": ["@graveshift/collectors@workspace:packages/collectors"],
+
     "@graveshift/config": ["@graveshift/config@workspace:packages/config"],
 
     "@graveshift/core": ["@graveshift/core@workspace:packages/core"],
@@ -428,6 +457,8 @@
     "@graveshift/gateway": ["@graveshift/gateway@workspace:packages/gateway"],
 
     "@graveshift/integrations": ["@graveshift/integrations@workspace:packages/integrations"],
+
+    "@graveshift/mcp-client": ["@graveshift/mcp-client@workspace:packages/mcp-client"],
 
     "@graveshift/metrics": ["@graveshift/metrics@workspace:packages/metrics"],
 

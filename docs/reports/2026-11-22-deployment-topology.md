@@ -1,5 +1,7 @@
 # Deployment topology and the daemon link (ticket #61)
 
+> Historical record. [ADR 0018](../adr/0018-project-scoped-state.md) supersedes the old `tenantId` text in this report. `projectId` replaces it.
+
 Date: 2026-11-22. Status: done for v2.
 
 Base branch: `feat/platform-v2` at `0580ffc`, the head of the active stack at
@@ -43,7 +45,7 @@ one-shot `patch` and `open-pr` jobs only.
 | Client to API `/mcp` | Only external surface; TLS at the ingress | Bearer MCP token, `CredentialService.verify(token, 'mcp')`, scope floor per method |
 | API to daemon read API | Loopback `127.0.0.1:2602`, not published | Deployment-local read token in env, no default, fail closed |
 | API to daemon `/healthz` | Loopback only | None; liveness data only |
-| Plugin or Collector to API `/api/events` | API HTTP surface | Publish key, scope `events:publish`, tenant and service checks |
+| Plugin or Collector to API `/api/events` | API HTTP surface | Publish key, scope `events:publish`, project and service checks |
 | API to NATS JetStream | Private network, port 4222 private | NATS credentials held by the API only |
 | API to PostgreSQL | Private network, loopback bind in compose | DB credentials from env or secret store |
 | Fix path to Actions to GitHub | One-shot jobs, no daemon, draft PR only | HMAC-signed decision, 32-byte key, five-minute window, narrow `pr_token`, trusted SHA, base-ref allowlist |
@@ -66,4 +68,4 @@ No ADR number was reused. ADR 0017 is the only ADR created.
 ## Recheck trigger
 
 Review the decision when the read API moves into the durable store, when v3
-needs a remote link or more than one tenant, or when Kubernetes mode is built.
+needs a remote link or more than one project, or when Kubernetes mode is built.

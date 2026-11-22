@@ -21,6 +21,7 @@
     "generate:check": "bun run --filter @graveshift/api-contract generate:check",
     "migrate:drift:check": "bun run --filter @graveshift/api prisma:drift:check",
     "migrate:drift:local": "bun run --filter @graveshift/api prisma:drift:local",
+    "mcp:drift:check": "bun run --filter @graveshift/mcp-client drift:check",
     "build": "bun run build:contracts && bun build apps/daemon/src/main.ts --target=bun --outdir=node_modules/.cache/graveshift-build/daemon && bun build packages/actuator/src/main.ts --target=bun --outdir=node_modules/.cache/graveshift-build/actuator",
     "verify": "bun run format:check && bun run lint && bun run typecheck && bun run test:check && bun run test",
     "postinstall": "bun run --filter @graveshift/api prisma:generate"

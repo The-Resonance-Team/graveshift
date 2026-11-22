@@ -47,3 +47,8 @@ export type PublishEventRequest =
 
 export type EventAcceptedResponse =
   paths['/api/events']['post']['responses'][202]['content']['application/json'];
+
+// The one config endpoint returns the whole validated config. Its response type is
+// generated from the one OpenAPI path; no sanitized view types remain in the contract.
+export type ConfigExportResponse =
+  paths['/api/config/export']['get']['responses'][200]['content']['application/json'];

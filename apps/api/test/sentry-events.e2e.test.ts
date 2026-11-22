@@ -12,7 +12,6 @@ const TEST_KEY = 'a'.repeat(64);
 const TEST_CREDENTIAL: VerifiedCredential = {
   id: 'sentry-credential',
   clientId: 'client-1',
-  tenantId: 'tenant-1',
   scopes: [EVENTS_PUBLISH_SCOPE],
   kind: 'plugin',
   service: 'api',
@@ -57,7 +56,7 @@ describe('POST /api/:projectId/envelope (e2e)', () => {
     expect(EventEnvelopeSchema.safeParse(ctx.publisher.envelopes[0]).success).toBe(true);
     expect(ctx.publisher.envelopes[0]).toMatchObject({
       id: '0123456789abcdef0123456789abcdef',
-      tenantId: 'tenant-1',
+      projectId: '12345',
       source: 'sentry',
       service: 'api',
       type: 'sentry.TypeError',
@@ -114,6 +113,25 @@ describe('POST /api/:projectId/envelope (e2e)', () => {
     await push('54321').expect(403);
   });
 
+  test('rejects a non-numeric project id in the path with 422 and publishes nothing', async () => {
+    // The guard runs first. A Credential with an equal non-numeric projectId passes it,
+    // so the path DTO is the check that refuses the request.
+    const loose: CredentialVerifier = {
+      async verify(): Promise<VerifiedCredential> {
+        return { ...TEST_CREDENTIAL, projectId: 'acme' };
+      },
+    };
+    const looseCtx = await buildAuthApp({}, undefined, loose);
+    await request(looseCtx.app.getHttpServer())
+      .post('/api/acme/envelope/')
+      .query({ sentry_key: TEST_KEY })
+      .set('content-type', 'application/x-sentry-envelope')
+      .send(fixture)
+      .expect(422);
+    expect(looseCtx.publisher.envelopes).toHaveLength(0);
+    await looseCtx.app.close();
+  });
+
   test('rejects a missing key and a key without a Grave binding', async () => {
     const noDsn = Buffer.from(
       fixture.toString('utf8').replace(`,"dsn":"https://${TEST_KEY}@ingest.invalid/12345"`, ''),
@@ -142,15 +160,18 @@ describe('POST /api/:projectId/envelope (e2e)', () => {
     }
   });
 
-  test('does not use event fields to choose the tenant or Grave', async () => {
+  test('does not use event fields to choose the project or Grave', async () => {
     const forged = Buffer.from(
       fixture
         .toString('utf8')
-        .replace('"level":"warning"', '"tenantId":"tenant-2","service":"worker","level":"warning"'),
+        .replace(
+          '"level":"warning"',
+          '"projectId":"project-2","service":"worker","level":"warning"',
+        ),
     );
     await push('12345', forged).expect(200);
     const published = ctx.publisher.envelopes.at(-1);
-    expect(published?.tenantId).toBe('tenant-1');
+    expect(published?.projectId).toBe('12345');
     expect(published?.service).toBe('api');
   });
 

@@ -4,7 +4,7 @@ import { EventEnvelopeSchema, type EventEnvelope } from './schemas';
 
 const envelope: EventEnvelope = {
   id: 'evt-1',
-  tenantId: 'tenant-1',
+  projectId: 'project-1',
   source: 'collector.docker',
   service: 'api',
   type: 'signal.oom',
@@ -28,12 +28,12 @@ describe('EventEnvelope', () => {
     );
   });
 
-  test('rejects a missing tenantId', () => {
-    const { tenantId: _tenantId, ...rest } = envelope;
+  test('rejects a missing projectId', () => {
+    const { projectId: _projectId, ...rest } = envelope;
     expect(EventEnvelopeSchema.safeParse(rest).success).toBe(false);
   });
 
-  for (const field of ['tenantId', 'type'] as const) {
+  for (const field of ['projectId', 'type'] as const) {
     for (const bad of ['has space', '*', '>', '', 'a..b']) {
       test(`rejects ${field} value ${JSON.stringify(bad)}`, () => {
         expect(EventEnvelopeSchema.safeParse({ ...envelope, [field]: bad }).success).toBe(false);
@@ -43,7 +43,7 @@ describe('EventEnvelope', () => {
 
   const stringFields = [
     'id',
-    'tenantId',
+    'projectId',
     'source',
     'service',
     'type',

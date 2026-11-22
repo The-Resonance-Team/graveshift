@@ -1,5 +1,7 @@
 # Self-hosted NATS JetStream for v2 (ticket 57)
 
+> Historical record. [ADR 0018](../adr/0018-project-scoped-state.md) supersedes the old `tenantId` text in this report. `projectId` replaces it.
+
 Date: 2026-11-22. Status: proposed for v2. Research only. No code changed.
 
 ## Goal
@@ -45,7 +47,7 @@ room for the JSON form.
 
 ### Single node first, cluster later
 
-v2 uses one NATS server with one replica (R1). One tenant uses the platform in v2.
+v2 uses one NATS server with one replica (R1). One project uses the platform in v2.
 One server is enough for the load. One server has no quorum problem and no extra
 cluster port to protect.
 
@@ -102,14 +104,14 @@ backup for those PostgreSQL rows.
 ## Subject tree
 
 The current `publishSubject` in `packages/events` builds
-`graveshift.<tenantId>.<lane>.<type>`. The `service` value names the Grave, but it
+`graveshift.<projectId>.<lane>.<type>`. The `service` value names the Grave, but it
 is not in the subject. The v2 target adds the Grave token:
 
 ```text
-graveshift.<tenantId>.<lane>.<grave>.<type>
+graveshift.<projectId>.<lane>.<grave>.<type>
 ```
 
-- `tenantId` — one token. v2 has one tenant; the token keeps v3 ready.
+- `projectId` — one token. v2 has one project; the token keeps v3 ready.
 - `lane` — `telemetry` or `detection`. `laneFor` maps `info` to `telemetry` and
   `warning` or `critical` to `detection`.
 - `grave` — the service under watch. It must be one safe token: `^[A-Za-z0-9_-]+$`.
@@ -138,7 +140,7 @@ stream by lane only if telemetry volume forces a different retention window.
 | Setting | v2 value | Reason |
 | --- | --- | --- |
 | Name | `GRAVESHIFT_EVENTS` | The default in `env.schema.ts`. |
-| Subjects | `graveshift.>` | Matches both lanes and all tenants. |
+| Subjects | `graveshift.>` | Matches both lanes and all projects. |
 | Storage | file | Restart safety and snapshots. |
 | Retention | limits | An event log with more than one reader. |
 | Discard | old | Bound age and size. |
@@ -180,7 +182,7 @@ consumer in v2.
 - A consumer sends an explicit ack only after it stores the result of the event.
   On a transient error it nacks with a delay. JetStream redelivers until
   `max_deliver`. After the last delivery the consumer publishes the envelope to
-  `graveshift.<tenantId>.dlq.<grave>` and acks it. No message loops forever.
+  `graveshift.<projectId>.dlq.<grave>` and acks it. No message loops forever.
 - The HTTP publisher in a Plugin or Collector retries on 429, 503 and a connection
   error. It sends the same envelope `id` on each retry. The API deduplicates by that
   id and by the JetStream `msgID`.
@@ -194,14 +196,14 @@ Both use `POST /api/events` with a plugin key. The route is the one write bounda
 for integration input.
 
 1. The integration builds one `EventEnvelope` with `EventEnvelopeSchema` from
-   `packages/core`. The `id` is the idempotency key. `tenantId` and `service` name
-   the tenant and the Grave.
+   `packages/core`. The `id` is the idempotency key. `projectId` and `service` name
+   the project and the Grave.
 2. It uses `createHttpPublisher` from `packages/events` and sends a bearer plugin key.
    It imports no NATS client and holds no NATS credential. A Collector uses the same
    route as a Plugin. Daemon-side placement does not grant a direct NATS write.
 3. The API applies `PayloadSizeInterceptor`, `ThrottlerGuard` and `PluginApiKeyGuard`.
    The `class-validator` DTO rejects unknown fields with 422.
-4. `EventIngestService` checks the `events:publish` scope, the tenant binding and the
+4. `EventIngestService` checks the `events:publish` scope, the project binding and the
    optional service binding. It parses the envelope again with the core schema,
    redacts every string, and calls the injected `Publisher`.
 5. `NatsEventPublisher` is the one production publisher in the API. It publishes to
@@ -239,7 +241,7 @@ The value of a new Credential is shown once.
 
 | Hop | Credential | Where it comes from | Transport |
 | --- | --- | --- | --- |
-| Plugin -> `POST /api/events` | Plugin key, scope `events:publish`, tenant binding, optional service (Grave) binding | Issued by `POST /api/credentials`; kept as a hash in PostgreSQL; held in the host secret store | HTTPS at the API ingress |
+| Plugin -> `POST /api/events` | Plugin key, scope `events:publish`, project binding, optional service (Grave) binding | Issued by `POST /api/credentials`; kept as a hash in PostgreSQL; held in the host secret store | HTTPS at the API ingress |
 | Collector -> `POST /api/events` | Same plugin key shape, one key per Collector | Same issuer and store | HTTPS at the API ingress |
 | API -> NATS, publish | NATS user or NKey with publish on `graveshift.>` | `GRAVESHIFT_NATS_URL` from env or Secret; auth material in the NATS server config | TLS on a private network |
 | Daemon / Wraith -> NATS, consume | A second user with subscribe and ack on `graveshift.>`, no publish | Env or Secret | TLS on a private network |
@@ -278,7 +280,7 @@ a second issuer or verifier.
   NATS connection, starts no long-running server and holds no model key. Backups and
   upgrades run on the self-hosted platform, not in Actions.
 - Clustering, mirrors and multi-tenancy are not v2 work. The subject and the envelope
-  keep the tenant so v3 needs no rewrite.
+  keep the project so v3 needs no rewrite.
 
 ## Implementation work proposed
 
@@ -297,6 +299,6 @@ This research changes no code. The linked implementation issue covers:
 ## Recheck triggers
 
 Review this report before the first production envelope is written, when a second
-tenant is added, when one server reaches its age or size limit, or when a named client
+project is added, when one server reaches its age or size limit, or when a named client
 needs a delivery mode other than poll. Recheck the backup format when the NATS server
 version changes.

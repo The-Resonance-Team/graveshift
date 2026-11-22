@@ -14,7 +14,7 @@ const config = (natsUrl?: string): EventsConfig => ({
 
 const envelope: EventEnvelope = {
   id: 'evt-1',
-  tenantId: 'tenant-1',
+  projectId: 'project-1',
   source: 'native',
   service: 'api',
   type: 'signal.oom',

@@ -18,6 +18,7 @@ This file is an index. It lists each context, the terms it owns and the path to 
 | `packages/gateway` | No domain terms |
 | `packages/integrations` | `packages/integrations/GLOSSARY.md` |
 | `packages/metrics` | No domain terms |
+| `packages/mcp-client` | No domain terms |
 | `packages/notifier-discord` | `packages/notifier-discord/GLOSSARY.md` |
 | `packages/patch` | `packages/patch/GLOSSARY.md` |
 | `packages/policy` | No domain terms |
