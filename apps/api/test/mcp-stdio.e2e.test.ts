@@ -13,11 +13,9 @@ const env: Record<string, string> = {};
 for (const name of [
   'PATH',
   'DATABASE_URL',
-  'GRAVESHIFT_PROJECT_ID',
   'GRAVESHIFT_API_INTERNAL_TOKEN',
   'GRAVESHIFT_DAEMON_INTERNAL_TOKEN',
   'GRAVESHIFT_OAUTH_JWT_SECRET',
-  'GRAVESHIFT_OAUTH_CLIENTS',
   'GRAVESHIFT_DAEMON_READ_TOKEN',
 ] as const) {
   const value = process.env[name];

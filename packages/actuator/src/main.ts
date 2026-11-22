@@ -32,10 +32,23 @@ const kube: KubeWriter = env.KUBERNETES_SERVICE_HOST
       scale: async () => unavailable('kubernetes'),
     };
 
+const apiUrl = env.GRAVESHIFT_API_URL ?? 'http://127.0.0.1:3000';
+const internalToken = env.GRAVESHIFT_API_INTERNAL_TOKEN ?? '';
+// The stored deployment grant is the only source of Project identity. There is
+// no host-wide Project env value. The API checks this id against the same grant.
+const bootResponse = await fetch(new URL('/internal/config', apiUrl), {
+  headers: { authorization: `Bearer ${internalToken}` },
+  signal: AbortSignal.timeout(5_000),
+});
+if (!bootResponse.ok) {
+  log('fatal', 'Internal configuration is unavailable; refusing to start');
+  process.exit(1);
+}
+const boot = (await bootResponse.json()) as { projectIds?: string[] };
 const auditConfig = {
-  apiUrl: env.GRAVESHIFT_API_URL ?? 'http://127.0.0.1:3000',
-  token: env.GRAVESHIFT_API_INTERNAL_TOKEN ?? '',
-  projectId: env.GRAVESHIFT_PROJECT_ID ?? '',
+  apiUrl,
+  token: internalToken,
+  projectId: boot.projectIds?.[0] ?? '',
 };
 const actuator = createActuator({
   secret,

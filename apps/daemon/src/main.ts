@@ -40,10 +40,13 @@ export const program = Effect.scoped(
       timeoutMs: config.GRAVESHIFT_API_TIMEOUT_MS,
     });
     const boot = yield* asynchronous(
-      () => loadBootConfig(api, config.GRAVESHIFT_PROJECT_ID),
+      () => loadBootConfig(api),
       'Daemon boot configuration is unavailable',
     );
-    const audit = createAudit(api, config.GRAVESHIFT_PROJECT_ID);
+    // ponytail: serve the first granted Project; upgrade when per-Project daemon
+    // routing lands so one daemon can serve every Project in the deployment.
+    const projectId = boot.projectIds[0] ?? '';
+    const audit = createAudit(api, projectId);
     const gateway = yield* startup(
       () => configuredGateway(boot, audit, env),
       'Agent bindings or gateway pricing are invalid',
@@ -62,7 +65,7 @@ export const program = Effect.scoped(
           connectConsumer({
             servers: config.GRAVESHIFT_NATS_URL,
             stream: boot.natsStream,
-            projectId: boot.projectId,
+            projectId,
           }),
         'NATS consumer is unavailable',
       ),
@@ -70,14 +73,14 @@ export const program = Effect.scoped(
     );
     yield* Effect.acquireRelease(
       asynchronous(async () => {
-        await collectors.start(boot.projectId, events.publisher);
+        await collectors.start(projectId, events.publisher);
         return collectors;
       }, 'Collector startup failed'),
       (resource) =>
         asynchronous(() => resource.stop(), 'Collector drain failed').pipe(Effect.orDie),
     );
     const reads = createReadRuntime({
-      projectId: boot.projectId,
+      projectId,
       api,
       sources: collectors.reads,
       metricJobs: collectors.metricJobs,
@@ -87,7 +90,7 @@ export const program = Effect.scoped(
       Effect.sync(() =>
         drainCommands(
           createWorkCommands({
-            projectId: boot.projectId,
+            projectId,
             agents: boot.agents,
             policy: boot.policy,
             runtime: createWorkClient(api),
@@ -102,7 +105,7 @@ export const program = Effect.scoped(
       (resource) => asynchronous(() => resource.stop(), 'Command drain failed').pipe(Effect.orDie),
     );
     const privateEdge = {
-      projectId: boot.projectId,
+      projectId,
       token: config.GRAVESHIFT_DAEMON_INTERNAL_TOKEN,
       maxBytes: config.GRAVESHIFT_BODY_MAX_BYTES,
       timeoutMs: config.GRAVESHIFT_COMMAND_TIMEOUT_MS,
@@ -110,12 +113,12 @@ export const program = Effect.scoped(
     const observe = yield* asynchronous(
       () =>
         createObservations({
-          projectId: boot.projectId,
+          projectId,
           api,
           gateway,
           agents: boot.agents,
           logs: (service, lines) => reads.logs(service, lines),
-          onWork: workActivation(lifetime.commands, boot.projectId),
+          onWork: workActivation(lifetime.commands, projectId),
         }),
       'Observation state is unavailable',
     );

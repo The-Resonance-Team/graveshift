@@ -2,8 +2,13 @@ import type { ExecutionContext } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { describe, expect, test } from 'bun:test';
 
-import { TEST_CONFIG } from '../../test/fakes/auth-test-config';
+import {
+  TEST_CLIENT_SECRET,
+  TEST_CONFIG,
+  testOAuthClients,
+} from '../../test/fakes/auth-test-config';
 import { FakeCredentialRepo } from '../../test/fakes/fake-credential-repo';
+import { FakeIdentityRepo } from '../identity/testing/fake-identity.repo';
 import type { Principal } from './auth.types';
 import { CredentialService } from './services/credential.service';
 import { OAuthTokenService } from './services/oauth-token.service';
@@ -22,15 +27,17 @@ const bearer = (token: string): ThrottleRequest => ({
 
 function setup() {
   const repo = new FakeCredentialRepo();
+  const identity = new FakeIdentityRepo();
+  for (const client of testOAuthClients()) void identity.clients.set(client.clientId, client);
   const credentials = new CredentialService(repo, TEST_CONFIG);
   const jwt = new JwtService();
-  const generator = new ThrottleKeyGenerator(jwt, credentials, TEST_CONFIG);
-  return { repo, jwt, credentials, generator };
+  const generator = new ThrottleKeyGenerator(jwt, credentials, TEST_CONFIG, identity);
+  return { repo, identity, jwt, credentials, generator };
 }
 
 describe('ThrottleKeyGenerator', () => {
   test('a cold process and a warm process resolve the same active Credential bucket', async () => {
-    const { repo, credentials, jwt, generator } = setup();
+    const { repo, identity, credentials, jwt, generator } = setup();
     const issued = await credentials.issue(
       { kind: 'plugin', name: 'publisher', scopes: ['events:publish'] },
       principal,
@@ -39,14 +46,15 @@ describe('ThrottleKeyGenerator', () => {
       jwt,
       new CredentialService(repo, TEST_CONFIG),
       TEST_CONFIG,
+      identity,
     );
     const request = bearer(issued.value);
     expect(await restarted.track(request)).toBe(bucket);
     expect(await generator.track(bearer(issued.value))).toBe(bucket);
     expect(request.credentialPrincipal?.expiresAt).toBe(issued.expiresAt);
-    const oauth = await new OAuthTokenService(jwt, TEST_CONFIG).exchange(
+    const oauth = await new OAuthTokenService(jwt, TEST_CONFIG, identity).exchange(
       'client-1',
-      TEST_CONFIG.oauthClients['client-1']?.secret ?? 'missing-secret',
+      TEST_CLIENT_SECRET,
     );
     expect(await generator.track(bearer(oauth.access_token))).toBe(bucket);
   });

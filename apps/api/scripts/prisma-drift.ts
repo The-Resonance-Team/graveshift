@@ -2,6 +2,10 @@
 // used: the check reads SQL text only, so it can run in CI without a DB service.
 const AUDIT_BLOCK =
   /-- BEGIN unmanaged append-only audit enforcement[\s\S]*?-- END unmanaged append-only audit enforcement\./;
+// Data rewrites change rows, not schema. The drift check compares schema objects
+// only, so the identity migration's one-transaction rewrite is excluded here.
+const IDENTITY_REWRITE_BLOCK =
+  /-- BEGIN unmanaged identity data rewrite[\s\S]*?-- END unmanaged identity data rewrite\./;
 const AUDIT_FUNCTION =
   /CREATE FUNCTION\s+([A-Za-z0-9_]+)\s*\(\s*\)\s+RETURNS\s+trigger[\s\S]*?AS\s+\$\$([\s\S]*?)\$\$/;
 const TRIGGER =
@@ -15,11 +19,12 @@ const EXPECTED_TRIGGERS = [
   { name: 'audit_entries_no_delete', event: 'DELETE', table: 'audit_entries' },
 ] as const;
 
-/** Strips the unmanaged block before generated SQL is compared with migration SQL. */
-const stripAuditBlock = (sql: string): string => sql.replace(AUDIT_BLOCK, '');
+/** Strips unmanaged blocks before generated SQL is compared with migration SQL. */
+const stripUnmanagedBlocks = (sql: string): string =>
+  sql.replace(AUDIT_BLOCK, '').replace(IDENTITY_REWRITE_BLOCK, '');
 
 export const normalize = (sql: string): string =>
-  stripAuditBlock(sql)
+  stripUnmanagedBlocks(sql)
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(

@@ -13,6 +13,5 @@ export function createAuthConfig(config: ConfigService<RootEnv, true>): AuthConf
     maxEventBytes: config.getOrThrow<number>('GRAVESHIFT_EVENT_MAX_BYTES'),
     eventRateLimit: config.getOrThrow<number>('GRAVESHIFT_EVENT_RATE_LIMIT'),
     eventRateTtlMs: config.getOrThrow<number>('GRAVESHIFT_EVENT_RATE_TTL_MS'),
-    oauthClients: config.getOrThrow('GRAVESHIFT_OAUTH_CLIENTS', { infer: true }),
   };
 }

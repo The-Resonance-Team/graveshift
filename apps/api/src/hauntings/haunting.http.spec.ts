@@ -5,6 +5,8 @@ import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test';
 import request from 'supertest';
 
 import { AuditConflict } from '../audit/audit.errors';
+import { ProjectGrant } from '../internal/project-grant';
+import { testProjectGrant } from '../internal/testing/project-grant.fixture';
 import { InternalGuard } from '../internal/internal.guard';
 import { HauntingController } from './haunting.controller';
 import { HauntingRepo } from './haunting.repo';
@@ -26,10 +28,10 @@ describe('private Haunting boundary', () => {
       providers: [
         HauntingService,
         InternalGuard,
+        { provide: ProjectGrant, useValue: testProjectGrant(['project-1']) },
         {
           provide: ConfigService,
           useValue: new ConfigService({
-            GRAVESHIFT_PROJECT_ID: 'project-1',
             GRAVESHIFT_API_INTERNAL_TOKEN: token,
           }),
         },

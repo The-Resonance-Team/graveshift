@@ -8,13 +8,14 @@ import request from 'supertest';
 import { configureApp } from '../src/app.factory';
 import { AppModule } from '../src/app.module';
 import { CREDENTIAL_CONFIG, CREDENTIAL_REPO } from '../src/auth/auth.types';
+import { IDENTITY_REPO } from '../src/identity/identity.types';
 import { InMemoryEventSource } from '../src/mcp/events/events.source';
 import { MCP_EVENT_SOURCE } from '../src/mcp/events/events.types';
 import { MCP_BACKEND, MCP_POLICY } from '../src/mcp/mcp.types';
 import { McpTokenVerifierService } from '../src/mcp/mcp-token.verifier';
 import { TEST_CONFIG } from './fakes/auth-test-config';
 import { FakeCredentialRepo } from './fakes/fake-credential-repo';
-import { accessToken, validEnvelope } from './fakes/auth-test-helpers';
+import { accessToken, testIdentityRepo, validEnvelope } from './fakes/auth-test-helpers';
 import { FakeMcpBackend } from './fakes/fake-mcp-backend';
 
 const rpc = { jsonrpc: '2.0', id: 1, method: 'tools/list' };
@@ -56,6 +57,8 @@ describe('POST /mcp bearer auth (e2e)', () => {
       .useValue(TEST_CONFIG)
       .overrideProvider(CREDENTIAL_REPO)
       .useValue(new FakeCredentialRepo())
+      .overrideProvider(IDENTITY_REPO)
+      .useValue(testIdentityRepo())
       .overrideProvider(MCP_EVENT_SOURCE)
       .useValue(eventSource)
       .compile();

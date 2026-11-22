@@ -1,16 +1,15 @@
 import { EnvelopeError } from '@graveshift/core';
 import {
   ConflictException,
-  ForbiddenException,
   Injectable,
   NotFoundException,
   ServiceUnavailableException,
   UnprocessableEntityException,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { z } from 'zod';
 
 import { AuditBusy, AuditConflict } from '../audit/audit.errors';
+import { ProjectGrant } from '../internal/project-grant';
 import type {
   ActiveHauntingDto,
   GetHauntingDto,
@@ -26,17 +25,15 @@ import { HauntingRepo } from './haunting.repo';
 export class HauntingService {
   constructor(
     private readonly repo: HauntingRepo,
-    private readonly config: ConfigService,
+    private readonly grant: ProjectGrant,
   ) {}
 
-  private authorize(input: HauntingProjectDto): void {
-    if (input.projectId !== this.config.getOrThrow<string>('GRAVESHIFT_PROJECT_ID')) {
-      throw new ForbiddenException('Internal project does not match this API');
-    }
+  private async authorize(input: HauntingProjectDto): Promise<void> {
+    await this.grant.assert(input.projectId);
   }
 
   async record(input: RecordHauntingDto) {
-    this.authorize(input);
+    await this.authorize(input);
     try {
       return await this.repo.upsert(input.projectId, input.eventId, input.view);
     } catch (error) {
@@ -51,27 +48,27 @@ export class HauntingService {
     }
   }
 
-  list(input: ListHauntingsDto) {
-    this.authorize(input);
+  async list(input: ListHauntingsDto) {
+    await this.authorize(input);
     return this.repo.list(input.projectId, input.limit);
   }
 
   async get(input: GetHauntingDto) {
-    this.authorize(input);
+    await this.authorize(input);
     const view = await this.repo.get(input.projectId, input.id);
     if (!view) throw new NotFoundException('Haunting not found');
     return view;
   }
 
   async context(input: HauntingContextDto) {
-    this.authorize(input);
+    await this.authorize(input);
     const view = await this.repo.context(input.projectId, input.service, input.diagnosisRef);
     if (!view) throw new NotFoundException('Haunting context not found');
     return view;
   }
 
-  active(input: ActiveHauntingDto) {
-    this.authorize(input);
+  async active(input: ActiveHauntingDto) {
+    await this.authorize(input);
     return this.repo.active(input.projectId, input.service);
   }
 }

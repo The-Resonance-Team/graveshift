@@ -13,7 +13,6 @@ process.env.GRAVESHIFT_DAEMON_READ_TOKEN ??= 'doc-generation-only-read-token';
 // The merged boot schema needs these required values. Use ephemeral placeholders only for
 // document generation; no database or daemon connection is opened here.
 process.env.DATABASE_URL ??= 'postgresql://doc:doc@127.0.0.1:1/doc';
-process.env.GRAVESHIFT_PROJECT_ID ??= 'doc-generation';
 process.env.GRAVESHIFT_API_INTERNAL_TOKEN ??= randomBytes(32).toString('hex');
 process.env.GRAVESHIFT_DAEMON_INTERNAL_TOKEN ??= randomBytes(32).toString('hex');
 // The merged boot config reads the agents and policy files. Resolve them against the

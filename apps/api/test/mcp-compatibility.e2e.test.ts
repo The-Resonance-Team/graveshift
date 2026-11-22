@@ -9,6 +9,8 @@ import { parsePolicy } from '@graveshift/policy';
 import { afterAll, beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
 
 import { AuditRepo } from '../src/audit/audit.repo';
+import { ProjectGrant } from '../src/internal/project-grant';
+import { testProjectGrant } from '../src/internal/testing/project-grant.fixture';
 import { DaemonMcpBackend } from '../src/mcp/mcp.backend';
 import { writeAutopsy } from '../src/mcp/mcp.postmortem';
 import { McpPrompts } from '../src/mcp/mcp.prompts';
@@ -223,9 +225,12 @@ describe('production MCP backend', () => {
         DaemonMcpBackend,
         { provide: AuditRepo, useValue: { list, verifyChain, append: async () => ({}) } },
         {
+          provide: ProjectGrant,
+          useValue: testProjectGrant(['project-1']),
+        },
+        {
           provide: ConfigService,
           useValue: new ConfigService({
-            GRAVESHIFT_PROJECT_ID: 'project-1',
             GRAVESHIFT_DAEMON_INTERNAL_TOKEN: 'fixture-only-token',
           }),
         },

@@ -6,7 +6,7 @@ import { z } from 'zod';
 const emptyToUndefined = (value: unknown) => (value === '' ? undefined : value);
 const setting = <Schema extends z.ZodType>(schema: Schema) =>
   z.preprocess(emptyToUndefined, schema);
-const project = z.string().regex(/^[A-Za-z0-9_-]+$/);
+const slug = z.string().regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
 const host = z
   .string()
   .refine(
@@ -32,13 +32,6 @@ const internalUrl = z.url({ protocol: /^https?$/ }).refine((value) => {
     url.pathname === '/'
   );
 }, 'Internal URL must be an HTTP origin without credentials');
-
-const oauthClientSchema = z.object({
-  secret: z.string().min(16),
-  projectId: project,
-  scopes: z.array(z.string()),
-});
-export type OAuthClientConfig = z.infer<typeof oauthClientSchema>;
 
 function parseJson(value: unknown): unknown {
   const input = emptyToUndefined(value);
@@ -77,7 +70,10 @@ export const rootEnvSchema = z
         },
       ),
     ),
-    GRAVESHIFT_PROJECT_ID: setting(project),
+    GRAVESHIFT_ROOT_ADMIN_EMAIL: setting(z.email().optional()),
+    GRAVESHIFT_ROOT_ADMIN_PASSWORD: setting(z.string().min(12).optional()),
+    GRAVESHIFT_ROOT_ORG_NAME: setting(z.string().min(1).optional()),
+    GRAVESHIFT_ROOT_ORG_SLUG: setting(slug.optional()),
     GRAVESHIFT_API_INTERNAL_TOKEN: setting(
       secret('GRAVESHIFT_API_INTERNAL_TOKEN').regex(
         /^[A-Za-z0-9._~+/-]+=*$/,
@@ -118,10 +114,6 @@ export const rootEnvSchema = z
     GRAVESHIFT_OAUTH_JWT_SECRET: setting(secret('GRAVESHIFT_OAUTH_JWT_SECRET')),
     GRAVESHIFT_OAUTH_ISSUER: setting(z.string().min(1).default('graveshift-api')),
     GRAVESHIFT_OAUTH_AUDIENCE: setting(z.string().min(1).default('graveshift-credentials')),
-    GRAVESHIFT_OAUTH_CLIENTS: z.preprocess(
-      parseJson,
-      z.record(z.string(), oauthClientSchema).default({}),
-    ),
     GRAVESHIFT_CREDENTIAL_TTL_SECONDS: setting(z.coerce.number().int().min(60).default(86_400)),
     GRAVESHIFT_CREDENTIAL_MAX_TTL_SECONDS: setting(
       z.coerce.number().int().min(60).default(2_592_000),
@@ -133,6 +125,22 @@ export const rootEnvSchema = z
     GRAVESHIFT_EVENT_RATE_TTL_MS: setting(z.coerce.number().int().min(1000).default(60_000)),
   })
   .superRefine((env, context) => {
+    const rootKeys = [
+      env.GRAVESHIFT_ROOT_ADMIN_EMAIL,
+      env.GRAVESHIFT_ROOT_ADMIN_PASSWORD,
+      env.GRAVESHIFT_ROOT_ORG_NAME,
+      env.GRAVESHIFT_ROOT_ORG_SLUG,
+    ];
+    if (
+      rootKeys.some((value) => value !== undefined) &&
+      rootKeys.some((value) => value === undefined)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['GRAVESHIFT_ROOT_ADMIN_EMAIL'],
+        message: 'All four root admin and root organization keys must be set together',
+      });
+    }
     if (env.GRAVESHIFT_API_INTERNAL_TOKEN === env.GRAVESHIFT_DAEMON_INTERNAL_TOKEN) {
       context.addIssue({
         code: 'custom',

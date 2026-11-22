@@ -10,6 +10,7 @@ import {
   workCaller,
 } from './testing/work-db.fixture';
 import { WorkItemRepo } from './work-item.repo';
+import { testProjectGrant } from '../internal/testing/project-grant.fixture';
 
 describe.skipIf(!dbTestEnabled)('Postgres WorkItemRepo admission', () => {
   const fixture = setupWorkDatabase();
@@ -26,9 +27,12 @@ describe.skipIf(!dbTestEnabled)('Postgres WorkItemRepo admission', () => {
     await fixture.db.workItem.update({ where: { id: 'work-1' }, data: { diagnosis } });
     const fresh = await openTestDatabase();
     try {
-      const restarted = new WorkItemRepo(fresh, new AuditRepo(fresh), WORK_TEST_AGENTS, {
-        projectId: 'project-1',
-      });
+      const restarted = new WorkItemRepo(
+        fresh,
+        new AuditRepo(fresh),
+        WORK_TEST_AGENTS,
+        testProjectGrant(['project-1']),
+      );
       expect(await restarted.read({ projectId: 'project-1', id: 'work-1' })).toMatchObject({
         item: { id: 'work-1', diagnosisRef: 'diagnosis-1' },
         diagnosis,

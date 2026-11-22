@@ -1,3 +1,44 @@
+// Simple scopes for the v3 identity model. Current scope strings stay accepted as
+// aliases, so clients from PR #113 and PR #120 keep the same effective grants.
+export const SIMPLE_SCOPES = [
+  'org:read',
+  'project:read',
+  'project:write',
+  'event:read',
+  'org:ci',
+] as const;
+
+export const SCOPE_ALIASES: Record<string, string> = {
+  'org:read': 'org:read',
+  'project:read': 'project:read',
+  'project:write': 'project:write',
+  'event:read': 'event:read',
+  'org:ci': 'org:ci',
+  'incidents:read': 'project:read',
+  'diagnoses:read': 'project:read',
+  'audit:read': 'org:read',
+  'logs:read': 'event:read',
+  'metrics:read': 'project:read',
+  'fix:propose': 'project:write',
+  'events:publish': 'event:read',
+  'config:export': 'config:export',
+  'tokens:manage': 'tokens:manage',
+};
+
+/** Adds the canonical form and every alias with the same meaning to a scope set. */
+export function expandScopes(scopes: readonly string[]): string[] {
+  const result = new Set<string>(scopes);
+  for (const scope of scopes) {
+    const canonical = SCOPE_ALIASES[scope];
+    if (canonical === undefined) continue;
+    result.add(canonical);
+    for (const [alias, target] of Object.entries(SCOPE_ALIASES)) {
+      if (target === canonical) result.add(alias);
+    }
+  }
+  return [...result];
+}
+
 // One scope catalog serves MCP tokens, plugin API keys and the one HTTP config endpoint.
 export const MCP_READ_SCOPES = [
   'incidents:read',

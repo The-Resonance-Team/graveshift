@@ -1,6 +1,7 @@
 import { describe, expect, spyOn, test } from 'bun:test';
 
 import { dbTestEnabled } from '../../test/database/fixtures';
+import { testProjectGrant } from '../internal/testing/project-grant.fixture';
 import { ActionRepo } from './action.repo';
 import { setupActionsDatabase } from './testing/action-db.fixture';
 import { ACTION_TEST_POLICY, completionInput } from './testing/action.fixture';
@@ -98,19 +99,24 @@ describe.skipIf(!dbTestEnabled)('durable runtime completion', () => {
 
   test('the API boot policy and mode are authoritative even when the client would allow execution', async () => {
     const input = await fixture.input();
-    const proposing = new ActionRepo(fixture.db, fixture.audit, {
-      projectId: 'project-1',
-      policy: ACTION_TEST_POLICY,
-      mode: 'propose',
-    });
+    const proposing = new ActionRepo(
+      fixture.db,
+      fixture.audit,
+      { policy: ACTION_TEST_POLICY, mode: 'propose' },
+      testProjectGrant(['project-1']),
+    );
     expect(await proposing.claim(input)).toEqual({ kind: 'denied', reason: 'policy_mode_propose' });
-    const stopped = new ActionRepo(fixture.db, fixture.audit, {
-      projectId: 'project-1',
-      policy: {
-        ...ACTION_TEST_POLICY,
-        limits: { ...ACTION_TEST_POLICY.limits, maxActionsPerServicePer10Min: 0 },
+    const stopped = new ActionRepo(
+      fixture.db,
+      fixture.audit,
+      {
+        policy: {
+          ...ACTION_TEST_POLICY,
+          limits: { ...ACTION_TEST_POLICY.limits, maxActionsPerServicePer10Min: 0 },
+        },
       },
-    });
+      testProjectGrant(['project-1']),
+    );
     expect(await stopped.claim(input)).toEqual({ kind: 'denied', reason: 'policy_rate_limited' });
     expect(await fixture.db.actionClaim.count()).toBe(0);
   });

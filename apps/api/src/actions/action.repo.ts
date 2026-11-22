@@ -6,6 +6,7 @@ import { subMinutes } from 'date-fns';
 import { AuditRepo } from '../audit/audit.repo';
 import * as config from '../config/boot.config';
 import { PrismaService } from '../infra/prisma.service';
+import { ProjectGrant } from '../internal/project-grant';
 import { ActionProjectError } from './action.errors';
 import { ACTION_CLAIM_SELECT } from './action.select';
 import type { ClaimActionDto } from './dto/claim-action.dto';
@@ -18,8 +19,9 @@ export class ActionRepo {
     private readonly audit: AuditRepo,
     @Inject(config.BOOT_CONFIG) private readonly boot: Pick<
       config.RootBootConfig,
-      'projectId' | 'policy' | 'mode'
+      'policy' | 'mode'
     >,
+    private readonly grant: ProjectGrant,
   ) {}
 
   claim(input: ClaimActionDto): Promise<claims.ClaimResult> {
@@ -106,11 +108,15 @@ export class ActionRepo {
     });
   }
 
-  private change<Result>(
+  private async change<Result>(
     projectId: string,
     task: (tx: Prisma.TransactionClient, at: Date) => Promise<Result>,
   ): Promise<Result> {
-    if (projectId !== this.boot.projectId) throw new ActionProjectError();
+    try {
+      await this.grant.assert(projectId);
+    } catch {
+      throw new ActionProjectError();
+    }
     return this.prisma.$transaction(
       async (tx) => {
         // Acquire the Audit chain project lock first. ReadCommitted then reads the latest committed claims after a wait.

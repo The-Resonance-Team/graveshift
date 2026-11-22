@@ -29,8 +29,8 @@ import type { WorkItem } from '@graveshift/core';
 
 import { AuditRepo } from '../audit/audit.repo';
 import { inAuditTransaction } from '../audit/audit.transaction';
-import { BOOT_CONFIG, type RootBootConfig } from '../config/boot.config';
 import { PrismaService } from '../infra/prisma.service';
+import { ProjectGrant } from '../internal/project-grant';
 import { hauntingWorkId, type HauntingWork } from './work-haunting.mapper';
 import { claimFix, saveTriage } from './work-item.admission';
 import { toWorkItem, workAudit } from './work-item.mapper';
@@ -48,17 +48,19 @@ export class WorkItemRepo {
     private readonly prisma: PrismaService,
     private readonly audit: AuditRepo,
     @Inject(WORK_AGENTS) private readonly agents: WorkAgents,
-    @Inject(BOOT_CONFIG) private readonly config: Pick<RootBootConfig, 'projectId'>,
+    private readonly grant: ProjectGrant,
   ) {}
 
-  private project(projectId: string): void {
-    if (projectId !== this.config.projectId) {
-      throw new WorkError('PROJECT_FORBIDDEN', 'This project is not available on this host');
+  private async project(projectId: string): Promise<void> {
+    try {
+      await this.grant.assert(projectId);
+    } catch {
+      throw new WorkError('PROJECT_FORBIDDEN', 'This project is not granted to this integration');
     }
   }
 
   async findByHaunting(projectId: string, incidentId: string): Promise<WorkItem | undefined> {
-    this.project(projectId);
+    await this.project(projectId);
     const row = await this.prisma.workItem.findFirst({
       where: { projectId, id: hauntingWorkId(projectId, incidentId) },
       select: WORK_ITEM_SELECT,
@@ -70,7 +72,7 @@ export class WorkItemRepo {
     input: FromHaunting,
     prepared: HauntingWork,
   ): Promise<CreatedWorkResult> {
-    this.project(input.projectId);
+    await this.project(input.projectId);
     const id = hauntingWorkId(input.projectId, input.incidentId);
     if (id !== prepared.item.id || prepared.diagnosis.incidentId !== input.incidentId) {
       throw new WorkError('INVALID_OUTCOME', 'The Work item must refer to the verified Haunting');
@@ -102,7 +104,7 @@ export class WorkItemRepo {
   }
 
   async publicationCount(projectId: string): Promise<number> {
-    this.project(projectId);
+    await this.project(projectId);
     // Later recovery updates keep an old publication in this conservative admission window.
     return this.prisma.fixAttempt.count({
       where: {
@@ -114,7 +116,7 @@ export class WorkItemRepo {
   }
 
   async list(projectId: string, query: WorkListQuery): Promise<WorkItemListResponse> {
-    this.project(projectId);
+    await this.project(projectId);
     const { offset, limit, ...filters } = query;
     const where = { projectId, ...filters } satisfies Prisma.WorkItemWhereInput;
     return this.prisma.$transaction(
@@ -136,7 +138,7 @@ export class WorkItemRepo {
   }
 
   async read(ref: CanonicalWorkRef): Promise<WorkSnapshot> {
-    this.project(ref.projectId);
+    await this.project(ref.projectId);
     return this.prisma.$transaction((tx) => loadWork(tx, ref), {
       isolationLevel: Prisma.TransactionIsolationLevel.RepeatableRead,
     });
@@ -147,7 +149,7 @@ export class WorkItemRepo {
     id,
     input: request,
   }: WorkStateCall<WorkRequest>): Promise<WorkOutcome | null> {
-    this.project(caller.projectId);
+    await this.project(caller.projectId);
     return inAuditTransaction(this.prisma, async (tx) => {
       await this.lockCommand(tx, caller);
       const receipt = await commandReceipt(tx, caller, id, request);
@@ -225,7 +227,7 @@ export class WorkItemRepo {
     caller: WorkCaller,
     task: (tx: Prisma.TransactionClient) => Promise<Result>,
   ): Promise<Result> {
-    this.project(caller.projectId);
+    await this.project(caller.projectId);
     return inAuditTransaction(this.prisma, async (tx) => {
       await this.lockCommand(tx, caller);
       return task(tx);

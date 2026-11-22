@@ -10,6 +10,7 @@ import {
   workCaller,
 } from './testing/work-db.fixture';
 import { WorkItemRepo } from './work-item.repo';
+import { testProjectGrant } from '../internal/testing/project-grant.fixture';
 
 const intent = { repo: 'owner/repo', branch: 'graveshift/work-1', baseSha: 'base-sha' };
 const pr = {
@@ -92,9 +93,12 @@ describe.skipIf(!dbTestEnabled)('Postgres Work item publication counter', () => 
       ],
     });
     expect(await fixture.repo.publicationCount('project-1')).toBe(5);
-    const foreign = new WorkItemRepo(fixture.db, fixture.audit, WORK_TEST_AGENTS, {
-      projectId: 'project-2',
-    });
+    const foreign = new WorkItemRepo(
+      fixture.db,
+      fixture.audit,
+      WORK_TEST_AGENTS,
+      testProjectGrant(['project-2']),
+    );
     expect(await foreign.publicationCount('project-2')).toBe(1);
     await expect(fixture.repo.publicationCount('project-2')).rejects.toMatchObject({
       code: 'PROJECT_FORBIDDEN',

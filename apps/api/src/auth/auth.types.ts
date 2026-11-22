@@ -1,6 +1,5 @@
 import type { NatsPublisherHandle } from '@graveshift/events/nats';
 
-import type { OAuthClientConfig } from '../config/env.schema';
 import type { CredentialKind } from './scopes';
 
 export const CREDENTIAL_CONFIG = Symbol('CREDENTIAL_CONFIG');
@@ -21,7 +20,6 @@ export interface AuthConfig {
   maxEventBytes: number;
   eventRateLimit: number;
   eventRateTtlMs: number;
-  oauthClients: Record<string, OAuthClientConfig>;
 }
 
 export interface CredentialRecord {

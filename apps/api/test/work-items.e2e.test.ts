@@ -10,11 +10,13 @@ import request from 'supertest';
 
 import { CREDENTIAL_CONFIG } from '../src/auth/auth.types';
 import { OAuthClientCredentialsStrategy } from '../src/auth/oauth-client-credentials.strategy';
+import { IDENTITY_REPO } from '../src/identity/identity.types';
 import { InternalGuard } from '../src/internal/internal.guard';
 import { InternalWorkController } from '../src/work-items/controllers/internal-work.controller';
 import { WorkItemsController } from '../src/work-items/controllers/work-items.controller';
 import { WorkItemRepo } from '../src/work-items/work-item.repo';
 import { TEST_CONFIG, TEST_ROOT_ENV } from './fakes/auth-test-config';
+import { testIdentityRepo } from './fakes/auth-test-helpers';
 import { fakeWorkApi } from './fakes/fake-fix-deps';
 
 describe('Work item HTTP boundary', () => {
@@ -23,7 +25,7 @@ describe('Work item HTTP boundary', () => {
   let token: string;
 
   async function start(options: Parameters<typeof fakeWorkApi>[0] = {}) {
-    adapter = fakeWorkApi({ projectId: TEST_ROOT_ENV.GRAVESHIFT_PROJECT_ID, ...options });
+    adapter = fakeWorkApi({ projectId: '12345', ...options });
     const moduleRef = await Test.createTestingModule({
       imports: [
         PassportModule,
@@ -35,6 +37,7 @@ describe('Work item HTTP boundary', () => {
         OAuthClientCredentialsStrategy,
         InternalGuard,
         { provide: CREDENTIAL_CONFIG, useValue: TEST_CONFIG },
+        { provide: IDENTITY_REPO, useValue: testIdentityRepo() },
         { provide: ConfigService, useValue: new ConfigService(TEST_ROOT_ENV) },
         { provide: WorkItemRepo, useValue: adapter.repo },
         { provide: WORK_COMMANDS, useValue: adapter.commands },
@@ -53,7 +56,7 @@ describe('Work item HTTP boundary', () => {
     token = moduleRef.get(JwtService).sign(
       {
         sub: 'client-1',
-        projectId: TEST_ROOT_ENV.GRAVESHIFT_PROJECT_ID,
+        projectId: '12345',
         scope: ['tokens:manage'],
       },
       {
@@ -84,7 +87,7 @@ describe('Work item HTTP boundary', () => {
 
   test('rejects a signed token from a different project with PROJECT_FORBIDDEN', async () => {
     const foreign = app.get(JwtService).sign(
-      { sub: 'client-2', projectId: 'project-2', scope: ['tokens:manage'] },
+      { sub: 'client-2', projectId: '12346', scope: ['tokens:manage'] },
       {
         secret: TEST_CONFIG.jwtSecret,
         issuer: TEST_CONFIG.jwtIssuer,

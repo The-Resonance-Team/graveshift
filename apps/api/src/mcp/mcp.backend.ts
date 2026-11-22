@@ -30,6 +30,7 @@ import { z } from 'zod';
 
 import type { VerifyResult } from '../audit/audit.types';
 import { AuditRepo } from '../audit/audit.repo';
+import { ProjectGrant } from '../internal/project-grant';
 import { DaemonUnavailableError } from './mcp.errors';
 import type { McpBackend } from './mcp.types';
 
@@ -49,7 +50,7 @@ export class HttpMcpBackend {
   constructor(
     @InjectHttpClient('daemon-read') private readonly http: HttpClient,
     @Optional() private readonly audit?: AuditRepo,
-    @Optional() private readonly config?: ConfigService,
+    @Optional() private readonly grant?: ProjectGrant,
   ) {}
 
   private fail(error: unknown): never {
@@ -135,9 +136,8 @@ export class HttpMcpBackend {
 
   async auditDecision(draft: AuditDraft): Promise<Pick<AuditDraft, 'key'>> {
     // ponytail: the daemon read API has no append route; persist in the API-owned
-    // audit store when both the store and project config are available.
-    const projectId = this.config?.get<string>('GRAVESHIFT_PROJECT_ID');
-    if (this.audit && projectId) await this.audit.append(projectId, draft);
+    // audit store using the Project from the stored deployment grant.
+    if (this.audit && this.grant) await this.audit.append(await this.grant.first(), draft);
     return { key: draft.key };
   }
 }
@@ -157,10 +157,11 @@ export class DaemonMcpBackend implements McpBackend {
     @InjectHttpClient('daemon') private readonly http: HttpClient,
     private readonly audit: AuditRepo,
     private readonly config: ConfigService,
+    private readonly grant: ProjectGrant,
   ) {}
 
-  private get projectId(): string {
-    return this.config.getOrThrow<string>('GRAVESHIFT_PROJECT_ID');
+  private async projectId(): Promise<string> {
+    return this.grant.first();
   }
 
   private async read<Schema extends z.ZodType>(path: string, input: object, schema: Schema) {
@@ -168,7 +169,7 @@ export class DaemonMcpBackend implements McpBackend {
       headers: {
         authorization: `Bearer ${this.config.getOrThrow<string>('GRAVESHIFT_DAEMON_INTERNAL_TOKEN')}`,
       },
-      json: { projectId: this.projectId, ...input },
+      json: { projectId: await this.projectId(), ...input },
     });
     return schema.parse(data);
   }
@@ -196,12 +197,12 @@ export class DaemonMcpBackend implements McpBackend {
     }
   }
 
-  listAudit(opts: { afterSeq: number; limit: number }): Promise<AuditEntry[]> {
-    return this.audit.list(this.projectId, opts);
+  async listAudit(opts: { afterSeq: number; limit: number }): Promise<AuditEntry[]> {
+    return this.audit.list(await this.projectId(), opts);
   }
 
-  verifyChain(): Promise<VerifyResult> {
-    return this.audit.verifyChain(this.projectId);
+  async verifyChain(): Promise<VerifyResult> {
+    return this.audit.verifyChain(await this.projectId());
   }
 
   tailLogs(service: string, lines: number) {
@@ -225,7 +226,7 @@ export class DaemonMcpBackend implements McpBackend {
   }
 
   async auditDecision(draft: AuditDraft) {
-    await this.audit.append(this.projectId, draft);
+    await this.audit.append(await this.projectId(), draft);
     return { key: draft.key };
   }
 }

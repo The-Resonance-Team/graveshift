@@ -1,6 +1,7 @@
 import { Controller, Get, Inject, UseGuards } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
 
+import { DEFAULT_DAEMON_GRANT, IDENTITY_REPO, type IdentityRepo } from '../identity/identity.types';
 import { BOOT_CONFIG, type RootBootConfig } from '../config/boot.config';
 import { InternalGuard } from './internal.guard';
 
@@ -8,12 +9,16 @@ import { InternalGuard } from './internal.guard';
 @UseGuards(InternalGuard)
 @Controller('internal/config')
 export class InternalConfigController {
-  constructor(@Inject(BOOT_CONFIG) private readonly config: RootBootConfig) {}
+  constructor(
+    @Inject(BOOT_CONFIG) private readonly config: RootBootConfig,
+    @Inject(IDENTITY_REPO) private readonly identity: IdentityRepo,
+  ) {}
 
   @Get()
-  read() {
+  async read() {
+    const grant = await this.identity.findGrant(DEFAULT_DAEMON_GRANT);
     return {
-      projectId: this.config.projectId,
+      projectIds: grant?.projectIds ?? [],
       agents: this.config.agents,
       policy: this.config.policy,
       gateway: this.config.gateway,

@@ -7,6 +7,7 @@ import { AuditRepo } from '../audit/audit.repo';
 import { attemptFence, setupWorkDatabase, WORK_TEST_AGENTS } from './testing/work-db.fixture';
 import { workHttpApp } from './testing/work-http.fixture';
 import { WorkItemRepo } from './work-item.repo';
+import { testProjectGrant } from '../internal/testing/project-grant.fixture';
 
 describe.skipIf(!dbTestEnabled)('saved Work item question recovery through public HTTP', () => {
   const fixture = setupWorkDatabase();
@@ -16,9 +17,12 @@ describe.skipIf(!dbTestEnabled)('saved Work item question recovery through publi
     const persisted = await fixture.read();
     const originalId = persisted.activeAttempt?.id;
     const fresh = await openTestDatabase();
-    const restarted = new WorkItemRepo(fresh, new AuditRepo(fresh), WORK_TEST_AGENTS, {
-      projectId: 'project-1',
-    });
+    const restarted = new WorkItemRepo(
+      fresh,
+      new AuditRepo(fresh),
+      WORK_TEST_AGENTS,
+      testProjectGrant(['project-1']),
+    );
     const commands: WorkCommands = {
       async triage() {
         throw new Error('Unexpected triage');

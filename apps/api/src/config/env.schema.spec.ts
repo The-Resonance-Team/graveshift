@@ -15,8 +15,6 @@ const base = {
   GRAVESHIFT_EVENT_MAX_BYTES: '2048',
   GRAVESHIFT_EVENT_RATE_LIMIT: '60',
   GRAVESHIFT_EVENT_RATE_TTL_MS: '60000',
-  GRAVESHIFT_OAUTH_CLIENTS:
-    '{"client-1":{"secret":"test-client-secret-123456","projectId":"project-1","scopes":["tokens:manage"]}}',
 };
 
 describe('boot env config', () => {
@@ -61,9 +59,26 @@ describe('boot env config', () => {
     }
   });
 
-  test('rejects malformed client registry JSON', () => {
-    const result = rootEnvSchema.safeParse({ ...base, GRAVESHIFT_OAUTH_CLIENTS: '{not json' });
-    expect(result.success).toBe(false);
+  test('no host-wide Project id key is accepted by the boot schema', () => {
+    const result = rootEnvSchema.parse(base);
+    expect(result).not.toHaveProperty('GRAVESHIFT_PROJECT_ID');
+    const withLegacy = rootEnvSchema.parse({ ...base, GRAVESHIFT_PROJECT_ID: 'local' });
+    expect(withLegacy).not.toHaveProperty('GRAVESHIFT_PROJECT_ID');
+  });
+
+  test('root admin keys are optional together and validate their shape', () => {
+    const root = {
+      GRAVESHIFT_ROOT_ADMIN_EMAIL: 'root@example.test',
+      GRAVESHIFT_ROOT_ADMIN_PASSWORD: 'root-only-test-password',
+      GRAVESHIFT_ROOT_ORG_NAME: 'Root Org',
+      GRAVESHIFT_ROOT_ORG_SLUG: 'root-org',
+    };
+    expect(rootEnvSchema.safeParse({ ...base, ...root }).success).toBe(true);
+    expect(
+      rootEnvSchema.safeParse({ ...base, ...root, GRAVESHIFT_ROOT_ORG_SLUG: 'Bad' }).success,
+    ).toBe(false);
+    const partial = { ...base, GRAVESHIFT_ROOT_ADMIN_EMAIL: 'root@example.test' };
+    expect(rootEnvSchema.safeParse(partial).success).toBe(false);
   });
 
   test('accepts a strong secret', () => {
@@ -74,15 +89,13 @@ describe('boot env config', () => {
     expect(result.success).toBe(true);
   });
 
-  test.each([
-    'DATABASE_URL',
-    'GRAVESHIFT_API_INTERNAL_TOKEN',
-    'GRAVESHIFT_DAEMON_INTERNAL_TOKEN',
-    'GRAVESHIFT_PROJECT_ID',
-  ])('requires %s without a production fallback', (key) => {
-    expect(rootEnvSchema.safeParse({ ...base, [key]: undefined }).success).toBe(false);
-    expect(rootEnvSchema.safeParse({ ...base, [key]: '' }).success).toBe(false);
-  });
+  test.each(['DATABASE_URL', 'GRAVESHIFT_API_INTERNAL_TOKEN', 'GRAVESHIFT_DAEMON_INTERNAL_TOKEN'])(
+    'requires %s without a production fallback',
+    (key) => {
+      expect(rootEnvSchema.safeParse({ ...base, [key]: undefined }).success).toBe(false);
+      expect(rootEnvSchema.safeParse({ ...base, [key]: '' }).success).toBe(false);
+    },
+  );
 
   test.each([
     { DATABASE_URL: 'https://database.example.test/db' },
@@ -143,34 +156,9 @@ describe('boot env config', () => {
     ).toBe(false);
   });
 
-  test('accepts distinct client projectIds but still validates client tokens', () => {
-    const clients = {
-      'client-1': {
-        secret: 'local-test-secret-only',
-        projectId: 'project-1',
-        scopes: ['tokens:manage'],
-      },
-      foreign: {
-        secret: 'another-local-secret-only',
-        projectId: 'project-2',
-        scopes: ['tokens:manage'],
-      },
-    };
-    expect(
-      rootEnvSchema.safeParse({
-        ...base,
-        GRAVESHIFT_OAUTH_CLIENTS: JSON.stringify(clients),
-      }).success,
-    ).toBe(true);
-    expect(
-      rootEnvSchema.safeParse({
-        ...base,
-        GRAVESHIFT_OAUTH_CLIENTS: JSON.stringify({
-          ...clients,
-          weak: { secret: 'short', projectId: 'project-3', scopes: ['tokens:manage'] },
-        }),
-      }).success,
-    ).toBe(false);
+  test('the OAuth client registry is not read from the environment', () => {
+    const result = rootEnvSchema.parse(base);
+    expect(result).not.toHaveProperty('GRAVESHIFT_OAUTH_CLIENTS');
   });
 
   test('empty optional settings use schema defaults without a global auto-fix flag', () => {

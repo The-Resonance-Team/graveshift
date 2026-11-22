@@ -27,6 +27,7 @@ import { WorkItemRepo } from '../../api/src/work-items/work-item.repo';
 import { createPrivateApi } from './api-client';
 import { caller, policy } from './flow-fixtures';
 import type { FetchHandler } from './routes';
+import { testProjectGrant } from '../../api/src/internal/testing/project-grant.fixture';
 
 const apiToken = 'platform-test-api-token-long-enough';
 const daemonToken = 'platform-test-daemon-token-long-enough';
@@ -50,7 +51,7 @@ function fetchAdapter(reply: (incoming: Request) => Promise<Response>): typeof f
 
 export async function platformHttp(db: PrismaService, agents: readonly AgentConfig[]) {
   const audit = new AuditRepo(db);
-  const work = new WorkItemRepo(db, audit, agents, { projectId: caller.projectId });
+  const work = new WorkItemRepo(db, audit, agents, testProjectGrant([caller.projectId]));
   const hauntings = new HauntingRepo(db, audit);
   const captured: HttpCapture[] = [];
   const responses: Array<{ side: 'api' | 'daemon'; path: string; status: number; bytes: number }> =
@@ -100,11 +101,10 @@ export async function platformHttp(db: PrismaService, agents: readonly AgentConf
       { provide: AuditRepo, useValue: audit },
       { provide: WorkItemRepo, useValue: work },
       { provide: HauntingRepo, useValue: hauntings },
-      { provide: BOOT_CONFIG, useValue: { projectId: caller.projectId, agents, policy } },
+      { provide: BOOT_CONFIG, useValue: { agents, policy } },
       {
         provide: ConfigService,
         useValue: new ConfigService({
-          GRAVESHIFT_PROJECT_ID: caller.projectId,
           GRAVESHIFT_API_INTERNAL_TOKEN: apiToken,
           GRAVESHIFT_DAEMON_INTERNAL_TOKEN: daemonToken,
         }),

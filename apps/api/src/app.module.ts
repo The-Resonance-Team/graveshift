@@ -18,6 +18,7 @@ import { GraveshiftConfigModule, RootConfigModule } from './config/config.module
 import { HauntingsModule } from './hauntings/hauntings.module';
 import { InternalAccessModule } from './internal/internal.module';
 import { InternalHttpModule } from './internal/internal-http.module';
+import { IdentityModule } from './identity/identity.module';
 import { InternalConfigController } from './internal/internal-config.controller';
 import { PolicyContextController } from './internal/policy-context.controller';
 import { PolicyContextService } from './internal/policy-context.service';
@@ -38,6 +39,7 @@ import { WorkItemsModule } from './work-items/work-items.module';
     PrismaInfraModule,
     InternalAccessModule,
     InternalHttpModule,
+    IdentityModule,
     AuditModule,
     ActionsModule,
     HauntingsModule,

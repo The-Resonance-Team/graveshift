@@ -83,7 +83,7 @@ describe('credential routes (e2e)', () => {
     }).expect(422);
   });
 
-  test('POST rejects a service-bound plugin key when the client projectId is not numeric', async () => {
+  test('POST rejects a non-numeric client project claim with 401', async () => {
     const nonNumeric = accessToken(ctx.jwt, ['tokens:manage', 'events:publish'], {
       clientId: 'client-2',
       projectId: 'project-2',
@@ -93,7 +93,7 @@ describe('credential routes (e2e)', () => {
       name: 'sentry',
       scopes: ['events:publish'],
       service: 'api',
-    }).expect(422);
+    }).expect(401);
   });
 
   test('POST rejects a client-supplied projectId with 422', async () => {
@@ -148,7 +148,7 @@ describe('credential routes (e2e)', () => {
   test('GET lists only the caller credentials', async () => {
     const other = accessToken(ctx.jwt, ['tokens:manage'], {
       clientId: 'client-2',
-      projectId: 'project-2',
+      projectId: '12346',
     });
     const response = await request(app.getHttpServer())
       .get('/api/credentials')
@@ -240,7 +240,7 @@ describe('credential routes (e2e)', () => {
     }).expect(201);
     const otherProject = accessToken(ctx.jwt, ['tokens:manage'], {
       clientId: 'client-2',
-      projectId: 'project-2',
+      projectId: '12346',
     });
     await request(app.getHttpServer())
       .delete(`/api/credentials/${created.body.id}`)

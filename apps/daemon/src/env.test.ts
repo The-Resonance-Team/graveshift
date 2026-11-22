@@ -31,7 +31,6 @@ describe('daemon example environment values', () => {
 
   test('empty optional transport settings use intentional local defaults', () => {
     const config = readDaemonConfig({
-      GRAVESHIFT_PROJECT_ID: 'project-1',
       GRAVESHIFT_API_INTERNAL_TOKEN: 'local-api-test-token-with-at-least-32-chars',
       GRAVESHIFT_DAEMON_INTERNAL_TOKEN: 'local-daemon-test-token-with-at-least-32-chars',
       GRAVESHIFT_API_URL: '',
@@ -74,7 +73,6 @@ describe('daemon example environment values', () => {
     ).toThrow('configuration is invalid');
     expect(() =>
       readDaemonConfig({
-        GRAVESHIFT_PROJECT_ID: '',
         GRAVESHIFT_API_INTERNAL_TOKEN: '',
         GRAVESHIFT_DAEMON_INTERNAL_TOKEN: '',
       }),

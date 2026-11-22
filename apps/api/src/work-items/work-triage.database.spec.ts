@@ -4,6 +4,7 @@ import { dbTestEnabled, openTestDatabase } from '../../test/database/fixtures';
 import { AuditRepo } from '../audit/audit.repo';
 import { setupWorkDatabase, WORK_TEST_AGENTS, workCaller } from './testing/work-db.fixture';
 import { WorkItemRepo } from './work-item.repo';
+import { testProjectGrant } from '../internal/testing/project-grant.fixture';
 
 describe.skipIf(!dbTestEnabled)('Postgres pending triage command fencing', () => {
   const fixture = setupWorkDatabase();
@@ -30,9 +31,12 @@ describe.skipIf(!dbTestEnabled)('Postgres pending triage command fencing', () =>
       });
       const fresh = await openTestDatabase();
       try {
-        const restarted = new WorkItemRepo(fresh, new AuditRepo(fresh), WORK_TEST_AGENTS, {
-          projectId: 'project-1',
-        });
+        const restarted = new WorkItemRepo(
+          fresh,
+          new AuditRepo(fresh),
+          WORK_TEST_AGENTS,
+          testProjectGrant(['project-1']),
+        );
         await expect(
           restarted.saveTriage({
             caller: workCaller('automatic-command'),
