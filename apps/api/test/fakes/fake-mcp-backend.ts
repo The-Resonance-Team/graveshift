@@ -1,6 +1,6 @@
-import type { AuditEntry } from '@graveshift/core';
+import type { AuditEntry, CounterSnapshot, IncidentView, LimitCounters } from '@graveshift/core';
 
-import type { IncidentView, LimitCounters, McpBackend } from '../../src/mcp/mcp.types';
+import type { McpBackend } from '../../src/mcp/mcp.types';
 
 export const SECRET = 'AKIAIOSFODNN7EXAMPLE';
 
@@ -64,7 +64,7 @@ export class FakeMcpBackend implements McpBackend {
     return Promise.resolve(1);
   }
 
-  getCounters(): Promise<LimitCounters> {
-    return Promise.resolve(this.counters);
+  getCounters(): Promise<CounterSnapshot> {
+    return Promise.resolve({ source: 'wired', counters: this.counters });
   }
 }

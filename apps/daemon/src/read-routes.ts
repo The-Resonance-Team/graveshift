@@ -44,7 +44,12 @@ export const handleReadRequest =
     if (path === `${READ_BASE}/services`) return json(state.listServices());
     if (path === `${READ_BASE}/incidents`) return json(state.listIncidents());
     if (path.startsWith(`${READ_BASE}/incidents/`)) {
-      const id = decodeURIComponent(path.slice(`${READ_BASE}/incidents/`.length));
+      let id: string;
+      try {
+        id = decodeURIComponent(path.slice(`${READ_BASE}/incidents/`.length));
+      } catch {
+        return error(400, 'invalid_id');
+      }
       const view = state.getIncident(id);
       return view === undefined ? error(404, 'not_found') : json(view);
     }
@@ -71,5 +76,5 @@ export const handleReadRequest =
       return json({ value: state.queryMetric(promql) });
     }
     if (path === `${READ_BASE}/counters`) return json(state.counters());
-    return error(404, 'not_found');
+    return error(404, 'unknown_route');
   };

@@ -1,4 +1,6 @@
-import { type AuditEntry, AuditEntrySchema } from '@graveshift/core';
+import { createHash } from 'node:crypto';
+
+import { type AuditEntry, type ChainResult, AuditEntrySchema } from './schemas';
 
 export const GENESIS_HASH = '0'.repeat(64);
 
@@ -8,10 +10,10 @@ export type AuditDraft = Pick<AuditEntry, 'seq' | 'at' | 'actor' | 'type' | 'pay
 export type AuditInput = Pick<AuditEntry, 'actor' | 'type' | 'payload'> &
   Pick<Partial<AuditEntry>, 'incidentId'>;
 
-export type VerifyResult =
-  | { ok: true; length: number }
-  | { ok: false; brokenAtSeq: number; reason: string };
+/** One result shape for the chain helper and the daemon read route. */
+export type VerifyResult = ChainResult;
 
+/** One canonical byte string for every audit entry. The API and the daemon both use it. */
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
   if (value !== null && typeof value === 'object') {
@@ -31,7 +33,7 @@ export function hashEntry(draft: AuditDraft, prevHash: string): string {
     draft.payload,
     prevHash,
   ]);
-  return new Bun.CryptoHasher('sha256').update(body).digest('hex');
+  return createHash('sha256').update(body).digest('hex');
 }
 
 export function makeAuditEntry(

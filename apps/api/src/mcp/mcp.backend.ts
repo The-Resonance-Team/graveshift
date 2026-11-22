@@ -5,22 +5,32 @@ import {
   type HttpClient,
   HttpResponseError,
 } from '@nestjs/http-client';
-import type { AuditEntry } from '@graveshift/core';
+import { type AuditEntry, CounterSnapshotSchema, type IncidentView } from '@graveshift/core';
 
 import { DaemonUnavailableError } from './mcp.errors';
-import type { IncidentView, LimitCounters, McpBackend } from './mcp.types';
+import type { CounterSnapshot, McpBackend } from './mcp.types';
+
+const missingIncident = (body: unknown): boolean =>
+  typeof body === 'object' && body !== null && 'error' in body && body.error === 'not_found';
 
 /** The one client of the daemon read surface. A read failure never becomes empty data. */
 @Injectable()
 export class HttpMcpBackend implements McpBackend {
   constructor(@InjectHttpClient('daemon-read') private readonly http: HttpClient) {}
 
+  private fail(error: unknown): never {
+    if (error instanceof HttpResponseError && (error.status === 401 || error.status === 403)) {
+      throw new DaemonUnavailableError(error, 'daemon_auth');
+    }
+    throw new DaemonUnavailableError(error);
+  }
+
   private async read<T>(path: string, query?: HttpQuery): Promise<T> {
     try {
       const { data } = await this.http.get<T>(path, query === undefined ? {} : { query });
       return data;
     } catch (error) {
-      throw new DaemonUnavailableError(error);
+      return this.fail(error);
     }
   }
 
@@ -39,8 +49,14 @@ export class HttpMcpBackend implements McpBackend {
       });
       return data;
     } catch (error) {
-      if (error instanceof HttpResponseError && error.status === 404) return undefined;
-      throw new DaemonUnavailableError(error);
+      if (
+        error instanceof HttpResponseError &&
+        error.status === 404 &&
+        missingIncident(error.body)
+      ) {
+        return undefined;
+      }
+      return this.fail(error);
     }
   }
 
@@ -61,7 +77,12 @@ export class HttpMcpBackend implements McpBackend {
     return data.value;
   }
 
-  getCounters(): Promise<LimitCounters> {
-    return this.read<LimitCounters>('/read/counters');
+  async getCounters(): Promise<CounterSnapshot> {
+    const data = await this.read<unknown>('/read/counters');
+    try {
+      return CounterSnapshotSchema.parse(data);
+    } catch (error) {
+      return this.fail(error);
+    }
   }
 }

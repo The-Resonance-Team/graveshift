@@ -1,18 +1,13 @@
 import { getHttpClientToken, HttpNetworkError, HttpResponseError } from '@nestjs/http-client';
 import { Test } from '@nestjs/testing';
+import type { CounterSnapshot, IncidentView, LimitCounters } from '@graveshift/core';
 import { parsePolicy } from '@graveshift/policy';
 import { describe, expect, test } from 'bun:test';
 
 import { HttpMcpBackend } from './mcp.backend';
 import { DaemonUnavailableError } from './mcp.errors';
 import { McpTools } from './mcp.tools';
-import {
-  MCP_BACKEND,
-  MCP_ENV_MODE,
-  MCP_POLICY,
-  type IncidentView,
-  type LimitCounters,
-} from './mcp.types';
+import { MCP_BACKEND, MCP_ENV_MODE, MCP_POLICY } from './mcp.types';
 
 const DAEMON_CLIENT = getHttpClientToken('daemon-read');
 
@@ -22,6 +17,14 @@ const ZERO_COUNTERS: LimitCounters = {
   diagnosisLoops: 0,
   llmSpentTodayUsd: 0,
 };
+
+const snapshot = (
+  counters: LimitCounters,
+  source: 'wired' | 'not_wired' = 'wired',
+): CounterSnapshot => ({
+  source,
+  counters,
+});
 
 const incident: IncidentView = {
   incident: {
@@ -51,12 +54,12 @@ const policy = parsePolicy({
   default: 'deny',
 });
 
-const fakeDaemon = (counters: LimitCounters = ZERO_COUNTERS) => {
+const fakeDaemon = (countersReply: unknown = snapshot(ZERO_COUNTERS)) => {
   const calls: string[] = [];
   const replies: Record<string, unknown> = {
     '/read/services': [{ name: 'api', status: 'haunting' }],
     '/read/incidents': [incident, incident],
-    '/read/counters': counters,
+    '/read/counters': countersReply,
   };
   return {
     calls,
@@ -93,6 +96,9 @@ const build = async (client: unknown) => {
   };
 };
 
+const httpError = (status: number, body: unknown) =>
+  new HttpResponseError({ method: 'GET', url: '/read/incidents/nope', status, body });
+
 describe('HTTP MCP backend with a fake daemon', () => {
   test('a tool read returns daemon data, not an empty result', async () => {
     const daemon = fakeDaemon();
@@ -109,12 +115,13 @@ describe('HTTP MCP backend with a fake daemon', () => {
       diagnosisLoops: 1,
       llmSpentTodayUsd: 0.25,
     };
-    const { tools } = await build(fakeDaemon(counters).client);
+    const { tools } = await build(fakeDaemon(snapshot(counters)).client);
     const result = (await tools.proposeFix({ incidentId: 'inc-1', action: 'open_pr' })) as {
-      limits: { enforced: boolean; counters: LimitCounters };
+      limits: { enforced: boolean; source: string; counters: LimitCounters };
       decision: { reason: string };
     };
     expect(result.limits.enforced).toBe(true);
+    expect(result.limits.source).toBe('wired');
     expect(result.limits.counters).toEqual(counters);
     expect(result.decision.reason).toBe('rule:allow-pr');
   });
@@ -126,23 +133,79 @@ describe('HTTP MCP backend with a fake daemon', () => {
       diagnosisLoops: 0,
       llmSpentTodayUsd: 0,
     };
-    const { tools } = await build(fakeDaemon(counters).client);
+    const { tools } = await build(fakeDaemon(snapshot(counters)).client);
     const result = (await tools.proposeFix({ incidentId: 'inc-1', action: 'open_pr' })) as {
       decision: { reason: string };
     };
     expect(result.decision.reason).toBe('rate_limited');
   });
 
-  test('a missing incident is not an availability error', async () => {
-    const { backend } = await build(fakeDaemon().client);
+  test('propose_fix states that unwired counters do not enforce limits', async () => {
+    const { tools } = await build(fakeDaemon(snapshot(ZERO_COUNTERS, 'not_wired')).client);
+    const result = (await tools.proposeFix({ incidentId: 'inc-1', action: 'open_pr' })) as {
+      limits: { enforced: boolean; source: string; reason: string };
+    };
+    expect(result.limits.enforced).toBe(false);
+    expect(result.limits.source).toBe('not_wired');
+    expect(result.limits.reason).toContain('not enforced');
+  });
+
+  test('a malformed counters body makes the fix unavailable', async () => {
+    const malformed = [
+      { source: 'wired', counters: { openPrsLastHour: 0, actionsLast10Min: 0 } },
+      { source: 'wired', counters: { ...ZERO_COUNTERS, llmSpentTodayUsd: -1 } },
+      { source: 'wired', counters: { ...ZERO_COUNTERS, diagnosisLoops: Number.NaN } },
+    ];
+    await Promise.all(
+      malformed.map(async (body) => {
+        const { tools } = await build(fakeDaemon(body).client);
+        await expect(tools.proposeFix({ incidentId: 'inc-1', action: 'open_pr' })).rejects.toThrow(
+          DaemonUnavailableError,
+        );
+      }),
+    );
+  });
+
+  test('a 404 with a not_found body means the incident is absent', async () => {
     const client = {
       get: async () => {
-        throw new HttpResponseError({ method: 'GET', url: '/read/incidents/nope', status: 404 });
+        throw httpError(404, { error: 'not_found' });
       },
     };
-    const missing = await build(client);
-    expect(await missing.backend.getIncident('nope')).toBeUndefined();
+    const { backend } = await build(client);
+    expect(await backend.getIncident('nope')).toBeUndefined();
+  });
+
+  test('a 404 without a not_found body is an availability error', async () => {
+    const client = {
+      get: async () => {
+        throw httpError(404, { error: 'unknown_route' });
+      },
+    };
+    const { backend } = await build(client);
+    await expect(backend.getIncident('nope')).rejects.toThrow(DaemonUnavailableError);
+  });
+
+  test('a normal incident read still returns the daemon record', async () => {
+    const { backend } = await build(fakeDaemon().client);
     expect(await backend.getIncident('inc-1')).toEqual(incident);
+  });
+
+  test('a token error gets the daemon_auth code and still fails closed', async () => {
+    await Promise.all(
+      [401, 403].map(async (status) => {
+        const client = {
+          get: async () => {
+            throw httpError(status, { error: 'unauthorized' });
+          },
+        };
+        const { backend } = await build(client);
+        await expect(backend.listServices()).rejects.toMatchObject({
+          code: 'daemon_auth',
+          name: 'DaemonUnavailableError',
+        });
+      }),
+    );
   });
 
   test('the unavailable path fails closed when the daemon is down', async () => {
@@ -156,10 +219,10 @@ describe('HTTP MCP backend with a fake daemon', () => {
       },
     };
     const { backend, tools } = await build(down);
-    expect(backend.listServices()).rejects.toThrow(DaemonUnavailableError);
-    expect(backend.listIncidents()).rejects.toThrow(DaemonUnavailableError);
-    expect(backend.getCounters()).rejects.toThrow(DaemonUnavailableError);
-    expect(tools.proposeFix({ incidentId: 'inc-1', action: 'open_pr' })).rejects.toThrow(
+    await expect(backend.listServices()).rejects.toThrow(DaemonUnavailableError);
+    await expect(backend.listIncidents()).rejects.toThrow(DaemonUnavailableError);
+    await expect(backend.getCounters()).rejects.toThrow(DaemonUnavailableError);
+    await expect(tools.proposeFix({ incidentId: 'inc-1', action: 'open_pr' })).rejects.toThrow(
       DaemonUnavailableError,
     );
   });

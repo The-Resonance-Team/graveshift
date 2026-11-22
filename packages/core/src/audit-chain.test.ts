@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import { makeAuditEntry, verifyEntries } from './chain';
+import { makeAuditEntry, verifyEntries } from './audit-chain';
 
 describe('audit chain', () => {
   test('hashes a stable ordered chain and rejects edits, removals and reordering', () => {

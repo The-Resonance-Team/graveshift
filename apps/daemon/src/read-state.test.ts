@@ -1,6 +1,7 @@
+import type { IncidentView } from '@graveshift/core';
 import { describe, expect, test } from 'bun:test';
 
-import { createReadState, type IncidentView } from './read-state';
+import { createReadState } from './read-state';
 
 const incident: IncidentView = {
   incident: {
@@ -15,15 +16,18 @@ const incident: IncidentView = {
 };
 
 describe('daemon read state', () => {
-  test('starts empty with zero counters', () => {
+  test('starts empty with zero counters and an unwired source', () => {
     const state = createReadState();
     expect(state.listServices()).toEqual([]);
     expect(state.listIncidents()).toEqual([]);
     expect(state.counters()).toEqual({
-      openPrsLastHour: 0,
-      actionsLast10Min: 0,
-      diagnosisLoops: 0,
-      llmSpentTodayUsd: 0,
+      source: 'not_wired',
+      counters: {
+        openPrsLastHour: 0,
+        actionsLast10Min: 0,
+        diagnosisLoops: 0,
+        llmSpentTodayUsd: 0,
+      },
     });
   });
 
@@ -38,14 +42,12 @@ describe('daemon read state', () => {
   test('verifies a real audit hash chain and detects tampering', () => {
     const state = createReadState();
     state.appendAudit({
-      seq: 1,
       at: '2026-01-01T00:00:00.000Z',
       actor: 'wraith',
       type: 'incident.opened',
       payload: {},
     });
     state.appendAudit({
-      seq: 2,
       at: '2026-01-01T00:01:00.000Z',
       actor: 'medium',
       type: 'diagnosis.created',
@@ -55,7 +57,7 @@ describe('daemon read state', () => {
     const entries = state.listAudit(0, 10);
     expect(entries.map((entry) => entry.seq)).toEqual([1, 2]);
     entries[1]!.payload = { changed: true };
-    expect(state.verifyChain().ok).toBe(false);
+    expect(state.verifyChain()).toMatchObject({ ok: false, reason: 'hash mismatch' });
   });
 
   test('bounds a log tail and keeps the newest lines', () => {
@@ -68,14 +70,20 @@ describe('daemon read state', () => {
   test('reads metrics and counters that the daemon owns', () => {
     const state = createReadState();
     state.setMetric('up{service="api"}', 1);
-    state.setCounters({
-      openPrsLastHour: 2,
-      actionsLast10Min: 1,
-      diagnosisLoops: 0,
-      llmSpentTodayUsd: 0.5,
-    });
+    state.setCounters(
+      {
+        openPrsLastHour: 2,
+        actionsLast10Min: 1,
+        diagnosisLoops: 0,
+        llmSpentTodayUsd: 0.5,
+      },
+      'wired',
+    );
     expect(state.queryMetric('up{service="api"}')).toBe(1);
     expect(state.queryMetric('unknown')).toBeNull();
-    expect(state.counters().openPrsLastHour).toBe(2);
+    expect(state.counters()).toMatchObject({
+      source: 'wired',
+      counters: { openPrsLastHour: 2 },
+    });
   });
 });

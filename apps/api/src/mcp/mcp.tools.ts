@@ -95,8 +95,10 @@ export class McpTools {
     replicas?: number | undefined;
   }): Promise<unknown> {
     const view = need(await this.backend.getIncident(args.incidentId), 'incident not found');
-    // A daemon failure rejects the tool call. Zero counters are never assumed.
-    const counters = await this.backend.getCounters();
+    // A daemon failure or malformed counters reject the tool call. Zero counters are never assumed.
+    const snapshot = await this.backend.getCounters();
+    const counters = snapshot.counters;
+    const enforced = snapshot.source === 'wired';
     const action: PolicyAction = {
       name: args.action,
       ...(args.replicas === undefined ? {} : { params: { replicas: args.replicas } }),
@@ -115,7 +117,13 @@ export class McpTools {
       decision,
       audit: toAuditEvent(decision, ctx, action),
       executed: false,
-      limits: { enforced: true, counters, configured: this.policy.limits },
+      limits: {
+        enforced,
+        source: snapshot.source,
+        counters,
+        configured: this.policy.limits,
+        ...(enforced ? {} : { reason: 'daemon counters are not wired; limits are not enforced' }),
+      },
     });
   }
 

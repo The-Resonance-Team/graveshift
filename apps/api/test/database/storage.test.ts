@@ -3,9 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, describe, expect, test } from 'bun:test';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
+import type { AuditInput } from '@graveshift/core';
 
 import { AuditRepo } from '../../src/audit/repo/audit.repo';
-import { type AuditInput } from '../../src/audit/chain';
 import { PrismaCredentialRepo } from '../../src/auth/repo/credential.repo';
 import { CredentialService } from '../../src/auth/services/credential.service';
 import { CreateCredentialDto } from '../../src/auth/dto/create-credential.dto';

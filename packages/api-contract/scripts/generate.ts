@@ -8,6 +8,8 @@ const check = process.argv.includes('--check');
 // Document generation only boots the app; it never signs a token. Set an
 // ephemeral value before the imports, because ConfigModule validates at import.
 process.env.GRAVESHIFT_OAUTH_JWT_SECRET ??= randomBytes(32).toString('hex');
+// Document generation boots the app with the daemon config module. No real token is used.
+process.env.GRAVESHIFT_DAEMON_READ_TOKEN ??= 'doc-generation-only-read-token';
 const { createApp } = await import('../../../apps/api/src/app.factory');
 const { createOpenApiDocument } = await import('../../../apps/api/src/openapi');
 const app = await createApp();

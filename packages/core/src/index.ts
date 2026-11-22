@@ -1,3 +1,12 @@
+export {
+  GENESIS_HASH,
+  hashEntry,
+  makeAuditEntry,
+  type AuditDraft,
+  type AuditInput,
+  type VerifyResult,
+  verifyEntries,
+} from './audit-chain';
 export { err, GraveshiftError, ok, TransitionError, TriageError } from './errors';
 export type { Result, TransitionErrorCode, TriageErrorCode } from './errors';
 export {
@@ -17,22 +26,34 @@ export {
   ActionProposalSchema,
   ApprovalSchema,
   AuditEntrySchema,
+  ChainResultSchema,
+  CounterSnapshotSchema,
+  CounterSourceSchema,
   DiagnosisSchema,
   EventEnvelopeSchema,
   INCIDENT_STATES,
   IncidentSchema,
   IncidentStateSchema,
+  IncidentViewSchema,
+  LimitCountersSchema,
   SIGNAL_KINDS,
+  ServiceViewSchema,
   SignalSchema,
 } from './schemas';
 export type {
   ActionProposal,
   Approval,
   AuditEntry,
+  ChainResult,
+  CounterSnapshot,
+  CounterSource,
   Diagnosis,
   EventEnvelope,
   Incident,
   IncidentState,
+  IncidentView,
+  LimitCounters,
+  ServiceView,
   Signal,
 } from './schemas';
 export { BREAKER_WINDOW_MS, shouldTripBreaker, TRANSITIONS, transition } from './state';
