@@ -169,7 +169,7 @@ describe('POST /api/rules/validate (e2e)', () => {
         severities: ['warning'],
         services: ['api'],
         types: ['graveshift.oom'],
-        tenantId: 'tenant_1',
+        projectId: 'project_1',
       },
     };
     const response = await request(app.getHttpServer())

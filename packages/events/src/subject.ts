@@ -3,7 +3,7 @@ import type { EventEnvelope } from '@graveshift/core';
 /** The prefix of every Graveshift event subject. */
 export const SUBJECT_PREFIX = 'graveshift';
 
-/** The filter of the one event stream. It spans both lanes and all tenants. */
+/** The filter of the one event stream. It spans both lanes and all projects. */
 export const EVENTS_SUBJECT_FILTER = `${SUBJECT_PREFIX}.>`;
 
 /** The filter a per-Grave detection consumer uses. */
@@ -30,12 +30,12 @@ export function laneFor(severity: EventEnvelope['severity']): Lane {
 
 /**
  * Fail closed on an unvalidated caller. The primary rule is EventEnvelopeSchema
- * in packages/core: tenantId is one token and type is a dotted list of tokens.
+ * in packages/core: projectId is one token and type is a dotted list of tokens.
  * A type keeps its dots; neither part may carry a wildcard or a wildcard-like
  * empty token.
  */
-function assertSafeSubjectPart(value: string, name: 'tenantId' | 'type'): void {
-  if (name === 'tenantId' && value.includes('.')) {
+function assertSafeSubjectPart(value: string, name: 'projectId' | 'type'): void {
+  if (name === 'projectId' && value.includes('.')) {
     throw new Error(`Unsafe ${name} in event subject`);
   }
   const tokens = value.split('.');
@@ -44,16 +44,16 @@ function assertSafeSubjectPart(value: string, name: 'tenantId' | 'type'): void {
   }
 }
 
-/** Build `graveshift.<tenantId>.<lane>.<grave>.<type>`. */
+/** Build `graveshift.<projectId>.<lane>.<grave>.<type>`. */
 export function publishSubject(envelope: EventEnvelope): string {
-  assertSafeSubjectPart(envelope.tenantId, 'tenantId');
+  assertSafeSubjectPart(envelope.projectId, 'projectId');
   assertSafeSubjectPart(envelope.type, 'type');
   const grave = safeSubjectToken(envelope.service);
-  return `${SUBJECT_PREFIX}.${envelope.tenantId}.${laneFor(envelope.severity)}.${grave}.${envelope.type}`;
+  return `${SUBJECT_PREFIX}.${envelope.projectId}.${laneFor(envelope.severity)}.${grave}.${envelope.type}`;
 }
 
 /** Build the dead-letter subject for an exhausted detection envelope. */
-export function deadLetterSubject(tenantId: string, grave: string): string {
-  assertSafeSubjectPart(tenantId, 'tenantId');
-  return `${SUBJECT_PREFIX}.${tenantId}.dlq.${safeSubjectToken(grave)}`;
+export function deadLetterSubject(projectId: string, grave: string): string {
+  assertSafeSubjectPart(projectId, 'projectId');
+  return `${SUBJECT_PREFIX}.${projectId}.dlq.${safeSubjectToken(grave)}`;
 }

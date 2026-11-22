@@ -12,7 +12,7 @@ import type { EventEnvelope } from './schemas';
 
 const envelope: EventEnvelope = {
   id: 'evt-1',
-  tenantId: 'tenant-1',
+  projectId: 'project-1',
   source: 'collector.docker',
   service: 'api',
   type: 'signal.oom',
@@ -83,9 +83,9 @@ describe('rule engine', () => {
     expect(evaluateEnvelope(envelope, [disabled])).toBe('detect');
   });
 
-  test('matches tenantId, service, severity and type', () => {
+  test('matches projectId, service, severity and type', () => {
     const cases: Array<[Partial<EventEnvelope>, Rule['match'], Rule['action']]> = [
-      [{ tenantId: 'tenant-1' }, { tenantId: 'tenant-1' }, 'suppress'],
+      [{ projectId: 'project-1' }, { projectId: 'project-1' }, 'suppress'],
       [{ service: 'api' }, { services: ['api'] }, 'escalate'],
       [{ severity: 'warning' }, { severities: ['warning', 'critical'] }, 'suppress'],
       [{ type: 'signal.oom' }, { types: ['signal.oom'] }, 'escalate'],
@@ -98,7 +98,7 @@ describe('rule engine', () => {
 
   test('does not match when one field differs', () => {
     const candidate = rule('rule-1', 'suppress', 0, {
-      tenantId: 'tenant-2',
+      projectId: 'project-2',
       services: ['api'],
       severities: ['critical'],
       types: ['signal.oom'],

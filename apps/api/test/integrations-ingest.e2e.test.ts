@@ -9,7 +9,7 @@ import { accessToken, buildAuthApp, type AuthTestApp } from './fakes/auth-test-h
 function integrationEnvelope(kind: 'plugin' | 'collector', id: string): EventEnvelope {
   return EventEnvelopeSchema.parse({
     id,
-    tenantId: 'tenant-1',
+    projectId: 'project-1',
     source: kind === 'plugin' ? 'plugin.nestjs' : 'collector.fake',
     service: 'api',
     type: kind === 'plugin' ? 'http.request' : 'signal.fake',

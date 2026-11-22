@@ -1,5 +1,7 @@
 # Platform v2 decisions — draft for grilling
 
+> Historical record. [ADR 0018](../adr/0018-project-scoped-state.md) later replaced `tenantId` with `projectId`.
+
 Date: 2026-11-20
 Status: draft — recorded as stated by the owner; not accepted until grilling ends.
 

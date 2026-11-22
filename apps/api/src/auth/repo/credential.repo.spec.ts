@@ -6,7 +6,7 @@ import { CredentialLimitError } from './credential.repo';
 
 const principal: Principal = {
   clientId: 'client-1',
-  tenantId: 'tenant-1',
+  projectId: 'project-1',
   scopes: ['tokens:manage', 'events:publish'],
 };
 
@@ -17,10 +17,9 @@ const record = (id: string, hash: string): CredentialRecord => ({
   prefix: 'plugin_abcdef12',
   hash,
   clientId: principal.clientId,
-  tenantId: principal.tenantId,
+  projectId: principal.projectId,
   scopes: ['events:publish'],
   service: null,
-  projectId: null,
   createdAt: new Date().toISOString(),
   expiresAt: null,
   revokedAt: null,
@@ -33,7 +32,7 @@ describe('credential repository contract', () => {
     await repo.add(record('cred-1', 'a'.repeat(64)));
     expect(await repo.findByHash('a'.repeat(64))).toMatchObject({ id: 'cred-1' });
     expect(await repo.list(principal)).toHaveLength(1);
-    expect(await repo.list({ ...principal, tenantId: 'tenant-2' })).toEqual([]);
+    expect(await repo.list({ ...principal, projectId: 'project-2' })).toEqual([]);
     expect(repo.auditEvents).toEqual([
       {
         actor: 'client-1',

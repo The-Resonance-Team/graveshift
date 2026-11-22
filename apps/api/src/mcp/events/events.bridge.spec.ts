@@ -50,7 +50,7 @@ describe('EventsBridge', () => {
     ]);
   });
 
-  test('requires authentication for events/list and tenant scope for events/poll', async () => {
+  test('requires authentication for events/list and project scope for events/poll', async () => {
     const handlers = new Map<string, (...args: never[]) => unknown>();
     const server = {
       server: {
@@ -64,8 +64,8 @@ describe('EventsBridge', () => {
     } as unknown as McpServer;
     const service = {
       list: () => ({ resultType: 'complete' as const, events: [] }),
-      poll: (_params: unknown, scopes: readonly string[], tenantId: string) =>
-        Promise.resolve({ scopes, tenantId }),
+      poll: (_params: unknown, scopes: readonly string[], projectId: string) =>
+        Promise.resolve({ scopes, projectId }),
     } as unknown as EventPollService;
     registerEvents(server, service, async () => ({ scopes: [] }));
     const list = handlers.get('events/list')!;

@@ -7,7 +7,7 @@ import { MANAGEMENT_SCOPE } from './scopes';
 
 interface OAuthPayload {
   sub?: string;
-  tenantId?: string;
+  projectId?: string;
   scope?: string[];
   iss?: string;
   aud?: string | string[];
@@ -34,7 +34,7 @@ export class OAuthClientCredentialsStrategy extends PassportStrategy(
     const now = Math.floor(Date.now() / 1000);
     if (
       !payload?.sub ||
-      !payload.tenantId ||
+      !payload.projectId ||
       !Array.isArray(payload.scope) ||
       payload.iss !== this.config.jwtIssuer ||
       payload.aud !== this.config.jwtAudience ||
@@ -43,13 +43,13 @@ export class OAuthClientCredentialsStrategy extends PassportStrategy(
     ) {
       throw new UnauthorizedException();
     }
-    // The tenant and the scope grant come from the boot registry, not from token claims.
+    // The project and the scope grant come from the boot registry, not from token claims.
     const entry = this.config.oauthClients[payload.sub];
-    if (!entry || entry.tenantId !== payload.tenantId) throw new UnauthorizedException();
+    if (!entry || entry.projectId !== payload.projectId) throw new UnauthorizedException();
     if (!payload.scope.includes(MANAGEMENT_SCOPE)) throw new UnauthorizedException();
     if (!payload.scope.every((scope) => entry.scopes.includes(scope))) {
       throw new UnauthorizedException();
     }
-    return { clientId: payload.sub, tenantId: payload.tenantId, scopes: payload.scope };
+    return { clientId: payload.sub, projectId: payload.projectId, scopes: payload.scope };
   }
 }

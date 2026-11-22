@@ -18,7 +18,7 @@ const fixedClock: Clock = {
 function makeContext(): { context: Context; publisher: InMemoryPublisher } {
   const publisher = createInMemoryPublisher();
   return {
-    context: { publisher, tenantId: 'tenant-1', service: 'api' },
+    context: { publisher, projectId: 'project-1', service: 'api' },
     publisher,
   };
 }
@@ -41,7 +41,7 @@ describe('envelopeBuilder', () => {
     expect(() => EventEnvelopeSchema.parse(envelope)).not.toThrow();
     expect(envelope).toEqual({
       id: 'id-1',
-      tenantId: 'tenant-1',
+      projectId: 'project-1',
       source: 'collector.fake',
       service: 'api',
       type: 'signal.fake',
@@ -96,10 +96,10 @@ describe('validateContext', () => {
     expect(() => validateContext(context)).not.toThrow();
   });
 
-  test('rejects a missing publisher, tenantId or service', () => {
+  test('rejects a missing publisher, projectId or service', () => {
     const { context } = makeContext();
     expect(() => validateContext({ ...context, publisher: {} as never })).toThrow('publisher');
-    expect(() => validateContext({ ...context, tenantId: 'bad tenant' })).toThrow('tenantId');
+    expect(() => validateContext({ ...context, projectId: 'bad project' })).toThrow('projectId');
     expect(() => validateContext({ ...context, service: '' })).toThrow('service');
     expect(() => validateContext(undefined as never)).toThrow('object');
   });
@@ -120,7 +120,7 @@ describe('Collector example', () => {
     expect(envelope).toBeDefined();
     expect(() => EventEnvelopeSchema.parse(envelope)).not.toThrow();
     expect(envelope).toMatchObject({
-      tenantId: 'tenant-1',
+      projectId: 'project-1',
       service: 'api',
       source: 'collector.fake',
       severity: 'warning',

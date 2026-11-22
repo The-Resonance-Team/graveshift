@@ -30,10 +30,9 @@ export interface CredentialRecord {
   prefix: string;
   hash: string;
   clientId: string;
-  tenantId: string;
+  projectId: string;
   scopes: string[];
   service: string | null;
-  projectId: string | null;
   createdAt: string;
   expiresAt: string | null;
   revokedAt: string | null;
@@ -42,7 +41,7 @@ export interface CredentialRecord {
 
 export interface Principal {
   clientId: string;
-  tenantId: string;
+  projectId: string;
   scopes: string[];
 }
 
@@ -50,7 +49,6 @@ export interface VerifiedCredential extends Principal {
   id: string;
   kind: CredentialKind;
   service: string | null;
-  projectId: string | null;
 }
 
 export interface CredentialVerifier {
@@ -63,7 +61,6 @@ export interface CredentialMetadata {
   name: string;
   scopes: string[];
   service: string | null;
-  projectId: string | null;
   createdAt: string;
   expiresAt: string | null;
   revokedAt: string | null;

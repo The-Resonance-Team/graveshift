@@ -45,7 +45,7 @@ export class RuleMatchDto {
   @ValidateIf((_, value) => value !== undefined)
   @IsString()
   @Matches(TOKEN_PATTERN)
-  tenantId?: string;
+  projectId?: string;
 }
 
 // A Rule on the wire. Its shape matches RuleSchema; validation stays at the boundary.

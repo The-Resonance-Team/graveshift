@@ -13,7 +13,7 @@ import { McpTools } from './mcp.tools';
 
 interface BearerRequest {
   headers?: { authorization?: string };
-  authInfo?: { scopes: string[]; tenantId: string };
+  authInfo?: { scopes: string[]; projectId: string };
   mcpPrincipal?: { scopes: string[] };
 }
 
@@ -55,14 +55,14 @@ describe('MCP guard pairing', () => {
     const credentials = {
       verify: async (_token: string, kind: string) => {
         expect(kind).toBe('mcp');
-        return { clientId: 'client-1', tenantId: 'tenant-1', scopes: ['incidents:read'] };
+        return { clientId: 'client-1', projectId: 'project-1', scopes: ['incidents:read'] };
       },
     } as unknown as CredentialService;
     const http = new ExecutionContextHost([request, { setHeader() {} }]);
     http.setType('http');
 
     expect(await new McpBearerGuard(credentials).canActivate(http)).toBe(true);
-    expect(request.authInfo).toMatchObject({ scopes: ['incidents:read'], tenantId: 'tenant-1' });
+    expect(request.authInfo).toMatchObject({ scopes: ['incidents:read'], projectId: 'project-1' });
     expect(() => new McpScopeGuard().canActivate(mcpContext(request))).toThrow(ForbiddenException);
     expect(new McpScopeGuard().canActivate(mcpContext())).toBe(true);
   });

@@ -22,22 +22,23 @@ if (generated.exitCode !== 0) throw new Error(generated.stderr.toString());
 const generatedSql = generated.stdout.toString();
 
 describe('Prisma drift check', () => {
-  test('keeps table ownership for additive columns and indexes', () => {
+  test('keeps table ownership for columns and indexes', () => {
     const canonical = canonicalLines(migrationSql);
-    expect(canonical).toContain('TABLE credentials COLUMN "project_id" TEXT');
+    expect(canonical).toContain('TABLE credentials COLUMN "project_id" TEXT NOT NULL');
     expect(canonical).toContain(
-      'TABLE credentials UNIQUE_KEY credentials_tenant_id_project_id_key ("tenant_id", "project_id")',
+      'TABLE credentials UNIQUE_KEY credentials_project_id_hash_key ("project_id", "hash")',
     );
+    expect(canonical.some((line) => line.includes('COLUMN "tenant_id"'))).toBe(false);
   });
 
   test('accepts the committed migration set', () => {
     expect(driftMatches(migrationSql, generatedSql)).toBe(true);
   });
 
-  test('fails when the ALTER TABLE targets the wrong table', () => {
+  test('fails when the CREATE TABLE targets the wrong table', () => {
     const mutated = migrationSql.replace(
-      'ALTER TABLE "credentials" ADD COLUMN',
-      'ALTER TABLE "grave_events" ADD COLUMN',
+      'CREATE TABLE "credentials" (',
+      'CREATE TABLE "grave_events" (',
     );
     expect(mutated).not.toBe(migrationSql);
     expect(driftMatches(mutated, generatedSql)).toBe(false);
@@ -45,8 +46,8 @@ describe('Prisma drift check', () => {
 
   test('fails when the unique index targets the wrong table', () => {
     const mutated = migrationSql.replace(
-      'ON "credentials"("tenant_id", "project_id")',
-      'ON "tenants"("tenant_id", "project_id")',
+      'ON "credentials"("project_id", "hash")',
+      'ON "grave_events"("project_id", "hash")',
     );
     expect(mutated).not.toBe(migrationSql);
     expect(driftMatches(mutated, generatedSql)).toBe(false);

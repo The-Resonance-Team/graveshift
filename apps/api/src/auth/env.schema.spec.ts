@@ -14,7 +14,7 @@ const base = {
   GRAVESHIFT_EVENT_RATE_LIMIT: '60',
   GRAVESHIFT_EVENT_RATE_TTL_MS: '60000',
   GRAVESHIFT_OAUTH_CLIENTS:
-    '{"client-1":{"secret":"test-client-secret-123456","tenantId":"tenant-1","scopes":["tokens:manage"]}}',
+    '{"client-1":{"secret":"test-client-secret-123456","projectId":"project-1","scopes":["tokens:manage"]}}',
 };
 
 describe('boot env config', () => {

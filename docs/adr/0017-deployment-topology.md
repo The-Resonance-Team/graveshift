@@ -2,6 +2,8 @@
 
 Status: accepted
 
+> [ADR 0018](0018-project-scoped-state.md) supersedes the `tenantId` clause here. `projectId` replaces it.
+
 Date: 2026-11-22.
 
 Part of #18. This decision unblocks #48. It fixes process placement and the

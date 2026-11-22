@@ -5,7 +5,7 @@ process.env.GRAVESHIFT_DAEMON_READ_TOKEN ??= 'test-only-daemon-read-token';
 process.env.GRAVESHIFT_OAUTH_CLIENTS ??= JSON.stringify({
   'client-1': {
     secret: 'test-client-secret-123456',
-    tenantId: 'tenant-1',
+    projectId: 'project-1',
     scopes: [
       'tokens:manage',
       'incidents:read',
@@ -19,7 +19,7 @@ process.env.GRAVESHIFT_OAUTH_CLIENTS ??= JSON.stringify({
   },
   'client-2': {
     secret: 'test-client-secret-654321',
-    tenantId: 'tenant-2',
+    projectId: 'project-2',
     scopes: ['tokens:manage', 'incidents:read'],
   },
 });

@@ -41,7 +41,7 @@ export class EventsController {
     standardSchema: eventAcceptedSchema,
   })
   @ApiUnauthorizedResponse({ description: 'The plugin API key is not valid.' })
-  @ApiForbiddenResponse({ description: 'The scope, tenant or service binding failed.' })
+  @ApiForbiddenResponse({ description: 'The scope, project or service binding failed.' })
   @ApiPayloadTooLargeResponse({ description: 'The envelope exceeds the size limit.' })
   @ApiTooManyRequestsResponse({ description: 'The key reached its request rate limit.' })
   @ApiUnprocessableEntityResponse({ description: 'The envelope is malformed.' })

@@ -1,9 +1,5 @@
 import type { CredentialRecord, Principal } from '../../src/auth/auth.types';
-import {
-  CredentialConflictError,
-  CredentialLimitError,
-  CredentialRepo,
-} from '../../src/auth/repo/credential.repo';
+import { CredentialLimitError, CredentialRepo } from '../../src/auth/repo/credential.repo';
 
 /** In-memory store for tests. It reads no file and holds no secret. */
 export class FakeCredentialRepo extends CredentialRepo {
@@ -15,7 +11,7 @@ export class FakeCredentialRepo extends CredentialRepo {
     return this.records
       .filter(
         (record) =>
-          record.clientId === principal.clientId && record.tenantId === principal.tenantId,
+          record.clientId === principal.clientId && record.projectId === principal.projectId,
       )
       .map((record) => ({ ...record }));
   }
@@ -28,19 +24,11 @@ export class FakeCredentialRepo extends CredentialRepo {
     const active = this.records.filter(
       (item) =>
         item.clientId === record.clientId &&
-        item.tenantId === record.tenantId &&
+        item.projectId === record.projectId &&
         item.revokedAt === null &&
         (item.expiresAt === null || Date.parse(item.expiresAt) > Date.now()),
     ).length;
     if (active >= 10) throw new CredentialLimitError();
-    if (
-      record.projectId !== null &&
-      this.records.some(
-        (item) => item.tenantId === record.tenantId && item.projectId === record.projectId,
-      )
-    ) {
-      throw new CredentialConflictError();
-    }
     this.records.push({ ...record });
     this.auditEvents.push({
       actor: record.clientId,
@@ -54,7 +42,7 @@ export class FakeCredentialRepo extends CredentialRepo {
       (item) =>
         item.id === id &&
         item.clientId === principal.clientId &&
-        item.tenantId === principal.tenantId,
+        item.projectId === principal.projectId,
     );
     if (!record) return false;
     if (record.revokedAt !== null) return true;

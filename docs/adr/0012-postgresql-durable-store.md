@@ -2,6 +2,8 @@
 
 Status: accepted
 
+> [ADR 0018](0018-project-scoped-state.md) supersedes the `tenantId` clause here. `projectId` replaces it.
+
 On 2026-11-21 the owner chose PostgreSQL as the single durable store for platform v2. The owner moved work items, the audit chain and Credentials into it. Event occurrences and Cursors stayed in the event backbone from ADR 0005. The owner kept derived caches in memory. Config stayed in YAML under ADR 0011. The owner replaced the file-backed and process-lifetime stores.
 A restart could no longer lose state.
 Two API instances could no longer hold different copies of it.

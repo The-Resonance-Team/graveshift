@@ -1,6 +1,5 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import {
-  BadRequestException,
   ConflictException,
   ForbiddenException,
   Inject,
@@ -55,15 +54,6 @@ export class CredentialService implements CredentialVerifier {
     if (dto.kind === 'mcp' && dto.service !== undefined) {
       throw new ForbiddenException('An MCP token cannot have a service binding');
     }
-    if (
-      dto.projectId !== undefined &&
-      (!/^\d{1,20}$/.test(dto.projectId) || !dto.service || dto.kind !== 'plugin')
-    ) {
-      throw new BadRequestException('A Sentry project id requires a bound plugin credential');
-    }
-    if (dto.projectId && (dto.scopes.length !== 1 || dto.scopes[0] !== 'events:publish')) {
-      throw new ForbiddenException('A Sentry credential can only publish events');
-    }
 
     try {
       // Lowercase hex gives a 64-character value that a Sentry DSN accepts verbatim.
@@ -77,10 +67,9 @@ export class CredentialService implements CredentialVerifier {
         prefix: `${dto.kind}_${value.slice(0, 8)}`,
         hash: digest(value),
         clientId: principal.clientId,
-        tenantId: principal.tenantId,
+        projectId: principal.projectId,
         scopes: [...dto.scopes],
         service: dto.service ?? null,
-        projectId: dto.projectId ?? null,
         createdAt: now,
         expiresAt: new Date(
           Date.now() + Math.min(ttl, this.config.maxTtlSeconds) * 1000,
@@ -119,11 +108,10 @@ export class CredentialService implements CredentialVerifier {
     return {
       id: record.id,
       clientId: record.clientId,
-      tenantId: record.tenantId,
+      projectId: record.projectId,
       scopes: record.scopes,
       kind: record.kind,
       service: record.service,
-      projectId: record.projectId ?? null,
     };
   }
 
@@ -146,7 +134,7 @@ export class CredentialService implements CredentialVerifier {
       const oldest = this.clientIndex.keys().next().value;
       if (oldest) this.clientIndex.delete(oldest);
     }
-    this.clientIndex.set(digest(value), `${record.tenantId}:${record.clientId}`);
+    this.clientIndex.set(digest(value), `${record.projectId}:${record.clientId}`);
   }
 
   private isActive(record: CredentialRecord): boolean {
@@ -169,7 +157,6 @@ export class CredentialService implements CredentialVerifier {
       name: record.name,
       scopes: record.scopes,
       service: record.service,
-      projectId: record.projectId ?? null,
       createdAt: record.createdAt,
       expiresAt: record.expiresAt,
       revokedAt: record.revokedAt,

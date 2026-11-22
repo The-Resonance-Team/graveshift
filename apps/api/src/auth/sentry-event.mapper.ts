@@ -92,7 +92,7 @@ export function mapSentryEvent(
 
   return {
     id,
-    tenantId: credential.tenantId,
+    projectId: credential.projectId,
     source: 'sentry',
     service: credential.service ?? '',
     type,

@@ -37,7 +37,7 @@ enum CredentialKind {
 
 model WorkItem {
   id              String           @id
-  tenantId        String           @map("tenant_id")
+  projectId       String           @map("project_id")
   title           String
   description     String
   successCriteria String[]         @map("success_criteria")
@@ -60,12 +60,12 @@ model WorkItem {
   draftPr         Json?            @map("draft_pr")
   version         Int              @default(0)
 
-  @@index([tenantId])
+  @@index([projectId])
   @@map("work_items")
 }
 
 model AuditEntry {
-  tenantId   String   @map("tenant_id")
+  projectId  String   @map("project_id")
   seq        Int
   at         DateTime
   actor      String
@@ -75,13 +75,13 @@ model AuditEntry {
   prevHash   String   @map("prev_hash")
   hash       String
 
-  @@id([tenantId, seq])
+  @@id([projectId, seq])
   @@map("audit_entries")
 }
 
 model Credential {
   id                  String         @id
-  tenantId            String         @map("tenant_id")
+  projectId           String         @map("project_id")
   kind                CredentialKind
   name                String
   prefix              String
@@ -89,14 +89,12 @@ model Credential {
   clientId            String         @map("client_id")
   scopes              String[]
   service             String?
-  projectId           String?        @map("project_id")
   createdAt           DateTime       @map("created_at")
   expiresAt           DateTime?      @map("expires_at")
   revokedAt           DateTime?      @map("revoked_at")
   expirationAuditedAt DateTime?      @map("expiration_audited_at")
 
-  @@unique([tenantId, hash])
-  @@unique([tenantId, projectId])
+  @@unique([projectId, hash])
   @@index([hash])
   @@map("credentials")
 }

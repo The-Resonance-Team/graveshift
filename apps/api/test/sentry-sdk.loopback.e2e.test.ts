@@ -9,7 +9,6 @@ const TEST_KEY = 'c'.repeat(64);
 const credential: VerifiedCredential = {
   id: 'loopback-credential',
   clientId: 'client-1',
-  tenantId: 'tenant-1',
   scopes: [EVENTS_PUBLISH_SCOPE],
   kind: 'plugin',
   service: 'api',
@@ -52,7 +51,7 @@ describe.skipIf(process.env.CI === 'true')('Sentry SDK loopback ingest', () => {
     expect(ctx.publisher.envelopes).toHaveLength(1);
     expect(ctx.publisher.envelopes[0]).toMatchObject({
       id: 'fedcba9876543210fedcba9876543210',
-      tenantId: 'tenant-1',
+      projectId: '12345',
       service: 'api',
       severity: 'critical',
       payload: { message: 'Local Sentry event' },

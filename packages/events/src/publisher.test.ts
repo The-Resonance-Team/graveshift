@@ -6,7 +6,7 @@ import { createInMemoryPublisher } from './testing';
 
 const envelope: EventEnvelope = {
   id: 'evt-1',
-  tenantId: 'tenant-1',
+  projectId: 'project-1',
   source: 'collector.docker',
   service: 'api',
   type: 'signal.oom',
@@ -39,20 +39,20 @@ function fakeTarget(failure?: Error): { target: PublishTarget; published: Publis
 
 describe('publish subject', () => {
   test('info uses the telemetry lane and includes the Grave token', () => {
-    expect(publishSubject(envelope)).toBe('graveshift.tenant-1.telemetry.api.signal.oom');
+    expect(publishSubject(envelope)).toBe('graveshift.project-1.telemetry.api.signal.oom');
   });
 
   for (const severity of ['warning', 'critical'] as const) {
     test(`${severity} uses the detection lane and includes the Grave token`, () => {
       expect(publishSubject({ ...envelope, severity })).toBe(
-        `graveshift.tenant-1.detection.api.signal.oom`,
+        `graveshift.project-1.detection.api.signal.oom`,
       );
     });
   }
 
   test('maps a service with unsafe characters to one safe token', () => {
     expect(publishSubject({ ...envelope, service: 'checkout.api/v2' })).toBe(
-      'graveshift.tenant-1.telemetry.checkout_api_v2.signal.oom',
+      'graveshift.project-1.telemetry.checkout_api_v2.signal.oom',
     );
   });
 
@@ -65,9 +65,9 @@ describe('publish subject', () => {
 });
 
 describe('subject part safety', () => {
-  test('publishSubject rejects an unsafe tenantId', () => {
-    for (const tenantId of ['a.b', 'a*b', 'a>b', 'a b', '']) {
-      expect(() => publishSubject({ ...envelope, tenantId })).toThrow('tenantId');
+  test('publishSubject rejects an unsafe projectId', () => {
+    for (const projectId of ['a.b', 'a*b', 'a>b', 'a b', '']) {
+      expect(() => publishSubject({ ...envelope, projectId })).toThrow('projectId');
     }
   });
 
@@ -76,13 +76,13 @@ describe('subject part safety', () => {
       expect(() => publishSubject({ ...envelope, type })).toThrow('type');
     }
     expect(publishSubject({ ...envelope, type: 'checkout.http.request' })).toBe(
-      'graveshift.tenant-1.telemetry.api.checkout.http.request',
+      'graveshift.project-1.telemetry.api.checkout.http.request',
     );
   });
 
-  test('the core schema already limits tenantId and type', () => {
-    for (const tenantId of ['a.b', 'a*b', 'a>b']) {
-      expect(() => EventEnvelopeSchema.parse({ ...envelope, tenantId })).toThrow();
+  test('the core schema already limits projectId and type', () => {
+    for (const projectId of ['a.b', 'a*b', 'a>b']) {
+      expect(() => EventEnvelopeSchema.parse({ ...envelope, projectId })).toThrow();
     }
     for (const type of ['signal.*', 'signal.>']) {
       expect(() => EventEnvelopeSchema.parse({ ...envelope, type })).toThrow();
@@ -115,7 +115,7 @@ describe('createNatsPublisher', () => {
     await createNatsPublisher(target).publish({ ...envelope, severity: 'critical' });
 
     const record = published[0];
-    expect(record?.subject).toBe('graveshift.tenant-1.detection.api.signal.oom');
+    expect(record?.subject).toBe('graveshift.project-1.detection.api.signal.oom');
     const decoded = JSON.parse(new TextDecoder().decode(record?.payload)) as EventEnvelope;
     expect(decoded).toEqual({ ...envelope, severity: 'critical' });
   });
