@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import {
+  BadRequestException,
   ConflictException,
   ForbiddenException,
   Inject,
@@ -14,12 +15,17 @@ import {
   type AuthConfig,
   type CredentialMetadata,
   type CredentialRecord,
+  type CredentialVerifier,
   type IssuedCredential,
   type Principal,
   type VerifiedCredential,
 } from '../auth.types';
 import type { CreateCredentialDto } from '../dto/create-credential.dto';
-import { CredentialLimitError, CredentialRepo } from '../repo/credential.repo';
+import {
+  CredentialConflictError,
+  CredentialLimitError,
+  CredentialRepo,
+} from '../repo/credential.repo';
 import { FORBIDDEN_SCOPES, type CredentialKind, scopesForKind } from '../scopes';
 
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
@@ -27,7 +33,7 @@ const MAX_CLIENT_INDEX = 1000;
 
 /** The one issuer and verifier for MCP tokens and plugin API keys. */
 @Injectable()
-export class CredentialService {
+export class CredentialService implements CredentialVerifier {
   private readonly clientIndex = new Map<string, string>();
 
   constructor(
@@ -49,9 +55,19 @@ export class CredentialService {
     if (dto.kind === 'mcp' && dto.service !== undefined) {
       throw new ForbiddenException('An MCP token cannot have a service binding');
     }
+    if (
+      dto.projectId !== undefined &&
+      (!/^\d{1,20}$/.test(dto.projectId) || !dto.service || dto.kind !== 'plugin')
+    ) {
+      throw new BadRequestException('A Sentry project id requires a bound plugin credential');
+    }
+    if (dto.projectId && (dto.scopes.length !== 1 || dto.scopes[0] !== 'events:publish')) {
+      throw new ForbiddenException('A Sentry credential can only publish events');
+    }
 
     try {
-      const value = randomBytes(32).toString('base64url');
+      // Lowercase hex gives a 64-character value that a Sentry DSN accepts verbatim.
+      const value = randomBytes(32).toString('hex');
       const now = new Date().toISOString();
       const ttl = dto.ttlSeconds ?? this.config.defaultTtlSeconds;
       const record: CredentialRecord = {
@@ -64,6 +80,7 @@ export class CredentialService {
         tenantId: principal.tenantId,
         scopes: [...dto.scopes],
         service: dto.service ?? null,
+        projectId: dto.projectId ?? null,
         createdAt: now,
         expiresAt: new Date(
           Date.now() + Math.min(ttl, this.config.maxTtlSeconds) * 1000,
@@ -76,7 +93,7 @@ export class CredentialService {
       // The value is returned once. It is never stored, logged or listed again.
       return { ...this.toMetadata(record), prefix: record.prefix, value };
     } catch (error) {
-      if (error instanceof CredentialLimitError) {
+      if (error instanceof CredentialLimitError || error instanceof CredentialConflictError) {
         throw new ConflictException(error.message);
       }
       throw error;
@@ -84,7 +101,7 @@ export class CredentialService {
   }
 
   async verify(value: string, expectedKind?: CredentialKind): Promise<VerifiedCredential> {
-    if (!value || value.length < 32) throw new UnauthorizedException();
+    if (!/^[0-9a-f]{64}$/.test(value)) throw new UnauthorizedException();
     // SHA-256 over a 256-bit random token has no brute-force risk. We still compare
     // every candidate hash in constant time and never stop at the first match.
     const hash = digest(value);
@@ -106,6 +123,7 @@ export class CredentialService {
       scopes: record.scopes,
       kind: record.kind,
       service: record.service,
+      projectId: record.projectId ?? null,
     };
   }
 
@@ -151,6 +169,7 @@ export class CredentialService {
       name: record.name,
       scopes: record.scopes,
       service: record.service,
+      projectId: record.projectId ?? null,
       createdAt: record.createdAt,
       expiresAt: record.expiresAt,
       revokedAt: record.revokedAt,

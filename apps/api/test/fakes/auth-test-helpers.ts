@@ -10,7 +10,9 @@ import {
   CREDENTIAL_CONFIG,
   CREDENTIAL_REPO,
   EVENT_PUBLISHER,
+  SENTRY_CREDENTIAL_VERIFIER,
   type AuthConfig,
+  type CredentialVerifier,
 } from '../../src/auth/auth.types';
 import { TEST_CONFIG } from './auth-test-config';
 import { FakeCredentialRepo } from './fake-credential-repo';
@@ -27,18 +29,22 @@ export interface AuthTestApp {
 export async function buildAuthApp(
   overrides: Partial<AuthConfig> = {},
   publisherOverride?: InMemoryPublisher,
+  sentryVerifier?: CredentialVerifier,
 ): Promise<AuthTestApp> {
   const repo = new FakeCredentialRepo();
   const publisher = publisherOverride ?? createInMemoryPublisher();
   const config = { ...TEST_CONFIG, ...overrides };
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
+  const builder = Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(CREDENTIAL_CONFIG)
     .useValue(config)
     .overrideProvider(CREDENTIAL_REPO)
     .useValue(repo)
     .overrideProvider(EVENT_PUBLISHER)
-    .useValue(publisher)
-    .compile();
+    .useValue(publisher);
+  if (sentryVerifier) {
+    builder.overrideProvider(SENTRY_CREDENTIAL_VERIFIER).useValue(sentryVerifier);
+  }
+  const moduleRef = await builder.compile();
   const app = moduleRef.createNestApplication();
   configureApp(app);
   await app.init();
@@ -100,7 +106,7 @@ export function validEnvelope(overrides: Partial<EventEnvelope> = {}): EventEnve
   return {
     id: 'evt-1',
     tenantId: 'tenant-1',
-    source: 'plugin.nestjs',
+    source: 'native',
     service: 'api',
     type: 'signal.oom',
     severity: 'info',

@@ -90,12 +90,14 @@ model Credential {
   clientId            String         @map("client_id")
   scopes              String[]
   service             String?
+  projectId           String?        @map("project_id")
   createdAt           DateTime       @map("created_at")
   expiresAt           DateTime?      @map("expires_at")
   revokedAt           DateTime?      @map("revoked_at")
   expirationAuditedAt DateTime?      @map("expiration_audited_at")
 
   @@unique([tenantId, hash])
+  @@unique([tenantId, projectId])
   @@index([hash])
   @@map("credentials")
 }

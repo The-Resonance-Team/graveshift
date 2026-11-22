@@ -7,6 +7,7 @@ export const CREDENTIAL_CONFIG = Symbol('CREDENTIAL_CONFIG');
 export const CREDENTIAL_REPO = Symbol('CREDENTIAL_REPO');
 export const EVENT_PUBLISHER = Symbol('EVENT_PUBLISHER');
 export const NATS_CONNECTOR = Symbol('NATS_CONNECTOR');
+export const SENTRY_CREDENTIAL_VERIFIER = Symbol('SENTRY_CREDENTIAL_VERIFIER');
 
 export type NatsConnector = (servers: string) => Promise<NatsPublisherHandle>;
 
@@ -32,6 +33,7 @@ export interface CredentialRecord {
   tenantId: string;
   scopes: string[];
   service: string | null;
+  projectId: string | null;
   createdAt: string;
   expiresAt: string | null;
   revokedAt: string | null;
@@ -48,6 +50,11 @@ export interface VerifiedCredential extends Principal {
   id: string;
   kind: CredentialKind;
   service: string | null;
+  projectId: string | null;
+}
+
+export interface CredentialVerifier {
+  verify(value: string, expectedKind?: CredentialKind): Promise<VerifiedCredential>;
 }
 
 export interface CredentialMetadata {
@@ -56,6 +63,7 @@ export interface CredentialMetadata {
   name: string;
   scopes: string[];
   service: string | null;
+  projectId: string | null;
   createdAt: string;
   expiresAt: string | null;
   revokedAt: string | null;
@@ -69,4 +77,5 @@ export interface IssuedCredential extends CredentialMetadata {
 export interface PrincipalRequest {
   user: Principal;
   pluginPrincipal?: VerifiedCredential;
+  sentryPrincipal?: VerifiedCredential;
 }

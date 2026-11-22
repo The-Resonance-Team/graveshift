@@ -162,6 +162,10 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "projectId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time",
@@ -192,6 +196,7 @@
                     "name",
                     "scopes",
                     "service",
+                    "projectId",
                     "createdAt",
                     "expiresAt",
                     "revokedAt",
@@ -250,6 +255,10 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "projectId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time",
@@ -274,6 +283,7 @@
                           "name",
                           "scopes",
                           "service",
+                          "projectId",
                           "createdAt",
                           "expiresAt",
                           "revokedAt"
@@ -441,6 +451,68 @@
         },
         "tags": [
           "oauth"
+        ]
+      }
+    },
+    "/api/{projectId}/envelope": {
+      "post": {
+        "operationId": "SentryEventsController_ingest",
+        "parameters": [
+          {
+            "name": "projectId",
+            "required": true,
+            "in": "path",
+            "description": "The numeric project id in the Sentry DSN.",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-sentry-envelope": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The Sentry event is accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The key, project, scope or binding is invalid."
+          },
+          "413": {
+            "description": "The envelope or event item exceeds one MiB."
+          },
+          "422": {
+            "description": "The Sentry envelope or event is malformed."
+          },
+          "429": {
+            "description": "The Sentry key reached its request rate limit."
+          }
+        },
+        "tags": [
+          "events"
         ]
       }
     },
@@ -1809,6 +1881,10 @@
           "service": {
             "type": "string",
             "description": "Optional Grave or service binding. Plugin keys only."
+          },
+          "projectId": {
+            "type": "string",
+            "description": "Numeric Sentry project id for DSN credentials."
           },
           "ttlSeconds": {
             "type": "number",

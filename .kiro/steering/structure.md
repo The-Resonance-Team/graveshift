@@ -18,7 +18,6 @@ graveshift/
 │   ├── events/                    # Event publishing
 │   ├── integrations/              # Plugin and Collector contracts
 │   ├── patch/                     # Patch generation and guard
-│   ├── plugin-nestjs/             # NestJS Plugin
 │   ├── policy/                    # policy.yaml loader + PolicyEngine (pure, deterministic)
 │   ├── redactor/                  # secret/PII redaction (pure) + PBT
 │   ├── sources-docker/            # RuntimeSource via docker-socket-proxy (dockerode)

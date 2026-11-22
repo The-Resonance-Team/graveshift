@@ -1,5 +1,9 @@
 import type { CredentialRecord, Principal } from '../../src/auth/auth.types';
-import { CredentialLimitError, CredentialRepo } from '../../src/auth/repo/credential.repo';
+import {
+  CredentialConflictError,
+  CredentialLimitError,
+  CredentialRepo,
+} from '../../src/auth/repo/credential.repo';
 
 /** In-memory store for tests. It reads no file and holds no secret. */
 export class FakeCredentialRepo extends CredentialRepo {
@@ -29,6 +33,14 @@ export class FakeCredentialRepo extends CredentialRepo {
         (item.expiresAt === null || Date.parse(item.expiresAt) > Date.now()),
     ).length;
     if (active >= 10) throw new CredentialLimitError();
+    if (
+      record.projectId !== null &&
+      this.records.some(
+        (item) => item.tenantId === record.tenantId && item.projectId === record.projectId,
+      )
+    ) {
+      throw new CredentialConflictError();
+    }
     this.records.push({ ...record });
     this.auditEvents.push({
       actor: record.clientId,
