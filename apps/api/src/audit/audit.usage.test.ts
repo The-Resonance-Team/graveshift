@@ -49,7 +49,7 @@ describe('policy usage aggregate validation', () => {
       [{ ...empty, modelCalls: 1n, spentUsd: '9'.repeat(400) }],
       [{ ...empty, modelCalls: 1n, spentUsd: '' }],
     ].map((input) => ({ input })),
-  )('fails closed on an invalid or unrepresentable aggregate: %j', ({ input }) => {
+  )('fails closed on an invalid or unrepresentable aggregate #%#', ({ input }) => {
     expect(() => parsePolicyUsage(input)).toThrow(AuditCountersUnavailable);
   });
 });

@@ -1,4 +1,5 @@
 import { access, readFile, symlink } from 'node:fs/promises';
+import { dirname } from 'node:path';
 
 import { EMPTY_BLOB_SHA } from '@graveshift/patch';
 import { expect, test } from 'bun:test';
@@ -48,7 +49,16 @@ test('uses actual file changes and checks real patched files in a private worksp
       false,
     );
     expect(request.env.HOME).toStartWith(request.root);
-    expect(request.env.PATH).not.toContain(process.env.HOME ?? '/missing-home');
+    // The runtime directory may live under HOME (setup-bun installs Bun there).
+    // Only a host-home path outside that runtime directory is a leak.
+    const hostHome = process.env.HOME ?? '/missing-home';
+    const runtimeDir = dirname(process.execPath);
+    expect(request.env.PATH).toBeDefined();
+    expect(
+      (request.env.PATH ?? '')
+        .split(':')
+        .filter((entry) => entry.startsWith(hostHome) && entry !== runtimeDir),
+    ).toEqual([]);
     if (request.argv[0] !== 'fixture-check') return gitRunner(request);
     checks++;
     expect(await readFile(`${request.cwd}/src/app.ts`, 'utf8')).toBe('after\n');

@@ -1,4 +1,5 @@
 import { expect, test } from 'bun:test';
+import { z } from 'zod';
 
 import type { PublicationPhase } from './faults';
 import { prepareSource } from './source';
@@ -70,13 +71,13 @@ test('plans the publication without effects and publishes a checked draft agains
   expect(calls.find((call) => call.method === 'createCommit')?.args[3]).toBe(
     input.snapshot.baseSha,
   );
-  expect(calls.find((call) => call.method === 'createPullRequest')?.args[1]).toMatchObject({
-    draft: true,
-    body: expect.stringContaining('Passed: `git diff --check`'),
-  });
-  expect(
-    JSON.stringify(calls.find((call) => call.method === 'createPullRequest')?.args[1]),
-  ).toContain('+1 / -1');
+  // Parse the recorded call instead of using an asymmetric matcher: Bun 1.4.4
+  // mutates the received object when toMatchObject holds a stringContaining.
+  const draftInput = z
+    .object({ draft: z.literal(true), body: z.string() })
+    .parse(calls.find((call) => call.method === 'createPullRequest')?.args[1]);
+  expect(draftInput.body).toContain('Passed: `git diff --check`');
+  expect(draftInput.body).toContain('+1 / -1');
 });
 
 test.each(['base', 'blob'])('a changed %s fails before the first GitHub write', async (changed) => {
