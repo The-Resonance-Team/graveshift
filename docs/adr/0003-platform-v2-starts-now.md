@@ -3,6 +3,8 @@
 Status: accepted
 Supersedes: ADR 0001
 
+> [ADR 0018](0018-project-scoped-state.md) supersedes the `tenantId` clause here. `projectId` replaces it.
+>
 > [ADR 0009](0009-remove-v1-daemon-and-diagnosis-model-path.md) removed the reference daemon and `packages/llm`.
 
 Graveshift v2 starts on 2026-11-20. The Kiroween v1 scope in ADR 0001 is cancelled, not deprecated, because no package was published. PR #17 closes unmerged and the old daemon stays at `apps/_daemon` for reference only.

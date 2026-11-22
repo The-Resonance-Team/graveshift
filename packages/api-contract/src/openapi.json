@@ -162,10 +162,6 @@
                       "nullable": true,
                       "type": "string"
                     },
-                    "projectId": {
-                      "nullable": true,
-                      "type": "string"
-                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time",
@@ -196,7 +192,6 @@
                     "name",
                     "scopes",
                     "service",
-                    "projectId",
                     "createdAt",
                     "expiresAt",
                     "revokedAt",
@@ -255,10 +250,6 @@
                             "nullable": true,
                             "type": "string"
                           },
-                          "projectId": {
-                            "nullable": true,
-                            "type": "string"
-                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time",
@@ -283,7 +274,6 @@
                           "name",
                           "scopes",
                           "service",
-                          "projectId",
                           "createdAt",
                           "expiresAt",
                           "revokedAt"
@@ -378,7 +368,7 @@
             "description": "The plugin API key is not valid."
           },
           "403": {
-            "description": "The scope, tenant or service binding failed."
+            "description": "The scope, project or service binding failed."
           },
           "413": {
             "description": "The envelope exceeds the size limit."
@@ -1766,7 +1756,7 @@
               "pattern": "^[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*$"
             }
           },
-          "tenantId": {
+          "projectId": {
             "type": "string",
             "pattern": "^[A-Za-z0-9_-]+$"
           }
@@ -1866,10 +1856,6 @@
             "type": "string",
             "description": "Optional Grave or service binding. Plugin keys only."
           },
-          "projectId": {
-            "type": "string",
-            "description": "Numeric Sentry project id for DSN credentials."
-          },
           "ttlSeconds": {
             "type": "number",
             "description": "Lifetime in seconds. The config default applies when absent."
@@ -1887,9 +1873,9 @@
           "id": {
             "type": "string"
           },
-          "tenantId": {
+          "projectId": {
             "type": "string",
-            "description": "The tenant that owns the event."
+            "description": "The project that owns the event."
           },
           "source": {
             "type": "string"
@@ -1926,7 +1912,7 @@
         },
         "required": [
           "id",
-          "tenantId",
+          "projectId",
           "source",
           "service",
           "type",

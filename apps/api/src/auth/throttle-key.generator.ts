@@ -36,13 +36,13 @@ export class ThrottleKeyGenerator {
 
     if (token) {
       try {
-        const payload = this.jwt.verify<{ sub?: string; tenantId?: string }>(token, {
+        const payload = this.jwt.verify<{ sub?: string; projectId?: string }>(token, {
           secret: this.config.jwtSecret,
           issuer: this.config.jwtIssuer,
           audience: this.config.jwtAudience,
           algorithms: ['HS256'],
         });
-        if (payload.sub && payload.tenantId) return `${payload.tenantId}:${payload.sub}:${route}`;
+        if (payload.sub && payload.projectId) return `${payload.projectId}:${payload.sub}:${route}`;
       } catch {
         // An issued credential is not a management JWT. Check its hash index below.
       }

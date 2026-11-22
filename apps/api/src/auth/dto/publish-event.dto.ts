@@ -7,10 +7,10 @@ export class PublishEventDto {
   @IsNotEmpty()
   id!: string;
 
-  @ApiProperty({ description: 'The tenant that owns the event.' })
+  @ApiProperty({ description: 'The project that owns the event.' })
   @IsString()
   @Matches(/^[A-Za-z0-9_-]+$/)
-  tenantId!: string;
+  projectId!: string;
 
   @ApiProperty()
   @IsString()

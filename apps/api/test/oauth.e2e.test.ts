@@ -77,13 +77,13 @@ describe('OAuth 2.1 client credentials (e2e)', () => {
     await useToken(
       rawToken(ctx.jwt, {
         sub: 'client-2',
-        tenantId: 'tenant-2',
+        projectId: 'project-2',
         scope: ['tokens:manage', 'fix:propose'],
       }),
     ).expect(401);
   });
 
-  test('refuses a forged tenant claim', async () => {
-    await useToken(rawToken(ctx.jwt, { tenantId: 'tenant-forged' })).expect(401);
+  test('refuses a forged project claim', async () => {
+    await useToken(rawToken(ctx.jwt, { projectId: 'project-forged' })).expect(401);
   });
 });

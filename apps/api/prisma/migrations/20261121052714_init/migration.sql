@@ -13,7 +13,7 @@ CREATE TYPE "CredentialKind" AS ENUM ('mcp', 'plugin');
 -- CreateTable
 CREATE TABLE "work_items" (
     "id" TEXT NOT NULL,
-    "tenant_id" TEXT NOT NULL,
+    "project_id" TEXT NOT NULL,
     "title" TEXT NOT NULL,
     "description" TEXT NOT NULL,
     "success_criteria" TEXT[],
@@ -41,7 +41,7 @@ CREATE TABLE "work_items" (
 
 -- CreateTable
 CREATE TABLE "audit_entries" (
-    "tenant_id" TEXT NOT NULL,
+    "project_id" TEXT NOT NULL,
     "seq" INTEGER NOT NULL,
     "at" TIMESTAMP(3) NOT NULL,
     "actor" TEXT NOT NULL,
@@ -51,13 +51,13 @@ CREATE TABLE "audit_entries" (
     "prev_hash" TEXT NOT NULL,
     "hash" TEXT NOT NULL,
 
-    CONSTRAINT "audit_entries_pkey" PRIMARY KEY ("tenant_id","seq")
+    CONSTRAINT "audit_entries_pkey" PRIMARY KEY ("project_id","seq")
 );
 
 -- CreateTable
 CREATE TABLE "credentials" (
     "id" TEXT NOT NULL,
-    "tenant_id" TEXT NOT NULL,
+    "project_id" TEXT NOT NULL,
     "kind" "CredentialKind" NOT NULL,
     "name" TEXT NOT NULL,
     "prefix" TEXT NOT NULL,
@@ -74,11 +74,11 @@ CREATE TABLE "credentials" (
 );
 
 -- CreateIndex
-CREATE INDEX "work_items_tenant_id_idx" ON "work_items"("tenant_id");
+CREATE INDEX "work_items_project_id_idx" ON "work_items"("project_id");
 
 -- CreateIndex
 CREATE INDEX "credentials_hash_idx" ON "credentials"("hash");
-CREATE UNIQUE INDEX "credentials_tenant_id_hash_key" ON "credentials"("tenant_id", "hash");
+CREATE UNIQUE INDEX "credentials_project_id_hash_key" ON "credentials"("project_id", "hash");
 
 -- BEGIN unmanaged append-only audit enforcement (outside Prisma's schema model).
 CREATE FUNCTION prevent_audit_entry_mutation() RETURNS trigger

@@ -49,7 +49,7 @@ export interface components {
       severities?: ("info" | "warning" | "critical")[];
       services?: string[];
       types?: string[];
-      tenantId?: string;
+      projectId?: string;
     };
     RuleDto: {
       id: string;
@@ -72,15 +72,13 @@ export interface components {
       scopes: ("incidents:read" | "diagnoses:read" | "audit:read" | "logs:read" | "metrics:read" | "fix:propose" | "events:publish")[];
       /** @description Optional Grave or service binding. Plugin keys only. */
       service?: string;
-      /** @description Numeric Sentry project id for DSN credentials. */
-      projectId?: string;
       /** @description Lifetime in seconds. The config default applies when absent. */
       ttlSeconds?: number;
     };
     PublishEventDto: {
       id: string;
-      /** @description The tenant that owns the event. */
-      tenantId: string;
+      /** @description The project that owns the event. */
+      projectId: string;
       source: string;
       /** @description The Grave named by this event. */
       service: string;
@@ -180,7 +178,6 @@ export interface operations {
                 name: string;
                 scopes: string[];
                 service: string | null;
-                projectId: string | null;
                 /** Format: date-time */
                 createdAt: string;
                 /** Format: date-time */
@@ -210,7 +207,6 @@ export interface operations {
             name: string;
             scopes: string[];
             service: string | null;
-            projectId: string | null;
             /** Format: date-time */
             createdAt: string;
             /** Format: date-time */
@@ -267,7 +263,7 @@ export interface operations {
       401: {
         content: never;
       };
-      /** @description The scope, tenant or service binding failed. */
+      /** @description The scope, project or service binding failed. */
       403: {
         content: never;
       };

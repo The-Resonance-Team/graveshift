@@ -5,7 +5,7 @@ const emptyToUndefined = (value: unknown) => (value === '' ? undefined : value);
 
 const oauthClientSchema = z.object({
   secret: z.string().min(16),
-  tenantId: z.string().regex(/^[A-Za-z0-9_-]+$/),
+  projectId: z.string().regex(/^[A-Za-z0-9_-]+$/),
   scopes: z.array(z.string()),
 });
 

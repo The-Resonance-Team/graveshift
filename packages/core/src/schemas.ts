@@ -8,7 +8,7 @@ const subjectType = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/;
 
 export const EventEnvelopeSchema = z.object({
   id,
-  tenantId: z.string().regex(subjectToken),
+  projectId: z.string().regex(subjectToken),
   source: id,
   service: id,
   type: z.string().regex(subjectType),

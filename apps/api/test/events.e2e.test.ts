@@ -99,9 +99,9 @@ describe('POST /api/events (e2e)', () => {
     await push(key, validEnvelope({ payload: { blob: 'x'.repeat(4000) } })).expect(413);
   });
 
-  test('rejects a tenant mismatch with 403', async () => {
-    const key = await createKey({ kind: 'plugin', name: 'tenant', scopes: ['events:publish'] });
-    await push(key, validEnvelope({ tenantId: 'tenant-2' })).expect(403);
+  test('rejects a project mismatch with 403', async () => {
+    const key = await createKey({ kind: 'plugin', name: 'project', scopes: ['events:publish'] });
+    await push(key, validEnvelope({ projectId: 'project-2' })).expect(403);
   });
 
   test('checks an optional service binding', async () => {
@@ -115,7 +115,7 @@ describe('POST /api/events (e2e)', () => {
     await push(key, validEnvelope({ service: 'api', id: 'evt-bound' })).expect(202);
   });
 
-  test('an unbound plugin key publishes for any service in its tenant', async () => {
+  test('an unbound plugin key publishes for any service in its project', async () => {
     const fresh = await buildAuthApp();
     const token = accessToken(fresh.jwt, ['tokens:manage', 'events:publish']);
     const created = await request(fresh.app.getHttpServer())

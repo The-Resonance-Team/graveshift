@@ -48,13 +48,6 @@ export class CreateCredentialDto {
   @Matches(/\S/, { message: 'service must not be blank' })
   service?: string;
 
-  @ApiPropertyOptional({ description: 'Numeric Sentry project id for DSN credentials.' })
-  @IsOptional()
-  @IsString()
-  @MaxLength(20)
-  @Matches(/^\d+$/)
-  projectId?: string;
-
   @ApiPropertyOptional({
     description: 'Lifetime in seconds. The config default applies when absent.',
   })

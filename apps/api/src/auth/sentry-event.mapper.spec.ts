@@ -7,7 +7,6 @@ import { mapSentryEvent } from './sentry-event.mapper';
 const credential: VerifiedCredential = {
   id: 'credential-1',
   clientId: 'client-1',
-  tenantId: 'tenant-1',
   scopes: ['events:publish'],
   kind: 'plugin',
   service: 'api',

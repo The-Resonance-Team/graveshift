@@ -13,7 +13,7 @@ export const RuleMatchSchema = z.object({
   severities: z.array(field.severity).optional(),
   services: z.array(field.service).optional(),
   types: z.array(field.type).optional(),
-  tenantId: field.tenantId.optional(),
+  projectId: field.projectId.optional(),
 });
 export type RuleMatch = z.infer<typeof RuleMatchSchema>;
 
@@ -41,7 +41,7 @@ const compare = (a: string, b: string): number => (a < b ? -1 : a > b ? 1 : 0);
 
 const matchKey = (match: RuleMatch): string =>
   [
-    match.tenantId ?? '',
+    match.projectId ?? '',
     [...(match.severities ?? [])].sort().join(','),
     [...(match.services ?? [])].sort().join(','),
     [...(match.types ?? [])].sort().join(','),
@@ -70,7 +70,7 @@ const matches = (rule: Rule, envelope: EventEnvelope): boolean => {
     (match.severities === undefined || match.severities.includes(envelope.severity)) &&
     (match.services === undefined || match.services.includes(envelope.service)) &&
     (match.types === undefined || match.types.includes(envelope.type)) &&
-    (match.tenantId === undefined || match.tenantId === envelope.tenantId)
+    (match.projectId === undefined || match.projectId === envelope.projectId)
   );
 };
 

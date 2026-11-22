@@ -37,13 +37,13 @@ const unimplementedResult = z.object({ resultType: z.literal('complete') });
 interface ServingLike {
   era: 'legacy' | 'modern';
   transport: 'http' | 'stdio';
-  authInfo?: { scopes?: readonly string[]; tenantId?: string } | undefined;
+  authInfo?: { scopes?: readonly string[]; projectId?: string } | undefined;
   request?: unknown;
 }
 
 interface EventCaller {
   scopes: readonly string[];
-  tenantId?: string;
+  projectId?: string;
 }
 
 interface FactoryLike {
@@ -55,10 +55,10 @@ async function resolveCaller(
   serving: ServingLike,
   credentials: CredentialService,
 ): Promise<EventCaller> {
-  if (serving.authInfo?.tenantId) {
+  if (serving.authInfo?.projectId) {
     return {
       scopes: serving.authInfo.scopes ?? [],
-      tenantId: serving.authInfo.tenantId,
+      projectId: serving.authInfo.projectId,
     };
   }
   const request = serving.request as { headers?: Record<string, string> } | undefined;
@@ -67,7 +67,7 @@ async function resolveCaller(
   if (!token) return { scopes: [] };
   try {
     const credential = await credentials.verify(token, 'mcp');
-    return { scopes: credential.scopes, tenantId: credential.tenantId };
+    return { scopes: credential.scopes, projectId: credential.projectId };
   } catch {
     return { scopes: [] };
   }
@@ -83,7 +83,7 @@ export function registerEvents(
   low.registerCapabilities({ extensions: { [EXTENSION]: { listChanged: false } } });
 
   low.setRequestHandler('events/list', { params: listParams, result: listResult }, async () => {
-    if (!(await getCaller()).tenantId) {
+    if (!(await getCaller()).projectId) {
       throw new ProtocolError(FORBIDDEN, 'Forbidden', { reason: 'authentication' });
     }
     return service.list();
@@ -93,10 +93,10 @@ export function registerEvents(
     { params: pollParams, result: pollResult },
     async (params) => {
       const caller = await getCaller();
-      if (!caller.tenantId) {
+      if (!caller.projectId) {
         throw new ProtocolError(FORBIDDEN, 'Forbidden', { reason: 'authentication' });
       }
-      return service.poll(params, caller.scopes, caller.tenantId);
+      return service.poll(params, caller.scopes, caller.projectId);
     },
   );
 

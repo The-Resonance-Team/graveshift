@@ -1,3 +1,4 @@
+import { UnprocessableEntityException } from '@nestjs/common';
 import { describe, expect, test } from 'bun:test';
 
 import { TEST_CONFIG } from '../../../test/fakes/auth-test-config';
@@ -8,7 +9,7 @@ import { CredentialService } from './credential.service';
 
 const principal: Principal = {
   clientId: 'client-1',
-  tenantId: 'tenant-1',
+  projectId: '12345',
   scopes: ['tokens:manage', 'incidents:read', 'events:publish'],
 };
 
@@ -41,9 +42,8 @@ describe('CredentialService', () => {
     const issued = await service.issue(dto(), principal);
     const verified = await service.verify(issued.value);
     expect(verified.clientId).toBe('client-1');
-    expect(verified.tenantId).toBe('tenant-1');
+    expect(verified.projectId).toBe('12345');
     expect(verified.kind).toBe('mcp');
-    expect(verified.projectId).toBeNull();
   });
 
   test('refuses an unknown value and a value for another kind', async () => {
@@ -78,23 +78,34 @@ describe('CredentialService', () => {
     ).resolves.toBeDefined();
   });
 
-  test('issues a publish-only credential bound to a numeric Sentry project and Grave', async () => {
-    const { service, repo } = setup();
-    const issued = await service.issue(
-      dto({
-        kind: 'plugin',
-        name: 'sentry',
-        scopes: ['events:publish'],
-        service: 'api',
-        projectId: '12345',
+  test('rejects a service-bound plugin credential when the projectId is not numeric', async () => {
+    const { service } = setup();
+    await expect(
+      service.issue(dto({ kind: 'plugin', scopes: ['events:publish'], service: 'api' }), {
+        ...principal,
+        projectId: 'acme',
       }),
-      principal,
+    ).rejects.toThrow(UnprocessableEntityException);
+    const mcp = await service.issue(dto({ kind: 'mcp', scopes: ['incidents:read'] }), {
+      ...principal,
+      projectId: 'acme',
+    });
+    expect(mcp.kind).toBe('mcp');
+  });
+
+  test('issues a publish-only credential bound to a Sentry project and Grave', async () => {
+    const { service, repo } = setup();
+    const sentryPrincipal: Principal = { ...principal, projectId: '12345' };
+    const issued = await service.issue(
+      dto({ kind: 'plugin', name: 'sentry', scopes: ['events:publish'], service: 'api' }),
+      sentryPrincipal,
     );
 
     expect(issued.value).toMatch(/^[0-9a-f]{64}$/);
-    expect(issued.projectId).toBe('12345');
     expect(issued.service).toBe('api');
+    expect(issued).not.toHaveProperty('projectId');
     expect(repo.records[0]?.projectId).toBe('12345');
+    expect((await service.verify(issued.value, 'plugin')).projectId).toBe('12345');
     await expect(
       service.issue(
         dto({
@@ -102,28 +113,10 @@ describe('CredentialService', () => {
           name: 'sentry-reader',
           scopes: ['events:publish', 'incidents:read'],
           service: 'api',
-          projectId: '12345',
         }),
-        principal,
+        sentryPrincipal,
       ),
     ).rejects.toThrow();
-  });
-
-  test('maps a duplicate Sentry project id to a 409', async () => {
-    const { service } = setup();
-    const sentry = () =>
-      dto({
-        kind: 'plugin',
-        name: 'sentry',
-        scopes: ['events:publish'],
-        service: 'api',
-        projectId: '12345',
-      });
-    await service.issue(sentry(), principal);
-    await expect(service.issue(sentry(), principal)).rejects.toMatchObject({
-      status: 409,
-      message: 'The Sentry project id is already in use',
-    });
   });
 
   test('caps parallel issues at ten active credentials', async () => {
@@ -151,7 +144,7 @@ describe('CredentialService', () => {
     expect(list[0]).not.toHaveProperty('hash');
     expect(repo.auditEvents.map((event) => event.type)).toContain('credential.created');
     expect(
-      await service.list({ ...principal, clientId: 'client-2', tenantId: 'tenant-2' }),
+      await service.list({ ...principal, clientId: 'client-2', projectId: 'project-2' }),
     ).toEqual([]);
     await expect(
       service.revoke(issued.id, { ...principal, clientId: 'client-2' }),

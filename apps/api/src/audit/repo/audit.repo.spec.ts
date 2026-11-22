@@ -5,7 +5,7 @@ import type { AuditEntry as PrismaAuditEntry } from '@prisma/client';
 import type { PrismaService } from '../../infra/prisma.service';
 import { AuditRepo } from './audit.repo';
 
-const TENANT = 'tenant-1';
+const PROJECT = 'project-1';
 
 const build = (): AuditEntry[] => {
   const first = makeAuditEntry(
@@ -30,7 +30,7 @@ const build = (): AuditEntry[] => {
 };
 
 const toRow = (entry: AuditEntry): PrismaAuditEntry => ({
-  tenantId: TENANT,
+  projectId: PROJECT,
   seq: entry.seq,
   at: new Date(entry.at),
   actor: entry.actor,
@@ -51,17 +51,20 @@ describe('AuditRepo.verifyChain (pure)', () => {
   test('accepts an intact chain that starts at the 64-zero genesis hash', async () => {
     const entries = build();
     expect(entries[0]?.prevHash).toBe('0'.repeat(64));
-    expect(await repoOver(entries.map(toRow)).verifyChain(TENANT)).toEqual({ ok: true, length: 3 });
+    expect(await repoOver(entries.map(toRow)).verifyChain(PROJECT)).toEqual({
+      ok: true,
+      length: 3,
+    });
   });
 
   test('an empty chain is valid', async () => {
-    expect(await repoOver([]).verifyChain(TENANT)).toEqual({ ok: true, length: 0 });
+    expect(await repoOver([]).verifyChain(PROJECT)).toEqual({ ok: true, length: 0 });
   });
 
   test('detects an edited field', async () => {
     const rows = build().map(toRow);
     rows[1] = { ...rows[1]!, actor: 'attacker' };
-    expect(await repoOver(rows).verifyChain(TENANT)).toMatchObject({
+    expect(await repoOver(rows).verifyChain(PROJECT)).toMatchObject({
       ok: false,
       brokenAtSeq: 2,
       reason: 'hash mismatch',
@@ -71,13 +74,13 @@ describe('AuditRepo.verifyChain (pure)', () => {
   test('detects an edited payload', async () => {
     const rows = build().map(toRow);
     rows[0] = { ...rows[0]!, payload: { id: 'other' } };
-    expect(await repoOver(rows).verifyChain(TENANT)).toMatchObject({ ok: false, brokenAtSeq: 1 });
+    expect(await repoOver(rows).verifyChain(PROJECT)).toMatchObject({ ok: false, brokenAtSeq: 1 });
   });
 
   test('detects a removed entry', async () => {
     const rows = build().map(toRow);
     rows.splice(1, 1);
-    expect(await repoOver(rows).verifyChain(TENANT)).toMatchObject({
+    expect(await repoOver(rows).verifyChain(PROJECT)).toMatchObject({
       ok: false,
       brokenAtSeq: 2,
       reason: 'sequence gap or reorder',
@@ -86,7 +89,7 @@ describe('AuditRepo.verifyChain (pure)', () => {
 
   test('detects reordered entries', async () => {
     const [a, b, c] = build().map(toRow);
-    expect(await repoOver([a!, c!, b!]).verifyChain(TENANT)).toMatchObject({
+    expect(await repoOver([a!, c!, b!]).verifyChain(PROJECT)).toMatchObject({
       ok: false,
       brokenAtSeq: 2,
       reason: 'sequence gap or reorder',
@@ -103,9 +106,9 @@ describe('AuditRepo.verifyChain (pure)', () => {
     );
     // Round-trip through JSON, as PostgreSQL JSONB does.
     const stored = JSON.parse(JSON.stringify(entry)) as AuditEntry;
-    expect(await repoOver([toRow(stored)]).verifyChain(TENANT)).toEqual({ ok: true, length: 1 });
+    expect(await repoOver([toRow(stored)]).verifyChain(PROJECT)).toEqual({ ok: true, length: 1 });
     const edited = toRow({ ...stored, payload: { ...stored.payload, value: 2 } });
-    expect(await repoOver([edited]).verifyChain(TENANT)).toMatchObject({
+    expect(await repoOver([edited]).verifyChain(PROJECT)).toMatchObject({
       ok: false,
       brokenAtSeq: 1,
     });

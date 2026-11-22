@@ -15,7 +15,7 @@ function setup() {
 }
 
 async function poll(service: EventPollService, params: PollParams): Promise<EventPollResult> {
-  return service.poll(params, scopes, 'tenant-1');
+  return service.poll(params, scopes, '12345');
 }
 
 function errorCode(error: unknown): number | undefined {
@@ -137,12 +137,14 @@ describe('EventPollService', () => {
     expect(result.events.map((event) => event.eventId)).toEqual(['worker']);
   });
 
-  test('never returns another tenant events from the shared stream', async () => {
+  test('never returns another project events from the shared stream', async () => {
     const { source, service } = setup();
-    source.push(validEnvelope({ id: 'tenant-1-event', type: 'signal.oom', tenantId: 'tenant-1' }));
-    source.push(validEnvelope({ id: 'tenant-2-event', type: 'signal.oom', tenantId: 'tenant-2' }));
+    source.push(validEnvelope({ id: '12345-event', type: 'signal.oom', projectId: '12345' }));
+    source.push(
+      validEnvelope({ id: 'project-2-event', type: 'signal.oom', projectId: 'project-2' }),
+    );
     const result = await poll(service, { name: 'incident.changed', cursor: START });
-    expect(result.events.map((event) => event.eventId)).toEqual(['tenant-1-event']);
+    expect(result.events.map((event) => event.eventId)).toEqual(['12345-event']);
   });
 
   test('rejects a malformed cursor', async () => {
