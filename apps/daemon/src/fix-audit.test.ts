@@ -121,7 +121,7 @@ describe('fix audit builders', () => {
 
   test('the scope of a command is its authenticated project and client', () => {
     expect(auditScopeOfCaller({ ...caller, workerId: 'worker-1' })).toEqual({
-      projectId: 'project-1',
+      projectId: '12345',
       actor: 'person-1',
     });
   });

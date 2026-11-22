@@ -1,4 +1,4 @@
-import { WORK_COMMANDS } from '@graveshift/work';
+import { WORK_COMMANDS, type WorkCaller } from '@graveshift/work';
 import { HttpStatus, ValidationPipe, type INestApplication } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtModule, JwtService } from '@nestjs/jwt';
@@ -23,8 +23,17 @@ import { fakeWorkApi } from './fakes/fake-fix-deps';
 const SECRET = 'ghp_16C7e6F4a2B9d3E8c5A1';
 
 /** One boot per test, with its own sink and its own daemon adapter. */
-async function start(options: { readonly unauthenticatedPrincipal?: boolean } = {}) {
-  const adapter = fakeWorkApi({ projectId: '12345', projectIds: ['12346'] });
+async function start(
+  options: {
+    readonly unauthenticatedPrincipal?: boolean;
+    readonly delayMs?: (caller: WorkCaller) => number;
+  } = {},
+) {
+  const adapter = fakeWorkApi({
+    projectId: '12345',
+    projectIds: ['12346'],
+    ...(options.delayMs === undefined ? {} : { delayMs: options.delayMs }),
+  });
   const audit = new InMemoryAuditSink();
   const moduleRef = await Test.createTestingModule({
     imports: [
@@ -51,7 +60,7 @@ async function start(options: { readonly unauthenticatedPrincipal?: boolean } = 
     moduleRef.overrideGuard(AuthGuard('oauth-client-credentials')).useValue({
       canActivate: (context: { switchToHttp(): { getRequest(): object } }) => {
         const incoming = context.switchToHttp().getRequest() as { user?: object };
-        incoming.user = { clientId: '', projectId: '', scopes: ['tokens:manage'] };
+        incoming.user = { clientId: '', projectId: '', scopes: ['tokens:manage', 'fix:trigger'] };
         return true;
       },
     });
@@ -68,9 +77,13 @@ async function start(options: { readonly unauthenticatedPrincipal?: boolean } = 
   );
   await app.init();
   const jwt = compiled.get(JwtService);
-  const token = (clientId: string, projectId: string): string =>
+  const token = (
+    clientId: string,
+    projectId: string,
+    scope: readonly string[] = ['tokens:manage', 'fix:trigger'],
+  ): string =>
     jwt.sign(
-      { sub: clientId, projectId, scope: ['tokens:manage'] },
+      { sub: clientId, projectId, scope: [...scope] },
       {
         secret: TEST_CONFIG.jwtSecret,
         issuer: TEST_CONFIG.jwtIssuer,
@@ -91,22 +104,39 @@ describe('work item fix audit', () => {
     app = undefined;
   });
 
-  test('two OAuth clients write to their own Project chains', async () => {
-    const fix = await start();
+  test('two concurrent OAuth clients write to their own Project chains', async () => {
+    // The two requests run at the same time: client 2's daemon call is quick and client 1's
+    // stays open, so client 2 finishes first and client 1's outcome is written while — and
+    // after — the other request has fully completed. The audit scope each write lands under
+    // must come from its own request through AuditScopeInterceptor and AuditedWorkCommands.
+    const fix = await start({
+      delayMs: (caller) => (caller.projectId === '12345' ? 40 : 5),
+    });
     app = fix.app;
     const first = fix.token('client-1', '12345');
     const second = fix.token('client-2', '12346');
 
-    await request(app.getHttpServer())
-      .post('/api/work-items/work-1/fix-now')
-      .auth(first, { type: 'bearer' })
-      .send({})
-      .expect(200);
-    await request(app.getHttpServer())
-      .post('/api/work-items/work-1/fix-now')
-      .auth(second, { type: 'bearer' })
-      .send({})
-      .expect(200);
+    const [slow, quick] = await Promise.all([
+      request(app.getHttpServer())
+        .post('/api/work-items/work-1/fix-now')
+        .auth(first, { type: 'bearer' })
+        .send({})
+        .expect(200),
+      request(app.getHttpServer())
+        .post('/api/work-items/work-1/fix-now')
+        .auth(second, { type: 'bearer' })
+        .send({})
+        .expect(200),
+    ]);
+    expect([slow.body.ok, quick.body.ok]).toEqual([true, true]);
+
+    // Overlap is proven from the fake daemon's own record: both calls were open at once and
+    // the quick one returned while the slow one was still running.
+    expect(new Set(fix.adapter.timeline.slice(0, 2))).toEqual(
+      new Set(['fixNow:12345:start', 'fixNow:12346:start']),
+    );
+    expect(fix.adapter.timeline[2]).toBe('fixNow:12346:done');
+    expect(fix.adapter.timeline[3]).toBe('fixNow:12345:done');
 
     expect(fix.audit.projects().sort()).toEqual(['12345', '12346']);
     expect(fix.audit.entries('12345')).toHaveLength(1);

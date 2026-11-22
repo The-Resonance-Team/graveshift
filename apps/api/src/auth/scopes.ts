@@ -20,6 +20,7 @@ export const SCOPE_ALIASES: Record<string, string> = {
   'logs:read': 'event:read',
   'metrics:read': 'project:read',
   'fix:propose': 'project:write',
+  'fix:trigger': 'fix:trigger',
   'events:publish': 'event:read',
   'config:export': 'config:export',
   'tokens:manage': 'tokens:manage',
@@ -78,6 +79,13 @@ export const FORBIDDEN_SCOPES = ['admin', 'tokens:manage'] as const;
 export const MANAGEMENT_SCOPE = 'tokens:manage';
 export const EVENTS_PUBLISH_SCOPE = 'events:publish';
 export const CONFIG_EXPORT_SCOPE = 'config:export';
+
+// HTTP-only scope for the work-item Fix mutations (triage, Fix now, answer). It follows the
+// config:export rule: it is in no credential kind (MCP_READ_SCOPES, PLUGIN_SCOPES,
+// CREDENTIAL_ISSUABLE_SCOPES) and not in CLIENT_ISSUABLE_SCOPES, so CredentialService.issue
+// rejects it for every credential kind and a console-created client can never hold it. Only
+// an operator-registered OAuth client carries it, and only the Fix routes demand it.
+export const FIX_TRIGGER_SCOPE = 'fix:trigger';
 
 export type CredentialKind = 'mcp' | 'plugin';
 

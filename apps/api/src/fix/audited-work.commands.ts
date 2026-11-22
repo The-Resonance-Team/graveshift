@@ -55,21 +55,21 @@ export class AuditedWorkCommands implements WorkCommands {
     const scope = requireFixAuditScope(caller, currentAuditScope());
     const result = await this.inner.triage(caller, id, body);
     // A triage that starts the configured automatic trigger owns one Fix attempt too.
-    if (result.autoFix !== null) await this.record(scope, fixOutcomeFromTriage(id, result));
+    if (result.autoFix !== null) await this.record(scope, fixOutcomeFromTriage(caller, id, result));
     return result;
   }
 
   async fixNow(caller: WorkCaller, id: string, body: FixNowBody): Promise<FixResult> {
     const scope = requireFixAuditScope(caller, currentAuditScope());
     const result = await this.inner.fixNow(caller, id, body);
-    await this.record(scope, fixOutcomeFromCommand(id, result));
+    await this.record(scope, fixOutcomeFromCommand(caller, id, result));
     return result;
   }
 
   async answer(caller: WorkCaller, id: string, body: AnswerBody): Promise<FixResult> {
     const scope = requireFixAuditScope(caller, currentAuditScope());
     const result = await this.inner.answer(caller, id, body);
-    await this.record(scope, fixOutcomeFromCommand(id, result));
+    await this.record(scope, fixOutcomeFromCommand(caller, id, result));
     return result;
   }
 

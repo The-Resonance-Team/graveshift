@@ -3,7 +3,7 @@ import { ServiceUnavailableException } from '@nestjs/common';
 import { describe, expect, test } from 'bun:test';
 
 import { workItem } from '../../test/fakes/fake-fix-deps';
-import { withAuditScope } from '../audit/audit.sink';
+import { currentAuditScope, withAuditScope, type AuditScope } from '../audit/audit.sink';
 import { InMemoryAuditSink } from '../audit/testing/in-memory-audit.sink';
 import { AuditedWorkCommands } from './audited-work.commands';
 
@@ -29,10 +29,14 @@ const open: FixResult = {
 
 const completed = (): FixResult => structuredClone(open);
 
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
 /**
  * One independent boundary per call: its own sink, its own daemon call log and its own reply.
  * Nothing is shared between two fixtures, so a test of two Projects proves separation by
- * construction rather than by the order the tests happen to run in.
+ * construction rather than by the order the tests happen to run in. A test can give each
+ * boundary its own in-call delay and a shared timeline, so two clients genuinely overlap and
+ * the slower one finishes last.
  */
 function boundary(options: {
   readonly projectId: string;
@@ -40,20 +44,37 @@ function boundary(options: {
   readonly reply?: () => Promise<FixResult>;
   readonly triage?: () => Promise<TriageResult>;
   readonly audit?: InMemoryAuditSink;
+  /** How long the fake daemon stays inside the call, so two calls really overlap. */
+  readonly delayMs?: number;
+  /** Shared order record: start and done per call, to prove interleaving, not timing luck. */
+  readonly timeline?: string[];
+  /** The audit scope each call sees while it runs: its own request scope or nothing. */
+  readonly seenScopes?: Array<{ tag: string; scope: AuditScope | undefined }>;
 }) {
   const calls: string[] = [];
   const reply = options.reply ?? (async () => completed());
+  const enter = (tag: string, caller: WorkCaller, id: string) => {
+    options.timeline?.push(`${tag}:start`);
+    options.seenScopes?.push({ tag, scope: currentAuditScope() });
+    calls.push(`daemon:${caller.projectId}:${id}`);
+  };
   const inner = {
     async fixNow(caller: WorkCaller, id: string): Promise<FixResult> {
-      calls.push(`daemon:${caller.projectId}:${id}`);
+      enter(`fix-now:${options.projectId}`, caller, id);
+      if (options.delayMs !== undefined) await sleep(options.delayMs);
+      options.timeline?.push(`fix-now:${options.projectId}:done`);
       return reply();
     },
     async answer(caller: WorkCaller, id: string): Promise<FixResult> {
-      calls.push(`daemon:${caller.projectId}:${id}`);
+      enter(`answer:${options.projectId}`, caller, id);
+      if (options.delayMs !== undefined) await sleep(options.delayMs);
+      options.timeline?.push(`answer:${options.projectId}:done`);
       return reply();
     },
     async triage(caller: WorkCaller, id: string): Promise<TriageResult> {
-      calls.push(`daemon:${caller.projectId}:${id}`);
+      enter(`triage:${options.projectId}`, caller, id);
+      if (options.delayMs !== undefined) await sleep(options.delayMs);
+      options.timeline?.push(`triage:${options.projectId}:done`);
       return (options.triage ?? (async () => ({ item: workItem(id), autoFix: null })))();
     },
   };
@@ -103,12 +124,46 @@ describe('audited fix commands', () => {
     expect(fix.audit.ofType('fix.outcome')).toHaveLength(1);
   });
 
-  test('two OAuth clients of different Projects write to different chains', async () => {
-    const first = boundary({ projectId: '12345', clientId: 'client-1' });
-    const second = boundary({ projectId: '12346', clientId: 'client-2' });
-    await first.run(() => first.commands.fixNow(first.caller(), 'work-1', {}));
-    await second.run(() => second.commands.fixNow(second.caller(), 'work-2', {}));
+  test('two concurrent OAuth clients of different Projects write to different chains', async () => {
+    // Both commands are in flight at once: the quick one returns while the slow one is still
+    // inside the daemon, so every audit write below races the other request on purpose.
+    const timeline: string[] = [];
+    const seenScopes: Array<{ tag: string; scope: AuditScope | undefined }> = [];
+    const first = boundary({
+      projectId: '12345',
+      clientId: 'client-1',
+      delayMs: 40,
+      timeline,
+      seenScopes,
+    });
+    const second = boundary({
+      projectId: '12346',
+      clientId: 'client-2',
+      delayMs: 5,
+      timeline,
+      seenScopes,
+    });
+    const [slow, quick] = await Promise.all([
+      first.run(() => first.commands.fixNow(first.caller(), 'work-1', {})),
+      second.run(() => second.commands.fixNow(second.caller(), 'work-2', {})),
+    ]);
+    expect([slow.ok, quick.ok]).toEqual([true, true]);
 
+    // Overlap is proven, not assumed: both calls entered, the quick one left first, the slow
+    // one wrote its outcome only after the other request had fully finished.
+    expect(timeline).toEqual([
+      'fix-now:12345:start',
+      'fix-now:12346:start',
+      'fix-now:12346:done',
+      'fix-now:12345:done',
+    ]);
+    // Each in-call collaborator read its own request scope while the other was running.
+    expect(seenScopes).toEqual([
+      { tag: 'fix-now:12345', scope: { projectId: '12345', actor: 'client-1' } },
+      { tag: 'fix-now:12346', scope: { projectId: '12346', actor: 'client-2' } },
+    ]);
+
+    // Each chain holds only its own actor and only its own commands: nothing leaked across.
     expect(first.audit.projects()).toEqual(['12345']);
     expect(second.audit.projects()).toEqual(['12346']);
     expect(first.audit.entries('12345').map((entry) => entry.actor)).toEqual(['client-1']);

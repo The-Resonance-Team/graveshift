@@ -56,7 +56,11 @@ export async function workHttpApp(
         if (!request.headers?.authorization?.startsWith('Bearer ')) {
           throw new UnauthorizedException();
         }
-        request.user = { clientId: 'client-1', projectId: 'project-1', scopes: ['tokens:manage'] };
+        request.user = {
+          clientId: 'client-1',
+          projectId: '12345',
+          scopes: ['tokens:manage', 'fix:trigger'],
+        };
         return true;
       },
     })
@@ -72,7 +76,7 @@ export async function workHttpApp(
   );
   await app.init();
   const token = moduleRef.get(JwtService).sign(
-    { sub: 'client-1', projectId: 'project-1', scope: ['tokens:manage'] },
+    { sub: 'client-1', projectId: '12345', scope: ['tokens:manage', 'fix:trigger'] },
     {
       secret: TEST_CONFIG.jwtSecret,
       issuer: TEST_CONFIG.jwtIssuer,

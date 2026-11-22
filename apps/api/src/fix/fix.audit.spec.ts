@@ -44,7 +44,7 @@ function result(overrides: Partial<FixResult> = {}): FixResult {
 
 describe('fix outcome audit record', () => {
   test('is one entry for one attempt, keyed by it', () => {
-    expect(fixOutcomeAudit(scope, fixOutcomeFromCommand('work-1', result()))).toEqual({
+    expect(fixOutcomeAudit(scope, fixOutcomeFromCommand(caller(), 'work-1', result()))).toEqual({
       projectId: '12345',
       actor: 'client-1',
       type: FIX_OUTCOME_AUDIT_TYPE,
@@ -61,8 +61,35 @@ describe('fix outcome audit record', () => {
     });
   });
 
+  test('an outcome before any attempt is claimed is keyed by its command id', () => {
+    const unclaimed = result({
+      attemptId: null,
+      ok: false,
+      pr: null,
+      effect: 'deny',
+      failure: 'policy_denied',
+      reason: 'low_confidence',
+    });
+    const first = fixOutcomeAudit(scope, fixOutcomeFromCommand(caller(), 'work-1', unclaimed));
+    expect(first.key).toBe('fix:command:command-1:fix_now:outcome');
+    // Two different commands over one unclaimed Work item never collide on a key.
+    const second = fixOutcomeAudit(
+      scope,
+      fixOutcomeFromCommand(caller({ commandId: 'command-2' }), 'work-1', unclaimed),
+    );
+    expect(second.key).not.toBe(first.key);
+    // Replaying one command returns its recorded result, so it audits that command once.
+    const replay = fixOutcomeAudit(scope, fixOutcomeFromCommand(caller(), 'work-1', unclaimed));
+    expect(replay.key).toBe(first.key);
+    // The key carries the command id; the payload stays identifiers only.
+    expect(JSON.stringify(first.payload)).not.toContain('command-1');
+    expect(first.payload).not.toHaveProperty('commandId');
+  });
+
   test('carries no note, title, reason text, pull request URL or branch slug', () => {
-    const audit = JSON.stringify(fixOutcomeAudit(scope, fixOutcomeFromCommand('work-1', result())));
+    const audit = JSON.stringify(
+      fixOutcomeAudit(scope, fixOutcomeFromCommand(caller(), 'work-1', result())),
+    );
     expect(audit).not.toContain(secret);
     expect(audit).not.toContain('github.test');
     expect(audit).not.toContain('graveshift/fix');
@@ -72,6 +99,7 @@ describe('fix outcome audit record', () => {
     const denied = fixOutcomeAudit(
       scope,
       fixOutcomeFromCommand(
+        caller(),
         'work-1',
         result({
           item: workItem('work-1'),
@@ -98,7 +126,7 @@ describe('fix outcome audit record', () => {
     expect(
       fixOutcomeAudit(
         scope,
-        fixOutcomeFromTriage('work-1', {
+        fixOutcomeFromTriage(caller(), 'work-1', {
           item: workItem('work-1'),
           autoFix: {
             ok: false,

@@ -11,7 +11,7 @@ import { withAuditScope } from './audit';
 import type { FixContext } from './fix-context';
 
 export const at = '2026-11-21T10:00:00.000Z';
-export const caller = { projectId: 'project-1', actor: 'person-1', commandId: 'command-1' };
+export const caller = { projectId: '12345', actor: 'person-1', commandId: 'command-1' };
 
 /**
  * Binds the authenticated audit scope a real Work command carries, so a test can call a fix or

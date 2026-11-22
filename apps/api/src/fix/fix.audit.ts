@@ -16,6 +16,8 @@ export const NO_AUDIT_SCOPE_MESSAGE = 'The request has no authenticated audit sc
 /** The identity a Fix audit entry may record. Everything else about a request stays out. */
 export interface FixAuditOutcome {
   readonly workItemId: string;
+  /** The idempotency command id. It keys the fallback entry when no attempt was claimed. */
+  readonly commandId: string;
   readonly trigger: FixTrigger;
   readonly attemptId: string | null;
   readonly effect: FixResult['effect'];
@@ -53,9 +55,11 @@ function outcomeRecord(scope: AuditScope, outcome: FixAuditOutcome): AuditRecord
     projectId: scope.projectId,
     actor: scope.actor,
     type: FIX_OUTCOME_AUDIT_TYPE,
-    // One entry per attempt. A replayed command that returns the recorded result appends the
-    // same key, and `AuditRepo.append` keeps one entry for one key.
-    key: `fix:${outcome.attemptId ?? outcome.workItemId}:${outcome.trigger}:outcome`,
+    // One entry per attempt: a replayed command that returns the recorded result appends the
+    // same key, and `AuditRepo.append` keeps one entry for one key. Before an attempt is
+    // claimed there is no attempt id to key by, so the command id keys the entry instead: two
+    // different commands never collide, and a replay of one command audits that command once.
+    key: `fix:${outcome.attemptId ?? `command:${outcome.commandId}`}:${outcome.trigger}:outcome`,
     payload: {
       workItemId: outcome.workItemId,
       ...(outcome.attemptId === null ? {} : { attemptId: outcome.attemptId }),
@@ -76,10 +80,15 @@ function outcomeRecord(scope: AuditScope, outcome: FixAuditOutcome): AuditRecord
   };
 }
 
-/** The outcome fields a Fix command reports back from the daemon. */
-export function fixOutcomeFromCommand(id: string, result: FixResult): FixAuditOutcome {
+/** The outcome fields a Fix command reports back from the daemon, keyed by that command. */
+export function fixOutcomeFromCommand(
+  caller: WorkCaller,
+  id: string,
+  result: FixResult,
+): FixAuditOutcome {
   return {
     workItemId: id,
+    commandId: caller.commandId,
     trigger: result.trigger,
     attemptId: result.attemptId,
     effect: result.effect,
@@ -102,11 +111,16 @@ export function fixOutcomeFromCommand(id: string, result: FixResult): FixAuditOu
  * triage reply reports the attempt's terminal state only, and the pull request identity stays
  * with the Fix result.
  */
-export function fixOutcomeFromTriage(id: string, result: TriageResult): FixAuditOutcome {
+export function fixOutcomeFromTriage(
+  caller: WorkCaller,
+  id: string,
+  result: TriageResult,
+): FixAuditOutcome {
   const auto = result.autoFix;
   if (auto === null) throw new Error('A triage with no Fix attempt has no outcome to audit');
   return {
     workItemId: id,
+    commandId: caller.commandId,
     trigger: 'auto_fix',
     attemptId: auto.attemptId,
     effect: auto.effect,

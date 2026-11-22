@@ -63,7 +63,7 @@ describe('Work item HTTP boundary', () => {
       {
         sub: 'client-1',
         projectId: '12345',
-        scope: ['tokens:manage'],
+        scope: ['tokens:manage', 'fix:trigger'],
       },
       {
         secret: TEST_CONFIG.jwtSecret,

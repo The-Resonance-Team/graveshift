@@ -21,7 +21,7 @@ describe.skipIf(!dbTestEnabled)('saved Work item question recovery through publi
       fresh,
       new AuditRepo(fresh),
       WORK_TEST_AGENTS,
-      testProjectGrant(['project-1']),
+      testProjectGrant(['12345']),
     );
     const commands: WorkCommands = {
       async triage() {

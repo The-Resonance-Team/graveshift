@@ -45,8 +45,17 @@ export function workItem(id = 'work-1', overrides: Partial<WorkItem> = {}): Work
 
 /** Explicit HTTP test adapter. No production store or fix execution is replaced. */
 export function fakeWorkApi(
-  options: { deny?: boolean; fail?: boolean; projectId?: string; projectIds?: string[] } = {},
+  options: {
+    deny?: boolean;
+    fail?: boolean;
+    projectId?: string;
+    projectIds?: string[];
+    /** Keeps the fake daemon inside a call, so concurrent requests really overlap. */
+    delayMs?: (caller: WorkCaller) => number;
+  } = {},
 ) {
+  const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+  const hold = (caller: WorkCaller) => sleep(options.delayMs?.(caller) ?? 0);
   const allowed = new Set([options.projectId ?? '12345', ...(options.projectIds ?? [])]);
   // The production store is keyed by Project, so the fake is too: one client's change can never
   // be seen by another Project.
@@ -65,6 +74,8 @@ export function fakeWorkApi(
     return created;
   };
   const calls: { method: string; caller: WorkCaller; id: string; input: unknown }[] = [];
+  /** Start and done markers per daemon call, so a test can prove overlap, not timing luck. */
+  const timeline: string[] = [];
   const receipts = new Map<string, { content: string; result: FixResult }>();
   const read = (projectId: string, id: string) => {
     if (!allowed.has(projectId)) throw new WorkError('PROJECT_FORBIDDEN', 'Wrong project');
@@ -117,18 +128,32 @@ export function fakeWorkApi(
   const commands: WorkCommands = {
     async triage(caller, id, input) {
       calls.push({ method: 'triage', caller, id, input });
+      timeline.push(`triage:${caller.projectId}:start`);
+      await hold(caller);
       const decision = decideTriage(read(caller.projectId, id), input.assignee, TEST_AGENTS);
       itemsFor(caller.projectId).set(id, decision.item);
-      if (decision.trigger === null) return { item: decision.item, autoFix: null };
-      return triageResult(await run(caller, id, input, 'auto_fix'));
+      if (decision.trigger === null) {
+        timeline.push(`triage:${caller.projectId}:done`);
+        return { item: decision.item, autoFix: null };
+      }
+      const outcome = await triageResult(await run(caller, id, input, 'auto_fix'));
+      timeline.push(`triage:${caller.projectId}:done`);
+      return outcome;
     },
     async fixNow(caller, id, input) {
       calls.push({ method: 'fixNow', caller, id, input });
-      return run(caller, id, input, 'fix_now');
+      timeline.push(`fixNow:${caller.projectId}:start`);
+      await hold(caller);
+      const result = await run(caller, id, input, 'fix_now');
+      timeline.push(`fixNow:${caller.projectId}:done`);
+      return result;
     },
     async answer(caller, id, input) {
       calls.push({ method: 'answer', caller, id, input });
+      timeline.push(`answer:${caller.projectId}:start`);
+      await hold(caller);
       read(caller.projectId, id);
+      timeline.push(`answer:${caller.projectId}:done`);
       throw new WorkError('QUESTION_NOT_PENDING', 'This question is no longer pending');
     },
   };
@@ -152,5 +177,5 @@ export function fakeWorkApi(
       return { items: rows.slice(offset, offset + limit), total: rows.length, offset, limit };
     },
   };
-  return { repo, commands, calls };
+  return { repo, commands, calls, timeline };
 }

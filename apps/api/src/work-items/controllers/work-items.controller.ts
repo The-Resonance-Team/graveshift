@@ -37,6 +37,7 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 
 import type { PrincipalRequest } from '../../auth/auth.types';
 import { AuditScopeInterceptor } from '../../audit/audit-scope.interceptor';
+import { FixTriggerScopeGuard } from '../fix-trigger-scope.guard';
 import { AnswerRequestDto } from '../dto/answer-request.dto';
 import { FixNowRequestDto } from '../dto/fix-now-request.dto';
 import { ListWorkItemsQueryDto } from '../dto/list-work-items-query.dto';
@@ -104,6 +105,7 @@ export class WorkItemsController {
   }
 
   @Post(':id/triage')
+  @UseGuards(FixTriggerScopeGuard)
   @HttpCode(200)
   @ApiHeader(commandHeader)
   @ApiOkResponse({
@@ -118,6 +120,9 @@ export class WorkItemsController {
   @ApiConflictResponse({
     description: 'The Work item is complete, has an active attempt, or the command ID conflicts.',
   })
+  @ApiForbiddenResponse({
+    description: 'The token does not hold fix:trigger, so triage cannot start an automatic Fix.',
+  })
   @ApiNotFoundResponse({ description: 'The Work item does not exist in this project.' })
   triage(
     @Param() params: WorkItemParamsDto,
@@ -129,6 +134,7 @@ export class WorkItemsController {
   }
 
   @Post(':id/fix-now')
+  @UseGuards(FixTriggerScopeGuard)
   @HttpCode(200)
   @ApiHeader(commandHeader)
   @ApiOkResponse({
@@ -139,7 +145,7 @@ export class WorkItemsController {
   })
   @ApiForbiddenResponse({
     description:
-      'Human assignments have no Fix now action. Agent autoFix must be disabled for Fix now.',
+      'Human assignments have no Fix now action, Agent autoFix must be disabled for Fix now, or the token does not hold fix:trigger.',
   })
   @ApiUnprocessableEntityResponse({ description: 'The request body is invalid.' })
   @ApiConflictResponse({
@@ -156,6 +162,7 @@ export class WorkItemsController {
   }
 
   @Post(':id/answer')
+  @UseGuards(FixTriggerScopeGuard)
   @HttpCode(200)
   @ApiHeader(commandHeader)
   @ApiOkResponse({
@@ -169,6 +176,9 @@ export class WorkItemsController {
   })
   @ApiConflictResponse({
     description: 'The question is no longer pending or the command ID conflicts.',
+  })
+  @ApiForbiddenResponse({
+    description: 'The token does not hold fix:trigger, so an answer cannot resume a Fix attempt.',
   })
   @ApiNotFoundResponse({ description: 'The Work item does not exist in this project.' })
   answer(
