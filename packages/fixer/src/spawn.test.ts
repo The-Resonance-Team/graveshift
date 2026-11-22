@@ -35,11 +35,13 @@ describe('createSpawnRunner', () => {
 
   test('output far above the cap stays bounded and is marked truncated', async () => {
     const runner = createSpawnRunner([]);
+    // 25 MiB in a few large writes: far above the cap, and quick enough that
+    // the check itself is not what the test measures.
     const result = await runner({
       argv: [
         process.execPath,
         '-e',
-        'for (let i = 0; i < 4_000_000; i++) process.stdout.write("x");',
+        'const chunk = "x".repeat(64 * 1024); for (let i = 0; i < 400; i++) process.stdout.write(chunk);',
       ],
       cwd: '/',
       env: sandboxEnv('/tmp'),
