@@ -1,0 +1,59 @@
+import type { EventEnvelope } from '@graveshift/core';
+
+/** The prefix of every Graveshift event subject. */
+export const SUBJECT_PREFIX = 'graveshift';
+
+/** The filter of the one event stream. It spans both lanes and all tenants. */
+export const EVENTS_SUBJECT_FILTER = `${SUBJECT_PREFIX}.>`;
+
+/** The filter a per-Grave detection consumer uses. */
+export const DETECTION_FILTER_SUBJECT = `${SUBJECT_PREFIX}.*.detection.>`;
+
+const safeToken = /^[A-Za-z0-9_-]+$/;
+
+/**
+ * Map a service name to one safe NATS subject token. A service that already
+ * holds a safe token is unchanged; other characters collapse to an underscore.
+ * // ponytail: one-token replacement, upgrade if two services collide on one token
+ */
+export function safeSubjectToken(service: string): string {
+  if (safeToken.test(service)) return service;
+  const mapped = service.replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
+  return mapped.length > 0 ? mapped : '_';
+}
+
+export type Lane = 'telemetry' | 'detection';
+
+export function laneFor(severity: EventEnvelope['severity']): Lane {
+  return severity === 'info' ? 'telemetry' : 'detection';
+}
+
+/**
+ * Fail closed on an unvalidated caller. The primary rule is EventEnvelopeSchema
+ * in packages/core: tenantId is one token and type is a dotted list of tokens.
+ * A type keeps its dots; neither part may carry a wildcard or a wildcard-like
+ * empty token.
+ */
+function assertSafeSubjectPart(value: string, name: 'tenantId' | 'type'): void {
+  if (name === 'tenantId' && value.includes('.')) {
+    throw new Error(`Unsafe ${name} in event subject`);
+  }
+  const tokens = value.split('.');
+  if (tokens.some((token) => !safeToken.test(token))) {
+    throw new Error(`Unsafe ${name} in event subject`);
+  }
+}
+
+/** Build `graveshift.<tenantId>.<lane>.<grave>.<type>`. */
+export function publishSubject(envelope: EventEnvelope): string {
+  assertSafeSubjectPart(envelope.tenantId, 'tenantId');
+  assertSafeSubjectPart(envelope.type, 'type');
+  const grave = safeSubjectToken(envelope.service);
+  return `${SUBJECT_PREFIX}.${envelope.tenantId}.${laneFor(envelope.severity)}.${grave}.${envelope.type}`;
+}
+
+/** Build the dead-letter subject for an exhausted detection envelope. */
+export function deadLetterSubject(tenantId: string, grave: string): string {
+  assertSafeSubjectPart(tenantId, 'tenantId');
+  return `${SUBJECT_PREFIX}.${tenantId}.dlq.${safeSubjectToken(grave)}`;
+}

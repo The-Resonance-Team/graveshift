@@ -95,6 +95,26 @@ services:
       - prometheus-data:/prometheus
     networks: [core, candy]
 
+  nats:
+    # Self-hosted event backbone. Port 4222 stays on the private core network.
+    # No public port, no MQTT, no leafnode and no WebSocket in v2.
+    image: nats:2.15.0
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    command: ['-c', '/etc/nats/nats.conf']
+    environment:
+      NATS_PUBLISH_USER: ${NATS_PUBLISH_USER:?NATS_PUBLISH_USER is required}
+      NATS_PUBLISH_PASSWORD: ${NATS_PUBLISH_PASSWORD:?NATS_PUBLISH_PASSWORD is required}
+      NATS_READ_USER: ${NATS_READ_USER:?NATS_READ_USER is required}
+      NATS_READ_PASSWORD: ${NATS_READ_PASSWORD:?NATS_READ_PASSWORD is required}
+    volumes:
+      - ./nats/nats.conf:/etc/nats/nats.conf:ro
+      - /run/secrets/nats:/run/secrets/nats:ro
+      - nats-data:/data/jetstream
+    expose: ['4222']
+    networks: [core]
+
 networks:
   core: {}
   act:
@@ -105,3 +125,4 @@ networks:
 volumes:
   postgres-data:
   prometheus-data:
+  nats-data:

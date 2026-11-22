@@ -1,7 +1,7 @@
-import type { EventEnvelope } from '@graveshift/core';
+import { EventEnvelopeSchema, type EventEnvelope } from '@graveshift/core';
 import { describe, expect, test } from 'bun:test';
 
-import { createNatsPublisher, type PublishTarget, publishSubject } from './index';
+import { createNatsPublisher, type PublishTarget, publishSubject, safeSubjectToken } from './index';
 import { createInMemoryPublisher } from './testing';
 
 const envelope: EventEnvelope = {
@@ -38,17 +38,57 @@ function fakeTarget(failure?: Error): { target: PublishTarget; published: Publis
 }
 
 describe('publish subject', () => {
-  test('info uses the telemetry lane', () => {
-    expect(publishSubject(envelope)).toBe('graveshift.tenant-1.telemetry.signal.oom');
+  test('info uses the telemetry lane and includes the Grave token', () => {
+    expect(publishSubject(envelope)).toBe('graveshift.tenant-1.telemetry.api.signal.oom');
   });
 
   for (const severity of ['warning', 'critical'] as const) {
-    test(`${severity} uses the detection lane`, () => {
+    test(`${severity} uses the detection lane and includes the Grave token`, () => {
       expect(publishSubject({ ...envelope, severity })).toBe(
-        'graveshift.tenant-1.detection.signal.oom',
+        `graveshift.tenant-1.detection.api.signal.oom`,
       );
     });
   }
+
+  test('maps a service with unsafe characters to one safe token', () => {
+    expect(publishSubject({ ...envelope, service: 'checkout.api/v2' })).toBe(
+      'graveshift.tenant-1.telemetry.checkout_api_v2.signal.oom',
+    );
+  });
+
+  test('safeSubjectToken is idempotent and never empty', () => {
+    expect(safeSubjectToken('checkout')).toBe('checkout');
+    expect(safeSubjectToken('checkout.api')).toBe('checkout_api');
+    expect(safeSubjectToken('...')).toBe('_');
+    expect(safeSubjectToken(safeSubjectToken('a b'))).toBe(safeSubjectToken('a b'));
+  });
+});
+
+describe('subject part safety', () => {
+  test('publishSubject rejects an unsafe tenantId', () => {
+    for (const tenantId of ['a.b', 'a*b', 'a>b', 'a b', '']) {
+      expect(() => publishSubject({ ...envelope, tenantId })).toThrow('tenantId');
+    }
+  });
+
+  test('publishSubject rejects a wildcard or empty token in type', () => {
+    for (const type of ['signal.*', 'signal.>', 'signal..oom', '.oom', 'signal ']) {
+      expect(() => publishSubject({ ...envelope, type })).toThrow('type');
+    }
+    expect(publishSubject({ ...envelope, type: 'checkout.http.request' })).toBe(
+      'graveshift.tenant-1.telemetry.api.checkout.http.request',
+    );
+  });
+
+  test('the core schema already limits tenantId and type', () => {
+    for (const tenantId of ['a.b', 'a*b', 'a>b']) {
+      expect(() => EventEnvelopeSchema.parse({ ...envelope, tenantId })).toThrow();
+    }
+    for (const type of ['signal.*', 'signal.>']) {
+      expect(() => EventEnvelopeSchema.parse({ ...envelope, type })).toThrow();
+    }
+    expect(() => EventEnvelopeSchema.parse({ ...envelope, type: 'a.b.c' })).not.toThrow();
+  });
 });
 
 describe('createNatsPublisher', () => {
@@ -75,7 +115,7 @@ describe('createNatsPublisher', () => {
     await createNatsPublisher(target).publish({ ...envelope, severity: 'critical' });
 
     const record = published[0];
-    expect(record?.subject).toBe('graveshift.tenant-1.detection.signal.oom');
+    expect(record?.subject).toBe('graveshift.tenant-1.detection.api.signal.oom');
     const decoded = JSON.parse(new TextDecoder().decode(record?.payload)) as EventEnvelope;
     expect(decoded).toEqual({ ...envelope, severity: 'critical' });
   });

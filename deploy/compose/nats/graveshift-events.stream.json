@@ -1,0 +1,14 @@
+{
+  "name": "GRAVESHIFT_EVENTS",
+  "subjects": ["graveshift.>"],
+  "storage": "file",
+  "retention": "limits",
+  "discard": "old",
+  "num_replicas": 1,
+  "allow_direct": true,
+  "max_age": 2592000000000000,
+  "max_msgs": 5000000,
+  "max_bytes": 10737418240,
+  "max_msg_size": 131072,
+  "duplicate_window": 120000000000
+}
