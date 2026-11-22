@@ -123,7 +123,459 @@
         "parameters": [],
         "responses": {
           "200": {
-            "description": "The validated Agent config from boot. The client list overrides by name.",
+            "description": "The sanitized Agent view from boot, for the dashboard. Requires config:read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "system": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "slug": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                          },
+                          "role": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "description": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "provider": {
+                            "type": "string",
+                            "enum": [
+                              "@ai-sdk/alibaba",
+                              "@ai-sdk/amazon-bedrock",
+                              "@ai-sdk/anthropic",
+                              "@ai-sdk/anthropic-aws",
+                              "@ai-sdk/assemblyai",
+                              "@ai-sdk/azure",
+                              "@ai-sdk/baseten",
+                              "@ai-sdk/black-forest-labs",
+                              "@ai-sdk/bytedance",
+                              "@ai-sdk/cartesia",
+                              "@ai-sdk/cerebras",
+                              "@ai-sdk/cohere",
+                              "@ai-sdk/deepgram",
+                              "@ai-sdk/deepinfra",
+                              "@ai-sdk/deepseek",
+                              "@ai-sdk/elevenlabs",
+                              "@ai-sdk/fal",
+                              "@ai-sdk/fish-audio",
+                              "@ai-sdk/fireworks",
+                              "@ai-sdk/gateway",
+                              "@ai-sdk/gladia",
+                              "@ai-sdk/gmicloud",
+                              "@ai-sdk/google",
+                              "@ai-sdk/google-vertex",
+                              "@ai-sdk/groq",
+                              "@ai-sdk/heygen",
+                              "@ai-sdk/huggingface",
+                              "@ai-sdk/hume",
+                              "@ai-sdk/klingai",
+                              "@ai-sdk/liquid",
+                              "@ai-sdk/luma",
+                              "@ai-sdk/minimax",
+                              "@ai-sdk/mistral",
+                              "@ai-sdk/moonshotai",
+                              "@ai-sdk/open-responses",
+                              "@ai-sdk/openai",
+                              "@ai-sdk/openai-compatible",
+                              "@ai-sdk/parallel",
+                              "@ai-sdk/perplexity",
+                              "@ai-sdk/prodia",
+                              "@ai-sdk/quiverai",
+                              "@ai-sdk/replicate",
+                              "@ai-sdk/revai",
+                              "@ai-sdk/scaledown",
+                              "@ai-sdk/tencent",
+                              "@ai-sdk/togetherai",
+                              "@ai-sdk/topaz",
+                              "@ai-sdk/typesafe-ai",
+                              "@ai-sdk/voyage",
+                              "@ai-sdk/xai",
+                              "@ai-sdk/zai"
+                            ]
+                          },
+                          "model": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "dailyBudgetUsd": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "escalateTo": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "slug",
+                          "role",
+                          "description",
+                          "provider",
+                          "model",
+                          "dailyBudgetUsd"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "client": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "name": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "slug": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                          },
+                          "role": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "description": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "provider": {
+                            "type": "string",
+                            "enum": [
+                              "@ai-sdk/alibaba",
+                              "@ai-sdk/amazon-bedrock",
+                              "@ai-sdk/anthropic",
+                              "@ai-sdk/anthropic-aws",
+                              "@ai-sdk/assemblyai",
+                              "@ai-sdk/azure",
+                              "@ai-sdk/baseten",
+                              "@ai-sdk/black-forest-labs",
+                              "@ai-sdk/bytedance",
+                              "@ai-sdk/cartesia",
+                              "@ai-sdk/cerebras",
+                              "@ai-sdk/cohere",
+                              "@ai-sdk/deepgram",
+                              "@ai-sdk/deepinfra",
+                              "@ai-sdk/deepseek",
+                              "@ai-sdk/elevenlabs",
+                              "@ai-sdk/fal",
+                              "@ai-sdk/fish-audio",
+                              "@ai-sdk/fireworks",
+                              "@ai-sdk/gateway",
+                              "@ai-sdk/gladia",
+                              "@ai-sdk/gmicloud",
+                              "@ai-sdk/google",
+                              "@ai-sdk/google-vertex",
+                              "@ai-sdk/groq",
+                              "@ai-sdk/heygen",
+                              "@ai-sdk/huggingface",
+                              "@ai-sdk/hume",
+                              "@ai-sdk/klingai",
+                              "@ai-sdk/liquid",
+                              "@ai-sdk/luma",
+                              "@ai-sdk/minimax",
+                              "@ai-sdk/mistral",
+                              "@ai-sdk/moonshotai",
+                              "@ai-sdk/open-responses",
+                              "@ai-sdk/openai",
+                              "@ai-sdk/openai-compatible",
+                              "@ai-sdk/parallel",
+                              "@ai-sdk/perplexity",
+                              "@ai-sdk/prodia",
+                              "@ai-sdk/quiverai",
+                              "@ai-sdk/replicate",
+                              "@ai-sdk/revai",
+                              "@ai-sdk/scaledown",
+                              "@ai-sdk/tencent",
+                              "@ai-sdk/togetherai",
+                              "@ai-sdk/topaz",
+                              "@ai-sdk/typesafe-ai",
+                              "@ai-sdk/voyage",
+                              "@ai-sdk/xai",
+                              "@ai-sdk/zai"
+                            ]
+                          },
+                          "model": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "dailyBudgetUsd": {
+                            "type": "number",
+                            "minimum": 0
+                          },
+                          "escalateTo": {
+                            "type": "string",
+                            "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$"
+                          }
+                        },
+                        "required": [
+                          "name",
+                          "slug",
+                          "role",
+                          "description",
+                          "provider",
+                          "model",
+                          "dailyBudgetUsd"
+                        ],
+                        "additionalProperties": false
+                      }
+                    }
+                  },
+                  "required": [
+                    "system",
+                    "client"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer credential was presented."
+          },
+          "403": {
+            "description": "The token does not hold config:read."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "config"
+        ]
+      }
+    },
+    "/api/config/policy": {
+      "get": {
+        "operationId": "ConfigController_getPolicy",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The sanitized policy view from boot, for the dashboard. No approver id, repo name, branch name or allowed/forbidden path. Requires config:read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "version": {
+                      "type": "number",
+                      "enum": [
+                        1
+                      ]
+                    },
+                    "mode": {
+                      "type": "string",
+                      "enum": [
+                        "dry-run",
+                        "propose",
+                        "act"
+                      ]
+                    },
+                    "limits": {
+                      "type": "object",
+                      "properties": {
+                        "maxOpenPrsPerHour": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "maxActionsPerServicePer10Min": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "maxDiagnosisLoops": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "llmDailyBudgetUsd": {
+                          "type": "number",
+                          "minimum": 0
+                        }
+                      },
+                      "required": [
+                        "maxOpenPrsPerHour",
+                        "maxActionsPerServicePer10Min",
+                        "maxDiagnosisLoops",
+                        "llmDailyBudgetUsd"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "llm": {
+                      "type": "object",
+                      "properties": {
+                        "minConfidenceForPr": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        },
+                        "minConfidenceForAction": {
+                          "type": "number",
+                          "minimum": 0,
+                          "maximum": 1
+                        }
+                      },
+                      "required": [
+                        "minConfidenceForPr",
+                        "minConfidenceForAction"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "rules": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "minLength": 1
+                          },
+                          "action": {
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "minLength": 1
+                              },
+                              {
+                                "minItems": 1,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              }
+                            ]
+                          },
+                          "when": {
+                            "type": "object",
+                            "properties": {
+                              "category": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "services": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "signals": {
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "params": {
+                            "type": "object",
+                            "properties": {
+                              "replicas": {
+                                "type": "object",
+                                "properties": {
+                                  "min": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "max": {
+                                    "type": "integer",
+                                    "minimum": 0,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "min",
+                                  "max"
+                                ],
+                                "additionalProperties": false
+                              }
+                            },
+                            "additionalProperties": false
+                          },
+                          "effect": {
+                            "type": "string",
+                            "enum": [
+                              "allow",
+                              "require_approval",
+                              "deny"
+                            ]
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "action",
+                          "effect"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "default": {
+                      "type": "string",
+                      "enum": [
+                        "deny"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "version",
+                    "mode",
+                    "limits",
+                    "llm",
+                    "rules",
+                    "default"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No valid bearer credential was presented."
+          },
+          "403": {
+            "description": "The token does not hold config:read."
+          }
+        },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
+        "tags": [
+          "config"
+        ]
+      }
+    },
+    "/api/config/agents/export": {
+      "get": {
+        "operationId": "ConfigController_exportAgents",
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "The full validated Agent config from boot. apiKeyEnv is a variable name only. Writes exactly one config.exported audit entry. Requires config:export.",
             "content": {
               "application/json": {
                 "schema": {
@@ -411,20 +863,31 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "No valid bearer credential was presented."
+          },
+          "403": {
+            "description": "The token does not hold config:export."
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "tags": [
           "config"
         ]
       }
     },
-    "/api/config/policy": {
+    "/api/config/policy/export": {
       "get": {
-        "operationId": "ConfigController_getPolicy",
+        "operationId": "ConfigController_exportPolicy",
         "parameters": [],
         "responses": {
           "200": {
-            "description": "The validated policy config from boot. Default deny stays in force.",
+            "description": "The full validated policy config from boot. No secret value or resolved env value. Writes exactly one config.exported audit entry. Requires config:export.",
             "content": {
               "application/json": {
                 "schema": {
@@ -713,8 +1176,19 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "No valid bearer credential was presented."
+          },
+          "403": {
+            "description": "The token does not hold config:export."
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "tags": [
           "config"
         ]
@@ -2330,6 +2804,13 @@
   "tags": [],
   "servers": [],
   "components": {
+    "securitySchemes": {
+      "bearer": {
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "type": "http"
+      }
+    },
     "schemas": {
       "RuleMatchDto": {
         "type": "object",
@@ -2451,7 +2932,9 @@
                 "logs:read",
                 "metrics:read",
                 "fix:propose",
-                "events:publish"
+                "events:publish",
+                "config:read",
+                "config:export"
               ]
             }
           },

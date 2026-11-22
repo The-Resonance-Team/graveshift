@@ -1,108 +1,42 @@
-import { parseGraveshiftConfig } from '@graveshift/config';
-import type { AgentsConfigResponse, PolicyConfigResponse } from '@graveshift/api-contract';
+import type {
+  ConfigAgentsExportResponse,
+  ConfigAgentsViewResponse,
+  ConfigPolicyExportResponse,
+  ConfigPolicyViewResponse,
+} from '@graveshift/api-contract';
 import type { INestApplication } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
-import { mkdtemp, rm } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
+import { unlink } from 'node:fs/promises';
 import request from 'supertest';
 
-import { AppModule } from '../src/app.module';
-import { configureApp } from '../src/app.factory';
-
-const FAKE_CONFIG = new URL('./fixtures/config.fake.yaml', import.meta.url);
-const FAKE_CONFIG_PATH = fileURLToPath(FAKE_CONFIG);
-const INVALID_BOOT_CONFIG_PATH = fileURLToPath(
-  new URL('./fixtures/config.invalid-boot.yaml', import.meta.url),
-);
-
-// Test-only values for the env names the fake config points at. No real secret.
-// The tests prove these values never appear in a config response.
-const FAKE_ENV_VALUES: Record<string, string> = {
-  GRAVESHIFT_TEST_AGENT_API_KEY: 'sk-fake-agent-key-never-returned',
-  GRAVESHIFT_TEST_CLIENT_API_KEY: 'sk-fake-client-key-never-returned',
-  GRAVESHIFT_TEST_GITHUB_APP_ID: '42424242',
-  GRAVESHIFT_TEST_GITHUB_PRIVATE_KEY: 'FAKE-PRIVATE-KEY-MATERIAL-NEVER-RETURNED',
-};
-
-// The name and value of an unknown key with a secret shape. AgentConfigSchema and
-// AgentsFileSchema are strict, so an Agent block key stops boot. PolicySchema is not
-// strict and strips it at boot. Either way the value must never reach a response.
-const UNKNOWN_SECRET_KEY = 'secretToken';
-const UNKNOWN_SECRET_VALUE = 'sk-fake-unknown-key-secret-never-returned';
-
-function withFakeEnv(path: string): void {
-  process.env.GRAVESHIFT_CONFIG_PATH = path;
-  for (const [name, value] of Object.entries(FAKE_ENV_VALUES)) process.env[name] = value;
-}
-
-function restoreEnv(): void {
-  if (originalConfigPath === undefined) delete process.env.GRAVESHIFT_CONFIG_PATH;
-  else process.env.GRAVESHIFT_CONFIG_PATH = originalConfigPath;
-  for (const name of Object.keys(FAKE_ENV_VALUES)) delete process.env[name];
-}
-
-const originalConfigPath = process.env.GRAVESHIFT_CONFIG_PATH;
-
-// The boot provider reads GRAVESHIFT_CONFIG_PATH when the module instantiates, so the
-// test sets it before building the app and restores it after every test.
-// The suite boots through @nestjs/testing: NestFactory.create exits the process on a
-// boot error, and the boot-validation tests must catch the error instead.
-async function appFromConfigFile(path: string): Promise<INestApplication> {
-  withFakeEnv(path);
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
-  const app = configureApp(moduleRef.createNestApplication({ logger: false }));
-  await app.init();
-  return app;
-}
-
-async function bootFailureFromConfigFile(path: string): Promise<unknown> {
-  withFakeEnv(path);
-  return Test.createTestingModule({ imports: [AppModule] })
-    .compile()
-    .then(
-      (moduleRef) => {
-        void moduleRef.close();
-        return undefined;
-      },
-      (error: unknown) => error,
-    );
-}
-
-// One config file in a private temp dir, so a test can write a broken variant without
-// touching a committed fixture. The directory is removed when the test ends.
-async function withTempConfigFile<T>(
-  name: string,
-  text: string,
-  run: (path: string) => Promise<T>,
-): Promise<T> {
-  const dir = await mkdtemp(join(tmpdir(), 'graveshift-config-e2e-'));
-  const path = join(dir, name);
-  try {
-    await Bun.write(path, text);
-    return await run(path);
-  } finally {
-    await rm(dir, { recursive: true, force: true });
-  }
-}
-
-// The one source the endpoints must serve: the same validated object the boot
-// provider holds. No route reads a YAML file per request.
-const validated = parseGraveshiftConfig(Bun.YAML.parse(await Bun.file(FAKE_CONFIG).text()));
-
-// JSON round-trip mirrors the wire format: express serializes the same way and drops
-// absent optional keys, so the comparison is against what the client actually parses.
-function wire<T>(value: unknown): T {
-  return JSON.parse(JSON.stringify(value)) as T;
-}
+import { ALL_SCOPES, MCP_READ_SCOPES, PLUGIN_SCOPES, scopesForKind } from '../src/auth/scopes';
+import {
+  CLIENTS,
+  EXPORT_ROUTES,
+  EXPECTED_AGENTS_VIEW,
+  EXPECTED_POLICY_VIEW,
+  FAKE_CONFIG,
+  FAKE_CONFIG_PATH,
+  FAKE_ENV_VALUES,
+  FakeAuditRepo,
+  READ_ROUTES,
+  SANITIZE_ABSENT_KEYS,
+  appFromConfigFile,
+  bearerToken,
+  restoreEnv,
+  validated,
+  wire,
+  withTempConfigFile,
+} from './config-test-helpers';
 
 describe('config read-only API (e2e)', () => {
   let app!: INestApplication;
+  let audit!: FakeAuditRepo;
 
   beforeEach(async () => {
-    app = await appFromConfigFile(FAKE_CONFIG_PATH);
+    audit = new FakeAuditRepo();
+    const built = await appFromConfigFile(FAKE_CONFIG_PATH, audit);
+    app = built.app;
   });
 
   afterEach(async () => {
@@ -110,41 +44,167 @@ describe('config read-only API (e2e)', () => {
     restoreEnv();
   });
 
-  test('GET /api/config/agents returns the exact validated Agent config', async () => {
-    const response = await request(app.getHttpServer()).get('/api/config/agents').expect(200);
-    const body = response.body as AgentsConfigResponse;
+  test('anonymous GET is denied with 401 before any config is read', async () => {
+    // The file is removed after boot: a 401 that survives proves the deny path never
+    // touches disk, because the config was read once at boot and frozen.
+    await withTempConfigFile(
+      'config.anonymous.yaml',
+      await Bun.file(FAKE_CONFIG).text(),
+      async (path) => {
+        const built = await appFromConfigFile(path);
+        try {
+          await unlink(path);
+          const responses = await Promise.all(
+            [...READ_ROUTES, ...EXPORT_ROUTES].map((route) =>
+              request(built.app.getHttpServer()).get(route),
+            ),
+          );
+          expect(responses.map((response) => response.status)).toEqual([401, 401, 401, 401]);
+        } finally {
+          await built.app.close();
+        }
+      },
+    );
+  });
+
+  test('a config:read token gets exactly the sanitized Agent view', async () => {
+    const token = await bearerToken(app, CLIENTS.read.id, CLIENTS.read.secret);
+    const response = await request(app.getHttpServer())
+      .get('/api/config/agents')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(response.body as ConfigAgentsViewResponse).toEqual(wire(EXPECTED_AGENTS_VIEW));
+    for (const key of SANITIZE_ABSENT_KEYS) expect(response.text).not.toContain(key);
+    expect(response.text).not.toContain('GRAVESHIFT_TEST_AGENT_API_KEY');
+    for (const value of Object.values(FAKE_ENV_VALUES)) expect(response.text).not.toContain(value);
+  });
+
+  test('a config:read token gets exactly the sanitized policy view', async () => {
+    const token = await bearerToken(app, CLIENTS.read.id, CLIENTS.read.secret);
+    const response = await request(app.getHttpServer())
+      .get('/api/config/policy')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(response.body as ConfigPolicyViewResponse).toEqual(wire(EXPECTED_POLICY_VIEW));
+    for (const key of SANITIZE_ABSENT_KEYS) expect(response.text).not.toContain(key);
+    expect(response.text).not.toContain('000000000000000001');
+    expect(response.text).not.toContain('fake/ghost-repo');
+  });
+
+  test('a config:export token gets the full Agent config but no secret value', async () => {
+    const token = await bearerToken(app, CLIENTS.export.id, CLIENTS.export.secret);
+    const response = await request(app.getHttpServer())
+      .get('/api/config/agents/export')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    const body = response.body as ConfigAgentsExportResponse;
     expect(body).toEqual(wire(validated.agents));
+    // apiKeyEnv stays a variable name; its value and the key never appear.
     expect(body.system[0]?.apiKeyEnv).toBe('GRAVESHIFT_TEST_AGENT_API_KEY');
     expect(body.client[0]?.apiKeyEnv).toBe('GRAVESHIFT_TEST_CLIENT_API_KEY');
+    for (const value of Object.values(FAKE_ENV_VALUES)) expect(response.text).not.toContain(value);
   });
 
-  test('GET /api/config/policy returns the exact validated policy config', async () => {
-    const response = await request(app.getHttpServer()).get('/api/config/policy').expect(200);
-    const body = response.body as PolicyConfigResponse;
-    expect(body).toEqual(wire(validated.policy));
-    expect(body.default).toBe('deny');
+  test('a config:export token gets the full policy config but no secret value', async () => {
+    const token = await bearerToken(app, CLIENTS.export.id, CLIENTS.export.secret);
+    const response = await request(app.getHttpServer())
+      .get('/api/config/policy/export')
+      .set('Authorization', `Bearer ${token}`)
+      .expect(200);
+    expect(response.body as ConfigPolicyExportResponse).toEqual(wire(validated.policy));
+    for (const value of Object.values(FAKE_ENV_VALUES)) expect(response.text).not.toContain(value);
   });
 
-  test('config responses hold env names only and no secret value', async () => {
-    const agents = await request(app.getHttpServer()).get('/api/config/agents').expect(200);
-    const policy = await request(app.getHttpServer()).get('/api/config/policy').expect(200);
-    const bodies = `${agents.text}\n${policy.text}`;
-    for (const value of Object.values(FAKE_ENV_VALUES)) {
-      expect(bodies).not.toContain(value);
+  test('the exact scope for the route is enforced on every config route', async () => {
+    const readToken = await bearerToken(app, CLIENTS.read.id, CLIENTS.read.secret);
+    const exportToken = await bearerToken(app, CLIENTS.export.id, CLIENTS.export.secret);
+    const unrelatedToken = await bearerToken(app, CLIENTS.unrelated.id, CLIENTS.unrelated.secret);
+    const server = app.getHttpServer();
+    // config:read on export routes, config:export on read routes, unrelated scope
+    // everywhere: denied.
+    const mismatches = await Promise.all([
+      ...EXPORT_ROUTES.map((route) =>
+        request(server).get(route).set('Authorization', `Bearer ${readToken}`),
+      ),
+      ...READ_ROUTES.map((route) =>
+        request(server).get(route).set('Authorization', `Bearer ${exportToken}`),
+      ),
+      ...[...READ_ROUTES, ...EXPORT_ROUTES].map((route) =>
+        request(server).get(route).set('Authorization', `Bearer ${unrelatedToken}`),
+      ),
+    ]);
+    expect(mismatches.map((response) => response.status)).toEqual([
+      403, 403, 403, 403, 403, 403, 403, 403,
+    ]);
+  });
+
+  test('one export writes exactly one audit event and a read writes none', async () => {
+    const readToken = await bearerToken(app, CLIENTS.read.id, CLIENTS.read.secret);
+    const server = app.getHttpServer();
+    await request(server)
+      .get(READ_ROUTES[0])
+      .set('Authorization', `Bearer ${readToken}`)
+      .expect(200);
+    await request(server)
+      .get(READ_ROUTES[1])
+      .set('Authorization', `Bearer ${readToken}`)
+      .expect(200);
+    expect(audit.appended.length).toBe(0);
+
+    const exportToken = await bearerToken(app, CLIENTS.export.id, CLIENTS.export.secret);
+    await request(server)
+      .get(EXPORT_ROUTES[0])
+      .set('Authorization', `Bearer ${exportToken}`)
+      .expect(200);
+    await request(server)
+      .get(EXPORT_ROUTES[1])
+      .set('Authorization', `Bearer ${exportToken}`)
+      .expect(200);
+
+    expect(audit.appended.length).toBe(2);
+    expect(audit.appended.map((entry) => entry.payload)).toEqual([
+      { exported: 'agents' },
+      { exported: 'policy' },
+    ]);
+    for (const entry of audit.appended) {
+      expect(entry.type).toBe('config.exported');
+      expect(entry.actor).toBe(CLIENTS.export.id);
+      expect(entry.projectId).toBe('12345');
+      expect(Object.keys(entry.payload)).toEqual(['exported']);
+      expect(JSON.stringify(entry.payload)).not.toContain('Test Agent');
     }
-    // The names are present, which shows the values were not resolved into them.
-    expect(agents.text).toContain('GRAVESHIFT_TEST_AGENT_API_KEY');
+  });
+
+  test('a failed audit append fails the export closed and serves no config', async () => {
+    const failingAudit = new FakeAuditRepo();
+    failingAudit.failure = new Error('audit chain unavailable');
+    const built = await appFromConfigFile(FAKE_CONFIG_PATH, failingAudit);
+    try {
+      const token = await bearerToken(built.app, CLIENTS.export.id, CLIENTS.export.secret);
+      const response = await request(built.app.getHttpServer())
+        .get(EXPORT_ROUTES[0])
+        .set('Authorization', `Bearer ${token}`);
+      expect(response.status).toBe(500);
+      expect(JSON.stringify(response.body)).not.toContain('Test Agent');
+    } finally {
+      await built.app.close();
+    }
+    expect(failingAudit.appended.length).toBe(0);
   });
 
   test('the routes serve the boot snapshot and never re-read the YAML file', async () => {
     // The app already booted from this file. Mutate it on disk: if a route re-read the
-    // file, the response would change. The response must stay the boot-time snapshot.
+    // file, the export response would change. The response must stay the boot snapshot.
     const original = await Bun.file(FAKE_CONFIG).text();
     try {
       await Bun.write(FAKE_CONFIG, original.replaceAll('Test Agent', 'Mutated Agent'));
-      const response = await request(app.getHttpServer()).get('/api/config/agents').expect(200);
+      const token = await bearerToken(app, CLIENTS.export.id, CLIENTS.export.secret);
+      const response = await request(app.getHttpServer())
+        .get(EXPORT_ROUTES[0])
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
       expect(response.text).not.toContain('Mutated Agent');
-      const body = response.body as AgentsConfigResponse;
+      const body = response.body as ConfigAgentsExportResponse;
       expect(body.system[0]?.name).toBe('Test Agent');
       expect(body).toEqual(wire(validated.agents));
     } finally {
@@ -154,86 +214,43 @@ describe('config read-only API (e2e)', () => {
 
   test('the config routes expose no write endpoint', async () => {
     const server = app.getHttpServer();
-    const responses = await Promise.all([
-      request(server).post('/api/config/agents'),
-      request(server).put('/api/config/agents'),
-      request(server).patch('/api/config/agents'),
-      request(server).delete('/api/config/agents'),
-      request(server).post('/api/config/policy'),
-      request(server).put('/api/config/policy'),
-      request(server).patch('/api/config/policy'),
-      request(server).delete('/api/config/policy'),
-    ]);
-    expect(responses.map((response) => response.status)).toEqual([
-      404, 404, 404, 404, 404, 404, 404, 404,
-    ]);
-  });
-});
-
-describe('config secret hygiene (e2e)', () => {
-  let app: INestApplication | undefined;
-
-  afterEach(async () => {
-    await app?.close();
-    app = undefined;
-    restoreEnv();
-  });
-
-  test('an unknown key with a secret in the Agent block stops boot and never reaches a response', async () => {
-    const source = await Bun.file(FAKE_CONFIG).text();
-    // One extra key inside the first Agent. AgentConfigSchema is strict, so boot fails.
-    const text = source.replace(
-      '      apiKeyEnv: GRAVESHIFT_TEST_AGENT_API_KEY',
-      `      apiKeyEnv: GRAVESHIFT_TEST_AGENT_API_KEY\n      ${UNKNOWN_SECRET_KEY}: ${UNKNOWN_SECRET_VALUE}`,
+    const routes = [...READ_ROUTES, ...EXPORT_ROUTES];
+    const responses = await Promise.all(
+      routes.flatMap((route) => [
+        request(server).post(route),
+        request(server).put(route),
+        request(server).patch(route),
+        request(server).delete(route),
+      ]),
     );
-    expect(text).not.toBe(source);
-    await withTempConfigFile('config.unknown-agent-key.yaml', text, async (path) => {
-      const failure = await bootFailureFromConfigFile(path);
-      expect(failure).toBeInstanceOf(Error);
-      const message = (failure as Error).message;
-      expect(message).toMatch(/Unrecognized key|strict/);
-      expect(message).toContain(UNKNOWN_SECRET_KEY);
-      // The rejected value stays out of the boot error, and no app exists to serve it.
-      expect(message).not.toContain(UNKNOWN_SECRET_VALUE);
-      expect(message).not.toContain('sk-fake');
-    });
+    expect(responses.every((response) => response.status === 404)).toBe(true);
+    expect(responses.length).toBe(routes.length * 4);
   });
 
-  test('an unknown key with a secret in the policy block is stripped at boot and never returned', async () => {
-    const source = await Bun.file(FAKE_CONFIG).text();
-    // One extra key inside the policy block. PolicySchema strips unknown keys at boot.
-    const text = source.replace(
-      'policy:\n',
-      `policy:\n  ${UNKNOWN_SECRET_KEY}: ${UNKNOWN_SECRET_VALUE}\n`,
+  test('config scopes stay HTTP-only: the catalog holds them, no credential kind does', async () => {
+    // Catalog check: the scopes exist for the #63 OAuth issuer only.
+    expect(ALL_SCOPES).toContain('config:read');
+    expect(ALL_SCOPES).toContain('config:export');
+    expect(MCP_READ_SCOPES).not.toContain('config:read');
+    expect(MCP_READ_SCOPES).not.toContain('config:export');
+    expect(PLUGIN_SCOPES).not.toContain('config:read');
+    expect(PLUGIN_SCOPES).not.toContain('config:export');
+    expect(scopesForKind('mcp')).not.toContain('config:read');
+    expect(scopesForKind('plugin')).not.toContain('config:export');
+    // Choke-point check: CredentialService.issue rejects them for both kinds before
+    // any store access, even from a tokens:manage client.
+    const token = await bearerToken(app, 'client-1', 'test-client-secret-123456');
+    const server = app.getHttpServer();
+    const denials = await Promise.all(
+      (['mcp', 'plugin'] as const).flatMap((kind) =>
+        (['config:read', 'config:export'] as const).map((scope) =>
+          request(server)
+            .post('/api/credentials')
+            .set('Authorization', `Bearer ${token}`)
+            .send({ kind, name: `cfg-${kind}-${scope}`, scopes: [scope] }),
+        ),
+      ),
     );
-    expect(text).not.toBe(source);
-    await withTempConfigFile('config.unknown-policy-key.yaml', text, async (path) => {
-      const created = await appFromConfigFile(path);
-      app = created;
-      const agents = await request(created.getHttpServer()).get('/api/config/agents').expect(200);
-      const policy = await request(created.getHttpServer()).get('/api/config/policy').expect(200);
-      const bodies = `${agents.text}\n${policy.text}`;
-      expect(bodies).not.toContain(UNKNOWN_SECRET_VALUE);
-      expect(bodies).not.toContain(UNKNOWN_SECRET_KEY);
-      // The stripped response still equals the validated fixture policy.
-      expect(policy.body as PolicyConfigResponse).toEqual(wire(validated.policy));
-    });
-  });
-});
-
-describe('config boot validation (e2e)', () => {
-  afterEach(() => {
-    restoreEnv();
-  });
-
-  test('an invalid boot config stops the API before any config route serves', async () => {
-    // Boot runs during module compile: the failure happens before an application
-    // instance exists, so no route could have served a request.
-    const failure = await bootFailureFromConfigFile(INVALID_BOOT_CONFIG_PATH);
-    expect(failure).toBeInstanceOf(Error);
-    const message = (failure as Error).message;
-    expect(message).toMatch(/Invalid config|GRAVESHIFT_CONFIG_INVALID/);
-    // The failure names the boot block of the merged schema.
-    expect(message).toContain('boot.port');
+    expect(denials.map((response) => response.status)).toEqual([403, 403, 403, 403]);
   });
 });

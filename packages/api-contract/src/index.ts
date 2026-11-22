@@ -48,8 +48,17 @@ export type PublishEventRequest =
 export type EventAcceptedResponse =
   paths['/api/events']['post']['responses'][202]['content']['application/json'];
 
-export type AgentsConfigResponse =
+// The read-only config surface. The sanitized (config:read) and full (config:export)
+// response types are distinct: the sanitized view has no prompt, params, baseUrl,
+// apiKeyEnv, allowedTools, approvers or github block.
+export type ConfigAgentsViewResponse =
   paths['/api/config/agents']['get']['responses'][200]['content']['application/json'];
 
-export type PolicyConfigResponse =
+export type ConfigPolicyViewResponse =
   paths['/api/config/policy']['get']['responses'][200]['content']['application/json'];
+
+export type ConfigAgentsExportResponse =
+  paths['/api/config/agents/export']['get']['responses'][200]['content']['application/json'];
+
+export type ConfigPolicyExportResponse =
+  paths['/api/config/policy/export']['get']['responses'][200]['content']['application/json'];

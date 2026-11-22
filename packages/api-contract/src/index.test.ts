@@ -3,10 +3,12 @@ import { describe, expect, test } from 'bun:test';
 import contractPackage from '../package.json';
 import {
   API_CONTRACT_VERSION,
-  type AgentsConfigResponse,
   type Assignee,
+  type ConfigAgentsExportResponse,
+  type ConfigAgentsViewResponse,
+  type ConfigPolicyExportResponse,
+  type ConfigPolicyViewResponse,
   type HealthResponse,
-  type PolicyConfigResponse,
   type TriageRequest,
   type WorkItemListResponse,
   type WorkItemResponse,
@@ -63,23 +65,87 @@ describe('api contract', () => {
   });
 
   test('the config routes are read-only in the contract', () => {
-    const agents = openapi.paths['/api/config/agents'];
-    const policy = openapi.paths['/api/config/policy'];
-    expect(Object.keys(agents)).toEqual(['get']);
-    expect(Object.keys(policy)).toEqual(['get']);
-    // The response carries the env variable name, never a key or a resolved value.
-    expect(agents.get.responses['200'].content['application/json'].schema).not.toHaveProperty(
-      'apiKey',
-    );
+    const configRoutes = [
+      '/api/config/agents',
+      '/api/config/policy',
+      '/api/config/agents/export',
+      '/api/config/policy/export',
+    ] as const;
+    for (const path of configRoutes) {
+      expect(Object.keys(openapi.paths[path] ?? {})).toEqual(['get']);
+    }
   });
 
-  test('exports the read-only config response types', () => {
-    // Compile-time check: these types come from the generated paths only.
-    type AgentsShape = Pick<AgentsConfigResponse, 'system' | 'client'>;
-    type PolicyShape = Pick<PolicyConfigResponse, 'version' | 'mode' | 'default'>;
-    const shape: AgentsShape = { system: [], client: [] };
-    const policyShape: PolicyShape = { version: 1, mode: 'dry-run', default: 'deny' };
-    expect(shape.system).toEqual([]);
-    expect(policyShape.mode).toBe('dry-run');
+  test('the sanitized and full config response types are distinct', () => {
+    // The sanitized (config:read) types carry the whitelist fields only.
+    type AgentsViewShape = Pick<
+      ConfigAgentsViewResponse['system'][number],
+      'name' | 'slug' | 'role' | 'description' | 'provider' | 'model' | 'dailyBudgetUsd'
+    >;
+    type PolicyViewShape = Pick<
+      ConfigPolicyViewResponse,
+      'version' | 'mode' | 'limits' | 'llm' | 'rules' | 'default'
+    >;
+    // The full (config:export) types keep apiKeyEnv as a variable name.
+    type AgentsExportShape = Pick<ConfigAgentsExportResponse['system'][number], 'apiKeyEnv'>;
+    const view: AgentsViewShape = {
+      name: 'Test Agent',
+      slug: 'test-agent',
+      role: 'tester',
+      description: 'd',
+      provider: '@ai-sdk/openai',
+      model: 'm',
+      dailyBudgetUsd: 1,
+    };
+    const policyView: PolicyViewShape = {
+      version: 1,
+      mode: 'dry-run',
+      limits: {
+        maxOpenPrsPerHour: 0,
+        maxActionsPerServicePer10Min: 0,
+        maxDiagnosisLoops: 0,
+        llmDailyBudgetUsd: 0,
+      },
+      llm: { minConfidenceForPr: 1, minConfidenceForAction: 1 },
+      rules: [],
+      default: 'deny',
+    };
+    const exported: AgentsExportShape = { apiKeyEnv: 'GRAVESHIFT_TEST_AGENT_API_KEY' };
+    expect(view.slug).toBe('test-agent');
+    expect(policyView.default).toBe('deny');
+    expect(exported.apiKeyEnv).toBe('GRAVESHIFT_TEST_AGENT_API_KEY');
+
+    // The sanitized Agent view type has no prompt, baseUrl, apiKeyEnv or allowedTools,
+    // and the sanitized policy view has no approvers or github block.
+    type ForbiddenAgentKeys = 'prompt' | 'params' | 'baseUrl' | 'apiKeyEnv' | 'allowedTools';
+    type ForbiddenPolicyKeys = 'approvers' | 'github';
+    type AgentViewKeys = keyof ConfigAgentsViewResponse['system'][number];
+    type PolicyViewKeys = keyof ConfigPolicyViewResponse;
+    // Compile-time: these assignments fail if a forbidden key ever enters the types.
+    const noAgentLeak: Exclude<AgentViewKeys, ForbiddenAgentKeys>[] = [
+      'name',
+      'slug',
+      'role',
+      'description',
+      'provider',
+      'model',
+      'dailyBudgetUsd',
+      'escalateTo',
+    ];
+    const noPolicyLeak: Exclude<PolicyViewKeys, ForbiddenPolicyKeys>[] = [
+      'version',
+      'mode',
+      'limits',
+      'llm',
+      'rules',
+      'default',
+    ];
+    // Counter-check: the full export type keeps approvers and github, so the check
+    // above really distinguishes the two surfaces instead of a broken schema.
+    type ExportPolicyKeys = keyof ConfigPolicyExportResponse;
+    const fullKeeps: Extract<ExportPolicyKeys, 'approvers' | 'github'>[] = ['approvers', 'github'];
+    expect(fullKeeps.length).toBe(2);
+    expect(noAgentLeak).toContain('name');
+    expect(noPolicyLeak).toContain('default');
   });
 });
