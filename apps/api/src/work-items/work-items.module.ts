@@ -7,6 +7,7 @@ import { FixService } from '../fix/fix.service';
 import { FIX_DEPS } from '../fix/fix.types';
 import { DEMO_WORK_ITEMS } from './work-item.fixtures';
 import { createWorkItemPolicy, WORK_ITEM_POLICY } from './work-item.policy';
+import { WorkItemScopeGuard } from './work-item.scope.guard';
 import { WORK_ITEM_SEED, WorkItemStore } from './work-item.store';
 import { WorkItemsController } from './work-items.controller';
 
@@ -15,6 +16,7 @@ import { WorkItemsController } from './work-items.controller';
   providers: [
     WorkItemStore,
     FixService,
+    WorkItemScopeGuard,
     { provide: FIX_DEPS, useFactory: createFixDeps, inject: [GRAVESHIFT_CONFIG] },
     {
       provide: WORK_ITEM_SEED,

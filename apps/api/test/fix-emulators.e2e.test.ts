@@ -2,6 +2,7 @@
 // stateful emulators. No real key, model call, GitHub call or network is used.
 import { createSubtasks, NEEDS_HUMAN, type WorkItem } from '@graveshift/core';
 import type { INestApplication } from '@nestjs/common';
+import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { describe, expect, test } from 'bun:test';
 import request from 'supertest';
@@ -12,6 +13,7 @@ import { createFixDeps } from '../src/fix/fix.deps';
 import { FIX_DEPS, type FixDeps } from '../src/fix/fix.types';
 import { WORK_ITEM_POLICY, type WorkItemPolicy } from '../src/work-items/work-item.policy';
 import { WORK_ITEM_SEED, WorkItemStore } from '../src/work-items/work-item.store';
+import { accessToken } from './fakes/auth-test-helpers';
 import { useFixEmulators, rewriteHost } from './fix-emulator.setup';
 
 const emu = useFixEmulators();
@@ -105,8 +107,11 @@ describe('fix path over emulated GitHub and AI', () => {
     try {
       await app.init();
 
+      // The fix-now route needs a client-credentials token with fix:trigger.
+      const token = accessToken(app.get(JwtService), ['tokens:manage', 'fix:trigger']);
       const response = await request(app.getHttpServer())
         .post('/api/work-items/wi-e2e/fix-now')
+        .set('Authorization', `Bearer ${token}`)
         .expect(200);
       expect(response.body.ok).toBe(true);
       expect(response.body.failure).toBe('none');

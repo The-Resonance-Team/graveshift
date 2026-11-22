@@ -1518,8 +1518,22 @@
                 }
               }
             }
+          },
+          "401": {
+            "description": "No valid bearer credential was presented."
+          },
+          "403": {
+            "description": "The token does not hold incidents:read."
+          },
+          "429": {
+            "description": "The client exceeded the rate limit."
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "tags": [
           "work-items"
         ]
@@ -1766,10 +1780,24 @@
               }
             }
           },
+          "401": {
+            "description": "No valid bearer credential was presented."
+          },
+          "403": {
+            "description": "The token does not hold incidents:read."
+          },
           "404": {
             "description": "No work item has this id."
+          },
+          "429": {
+            "description": "The client exceeded the rate limit."
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "tags": [
           "work-items"
         ]
@@ -2079,6 +2107,12 @@
               }
             }
           },
+          "401": {
+            "description": "No valid bearer credential was presented."
+          },
+          "403": {
+            "description": "The token does not hold fix:trigger."
+          },
           "404": {
             "description": "No work item has this id."
           },
@@ -2087,8 +2121,16 @@
           },
           "422": {
             "description": "The assignee is not valid."
+          },
+          "429": {
+            "description": "The client exceeded the rate limit."
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "tags": [
           "work-items"
         ]
@@ -2432,6 +2474,12 @@
               }
             }
           },
+          "401": {
+            "description": "No valid bearer credential was presented."
+          },
+          "403": {
+            "description": "The token does not hold fix:trigger."
+          },
           "404": {
             "description": "No work item has this id."
           },
@@ -2440,8 +2488,16 @@
           },
           "422": {
             "description": "The request body is not valid."
+          },
+          "429": {
+            "description": "The client exceeded the rate limit."
           }
         },
+        "security": [
+          {
+            "bearer": []
+          }
+        ],
         "tags": [
           "work-items"
         ]
@@ -2585,7 +2641,8 @@
                 "logs:read",
                 "metrics:read",
                 "fix:propose",
-                "events:publish"
+                "events:publish",
+                "fix:trigger"
               ]
             }
           },

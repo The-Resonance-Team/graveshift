@@ -76,9 +76,10 @@ describe('api contract', () => {
     expect(openapi.paths['/api/config/export'].get.security).toEqual([{ bearer: [] }]);
   });
 
-  test('the create-credential request advertises credential scopes only', () => {
+  test('the create-credential request advertises issuable scopes only', () => {
     // The document must not offer config:export: the service denies it for every
-    // credential kind, so advertising it would promise the impossible.
+    // credential kind, so advertising it would promise the impossible. fix:trigger is
+    // issuable for the HTTP trigger routes, so it is in the advertised list.
     const enumValues = openapi.components.schemas.CreateCredentialDto.properties.scopes.items.enum;
     expect(enumValues).toEqual([
       'incidents:read',
@@ -88,6 +89,7 @@ describe('api contract', () => {
       'metrics:read',
       'fix:propose',
       'events:publish',
+      'fix:trigger',
     ]);
     expect(enumValues.filter((scope) => scope.startsWith('config:'))).toEqual([]);
   });

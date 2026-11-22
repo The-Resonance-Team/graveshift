@@ -14,6 +14,7 @@ process.env.GRAVESHIFT_OAUTH_CLIENTS ??= JSON.stringify({
       'logs:read',
       'metrics:read',
       'fix:propose',
+      'fix:trigger',
       'events:publish',
     ],
   },

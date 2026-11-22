@@ -22,20 +22,29 @@ import {
   Post,
   Query,
   UnprocessableEntityException,
+  UseGuards,
 } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+import { ThrottlerGuard } from '@nestjs/throttler';
 import {
+  ApiBearerAuth,
   ApiConflictResponse,
+  ApiForbiddenResponse,
   ApiNotFoundResponse,
   ApiOkResponse,
   ApiTags,
+  ApiTooManyRequestsResponse,
+  ApiUnauthorizedResponse,
   ApiUnprocessableEntityResponse,
 } from '@nestjs/swagger';
 
+import { FIX_TRIGGER_SCOPE } from '../auth/scopes';
 import { FixService } from '../fix/fix.service';
 import { FixNowRequestDto } from './dto/fix-now-request.dto';
 import { ListWorkItemsQueryDto } from './dto/list-work-items-query.dto';
 import { TriageRequestDto } from './dto/triage-request.dto';
 import { WorkItemParamsDto } from './dto/work-item-params.dto';
+import { RequireWorkItemScope, WorkItemScopeGuard } from './work-item.scope.guard';
 import { WORK_ITEM_POLICY, type WorkItemPolicy } from './work-item.policy';
 import {
   type FixResultResponse,
@@ -47,7 +56,15 @@ import {
 } from './work-item.schema';
 import { WorkItemStore } from './work-item.store';
 
+// The shared OAuth 2.1 client-credentials guard verifies the bearer token and puts the
+// authenticated principal on request.user. The local scope guard then checks one exact
+// scope per route and copies the actor plus its ADR 0018 project id to request.auditScope,
+// so the later audit write can scope entries without a deployment-wide project id.
+// ThrottlerGuard runs first, so an over-limit caller reaches neither a store nor a helper.
 @ApiTags('work-items')
+@ApiBearerAuth()
+@UseGuards(ThrottlerGuard, AuthGuard('oauth-client-credentials'), WorkItemScopeGuard)
+@ApiTooManyRequestsResponse({ description: 'The client exceeded the rate limit.' })
 @Controller('api/work-items')
 export class WorkItemsController {
   constructor(
@@ -57,6 +74,9 @@ export class WorkItemsController {
   ) {}
 
   @Get()
+  @RequireWorkItemScope('incidents:read')
+  @ApiUnauthorizedResponse({ description: 'No valid bearer credential was presented.' })
+  @ApiForbiddenResponse({ description: 'The token does not hold incidents:read.' })
   @ApiOkResponse({
     description: 'A page of work items for the table.',
     standardSchema: workItemListResponseSchema,
@@ -72,6 +92,9 @@ export class WorkItemsController {
   }
 
   @Get(':id')
+  @RequireWorkItemScope('incidents:read')
+  @ApiUnauthorizedResponse({ description: 'No valid bearer credential was presented.' })
+  @ApiForbiddenResponse({ description: 'The token does not hold incidents:read.' })
   @ApiOkResponse({
     description: 'One work item for the detail sheet.',
     standardSchema: WorkItemSchema,
@@ -84,6 +107,9 @@ export class WorkItemsController {
   }
 
   @Post(':id/triage')
+  @RequireWorkItemScope(FIX_TRIGGER_SCOPE)
+  @ApiUnauthorizedResponse({ description: 'No valid bearer credential was presented.' })
+  @ApiForbiddenResponse({ description: 'The token does not hold fix:trigger.' })
   @HttpCode(HttpStatus.OK)
   @ApiOkResponse({
     description: 'The triaged work item and its auto-fix outcome.',
@@ -144,6 +170,9 @@ export class WorkItemsController {
   }
 
   @Post(':id/fix-now')
+  @RequireWorkItemScope(FIX_TRIGGER_SCOPE)
+  @ApiUnauthorizedResponse({ description: 'No valid bearer credential was presented.' })
+  @ApiForbiddenResponse({ description: 'The token does not hold fix:trigger.' })
   @HttpCode(HttpStatus.OK)
   @ApiOkResponse({
     description: 'The fix result with the work item, the policy effect and the draft PR ref.',

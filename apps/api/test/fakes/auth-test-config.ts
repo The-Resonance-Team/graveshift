@@ -16,6 +16,7 @@ export const TEST_OAUTH_CLIENTS: Record<string, OAuthClientConfig> = {
       'logs:read',
       'metrics:read',
       'fix:propose',
+      'fix:trigger',
       'events:publish',
     ],
   },

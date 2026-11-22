@@ -72,7 +72,7 @@ export interface components {
       kind: "mcp" | "plugin";
       /** @description A display name chosen by the client. */
       name: string;
-      scopes: ("incidents:read" | "diagnoses:read" | "audit:read" | "logs:read" | "metrics:read" | "fix:propose" | "events:publish")[];
+      scopes: ("incidents:read" | "diagnoses:read" | "audit:read" | "logs:read" | "metrics:read" | "fix:propose" | "events:publish" | "fix:trigger")[];
       /** @description Optional Grave or service binding. Plugin keys only. */
       service?: string;
       /** @description Lifetime in seconds. The config default applies when absent. */
@@ -556,6 +556,18 @@ export interface operations {
           };
         };
       };
+      /** @description No valid bearer credential was presented. */
+      401: {
+        content: never;
+      };
+      /** @description The token does not hold incidents:read. */
+      403: {
+        content: never;
+      };
+      /** @description The client exceeded the rate limit. */
+      429: {
+        content: never;
+      };
     };
   };
   WorkItemsController_get: {
@@ -611,8 +623,20 @@ export interface operations {
           };
         };
       };
+      /** @description No valid bearer credential was presented. */
+      401: {
+        content: never;
+      };
+      /** @description The token does not hold incidents:read. */
+      403: {
+        content: never;
+      };
       /** @description No work item has this id. */
       404: {
+        content: never;
+      };
+      /** @description The client exceeded the rate limit. */
+      429: {
         content: never;
       };
     };
@@ -685,6 +709,14 @@ export interface operations {
           };
         };
       };
+      /** @description No valid bearer credential was presented. */
+      401: {
+        content: never;
+      };
+      /** @description The token does not hold fix:trigger. */
+      403: {
+        content: never;
+      };
       /** @description No work item has this id. */
       404: {
         content: never;
@@ -695,6 +727,10 @@ export interface operations {
       };
       /** @description The assignee is not valid. */
       422: {
+        content: never;
+      };
+      /** @description The client exceeded the rate limit. */
+      429: {
         content: never;
       };
     };
@@ -774,6 +810,14 @@ export interface operations {
           };
         };
       };
+      /** @description No valid bearer credential was presented. */
+      401: {
+        content: never;
+      };
+      /** @description The token does not hold fix:trigger. */
+      403: {
+        content: never;
+      };
       /** @description No work item has this id. */
       404: {
         content: never;
@@ -784,6 +828,10 @@ export interface operations {
       };
       /** @description The request body is not valid. */
       422: {
+        content: never;
+      };
+      /** @description The client exceeded the rate limit. */
+      429: {
         content: never;
       };
     };
