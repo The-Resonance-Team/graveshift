@@ -48,22 +48,7 @@ export type PublishEventRequest =
 export type EventAcceptedResponse =
   paths['/api/events']['post']['responses'][202]['content']['application/json'];
 
-// The read-only config surface. The sanitized (config:read) and full (config:export)
-// response types are distinct: the sanitized view has no prompt, no param values, no
-// baseUrl, no apiKeyEnv, no allowedTools, no approvers, no github block, no rule
-// condition and no replica bound. GET /api/config/export is the one call that returns
-// every block of the full validated config.
-export type ConfigAgentsViewResponse =
-  paths['/api/config/agents']['get']['responses'][200]['content']['application/json'];
-
-export type ConfigPolicyViewResponse =
-  paths['/api/config/policy']['get']['responses'][200]['content']['application/json'];
-
-export type ConfigAgentsExportResponse =
-  paths['/api/config/agents/export']['get']['responses'][200]['content']['application/json'];
-
-export type ConfigPolicyExportResponse =
-  paths['/api/config/policy/export']['get']['responses'][200]['content']['application/json'];
-
+// The one config endpoint returns the whole validated config. Its response type is
+// generated from the one OpenAPI path; no sanitized view types remain in the contract.
 export type ConfigExportResponse =
   paths['/api/config/export']['get']['responses'][200]['content']['application/json'];

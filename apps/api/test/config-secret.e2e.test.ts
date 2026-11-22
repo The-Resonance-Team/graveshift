@@ -1,15 +1,15 @@
-import type { ConfigExportResponse, ConfigPolicyExportResponse } from '@graveshift/api-contract';
+import type { ConfigExportResponse } from '@graveshift/api-contract';
 import type { INestApplication } from '@nestjs/common';
 import { afterEach, describe, expect, test } from 'bun:test';
 import request from 'supertest';
 
 import {
   CLIENTS,
+  CONFIG_EXPORT_ROUTE,
   FAKE_CONFIG,
   INVALID_BOOT_CONFIG_PATH,
   UNKNOWN_SECRET_KEY,
   UNKNOWN_SECRET_VALUE,
-  WHOLE_EXPORT_ROUTE,
   appFromConfigFile,
   bearerToken,
   bootFailureFromConfigFile,
@@ -60,34 +60,14 @@ describe('config secret hygiene (e2e)', () => {
       const built = await appFromConfigFile(path);
       app = built.app;
       const token = await bearerToken(built.app, CLIENTS.export.id, CLIENTS.export.secret);
-      const readToken = await bearerToken(built.app, CLIENTS.read.id, CLIENTS.read.secret);
-      const responses = await Promise.all([
-        request(built.app.getHttpServer())
-          .get('/api/config/agents/export')
-          .set('Authorization', `Bearer ${token}`)
-          .expect(200),
-        request(built.app.getHttpServer())
-          .get('/api/config/policy/export')
-          .set('Authorization', `Bearer ${token}`)
-          .expect(200),
-        request(built.app.getHttpServer())
-          .get(WHOLE_EXPORT_ROUTE)
-          .set('Authorization', `Bearer ${token}`)
-          .expect(200),
-        request(built.app.getHttpServer())
-          .get('/api/config/policy')
-          .set('Authorization', `Bearer ${readToken}`)
-          .expect(200),
-      ]);
-      const bodies = responses.map((response) => response.text).join('\n');
-      expect(bodies).not.toContain(UNKNOWN_SECRET_VALUE);
-      expect(bodies).not.toContain(UNKNOWN_SECRET_KEY);
-      // The stripped full response still equals the validated fixture policy.
-      const [, policyExport, wholeExport] = responses;
-      expect(policyExport?.body as ConfigPolicyExportResponse).toEqual(wire(validated.policy));
-      // The whole-config export serves the same stripped policy object.
-      const wholeBody = wholeExport?.body as ConfigExportResponse | undefined;
-      expect(wholeBody?.policy).toEqual(wire(validated.policy));
+      const response = await request(built.app.getHttpServer())
+        .get(CONFIG_EXPORT_ROUTE)
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200);
+      expect(response.text).not.toContain(UNKNOWN_SECRET_VALUE);
+      expect(response.text).not.toContain(UNKNOWN_SECRET_KEY);
+      // The stripped full response still equals the validated fixture config.
+      expect(response.body as ConfigExportResponse).toEqual(wire(validated));
     });
   });
 });
@@ -97,7 +77,7 @@ describe('config boot validation (e2e)', () => {
     restoreEnv();
   });
 
-  test('an invalid boot config stops the API before any config route serves', async () => {
+  test('an invalid boot config stops the API before the endpoint serves', async () => {
     // Boot runs during module compile: the failure happens before an application
     // instance exists, so no route could have served a request.
     const failure = await bootFailureFromConfigFile(INVALID_BOOT_CONFIG_PATH);

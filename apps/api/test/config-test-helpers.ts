@@ -18,6 +18,8 @@ export const FAKE_CONFIG_PATH = fileURLToPath(FAKE_CONFIG);
 export const INVALID_BOOT_CONFIG_PATH = fileURLToPath(
   new URL('./fixtures/config.invalid-boot.yaml', import.meta.url),
 );
+// The one config endpoint. No other config path exists.
+export const CONFIG_EXPORT_ROUTE = '/api/config/export';
 
 // Test-only values for the env names the fake config points at. No real secret.
 // The tests prove these values never appear in a config response.
@@ -35,19 +37,12 @@ export const UNKNOWN_SECRET_KEY = 'secretToken';
 export const UNKNOWN_SECRET_VALUE = 'sk-fake-unknown-key-secret-never-returned';
 
 // Test-only OAuth clients from apps/api/test/setup.ts. Their secrets are placeholders.
+// The read client is kept only to prove that config:read is denied on the one endpoint.
 export const CLIENTS = {
   read: { id: 'client-config-read', secret: 'test-client-secret-config-read' },
   export: { id: 'client-config-export', secret: 'test-client-secret-config-export' },
   unrelated: { id: 'client-no-config', secret: 'test-client-secret-no-config' },
 } as const;
-
-export const READ_ROUTES = ['/api/config/agents', '/api/config/policy'] as const;
-export const WHOLE_EXPORT_ROUTE = '/api/config/export';
-export const EXPORT_ROUTES = [
-  '/api/config/agents/export',
-  '/api/config/policy/export',
-  WHOLE_EXPORT_ROUTE,
-] as const;
 
 function withFakeEnv(path: string): void {
   process.env.GRAVESHIFT_CONFIG_PATH = path;
@@ -148,93 +143,9 @@ export async function bearerToken(
   return response.body.access_token as string;
 }
 
-// The one source the endpoints must serve: the same validated object the boot
-// provider holds. No route reads a YAML file per request.
+// The one source the endpoint must serve: the same validated object the boot provider
+// holds. No handler reads a YAML file per request.
 export const validated = parseGraveshiftConfig(Bun.YAML.parse(await Bun.file(FAKE_CONFIG).text()));
-
-// The exact dashboard view the fake config must produce. Written by hand from the
-// fixture: a whitelist change in the projection that drops or leaks a field fails here.
-// `params` holds declared names only; the fixture values 'fake case' and 'v0' stay out.
-export const EXPECTED_AGENTS_VIEW = {
-  system: [
-    {
-      name: 'Test Agent',
-      slug: 'test-agent',
-      role: 'tester',
-      description: 'Handles fake incidents for tests.',
-      provider: '@ai-sdk/openai',
-      model: 'fake-test-model',
-      dailyBudgetUsd: 1,
-      params: ['CASE'],
-    },
-  ],
-  client: [
-    {
-      name: 'Client Agent',
-      slug: 'client-agent',
-      role: 'client-tester',
-      description: 'Handles fake deployments for tests.',
-      provider: '@ai-sdk/openai-compatible',
-      model: 'fake-client-model',
-      dailyBudgetUsd: 0.5,
-      escalateTo: 'test-agent',
-      params: ['VERSION'],
-    },
-  ],
-};
-
-// Rules are identity and decision only: no when block and no replica bound.
-export const EXPECTED_POLICY_VIEW = {
-  version: 1,
-  mode: 'dry-run',
-  limits: {
-    maxOpenPrsPerHour: 1,
-    maxActionsPerServicePer10Min: 1,
-    maxDiagnosisLoops: 1,
-    llmDailyBudgetUsd: 0.5,
-  },
-  llm: { minConfidenceForPr: 0.9, minConfidenceForAction: 0.95 },
-  rules: [
-    { id: 'fake-deny-db', action: '*', effect: 'deny' },
-    { id: 'fake-scale-up', action: 'scale_service', effect: 'require_approval' },
-  ],
-  default: 'deny',
-};
-
-// The sanitized view must not carry these keys in any form. The sanitized Agent view is
-// the one place `params` appears, and there it holds names only, so `params` is checked
-// per route instead of in this shared list.
-export const SANITIZE_ABSENT_KEYS = [
-  '"prompt"',
-  '"baseUrl"',
-  '"apiKeyEnv"',
-  '"allowedTools"',
-  '"approvers"',
-  '"discordUserIds"',
-  '"discordRoleIds"',
-  '"github"',
-  '"repos"',
-  '"repo"',
-  '"baseBranch"',
-  '"branchPrefix"',
-  '"allowedPaths"',
-  '"forbiddenPaths"',
-  '"when"',
-  '"services"',
-  '"signals"',
-  '"category"',
-  '"replicas"',
-];
-
-// Values that stay in the full config: a param default, a rule condition value and a
-// replica bound. The sanitized view must not carry any of them.
-export const SANITIZE_ABSENT_VALUES = [
-  'fake case',
-  'v0',
-  'postgres',
-  'memory_pressure',
-  'infrastructure',
-];
 
 // JSON round-trip mirrors the wire format: express serializes the same way and drops
 // absent optional keys, so the comparison is against what the client actually parses.

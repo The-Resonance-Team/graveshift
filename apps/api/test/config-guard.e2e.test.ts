@@ -12,15 +12,15 @@ import {
 import { CredentialService } from '../src/auth/services/credential.service';
 import {
   CLIENTS,
+  CONFIG_EXPORT_ROUTE,
   FAKE_CONFIG_PATH,
   FakeAuditRepo,
-  WHOLE_EXPORT_ROUTE,
   appFromConfigFile,
   bearerToken,
   restoreEnv,
 } from './config-test-helpers';
 
-// The two guards in front of the config routes: ThrottlerGuard and the scope catalog.
+// The guards in front of the one config endpoint: ThrottlerGuard and the scope catalog.
 describe('config guards (e2e)', () => {
   let app: INestApplication;
   let audit: FakeAuditRepo;
@@ -36,7 +36,7 @@ describe('config guards (e2e)', () => {
     restoreEnv();
   });
 
-  test('every config route is rate limited before the handler runs', async () => {
+  test('the config endpoint is rate limited before the handler runs', async () => {
     // An export takes a serialized audit transaction, so ThrottlerGuard must cap the
     // surface. With a limit of three, the fourth call in the window is denied by the
     // guard and never reaches AuditRepo.
@@ -50,7 +50,7 @@ describe('config guards (e2e)', () => {
       const responses = await Promise.all(
         Array.from({ length: 6 }, () =>
           request(built.app.getHttpServer())
-            .get(WHOLE_EXPORT_ROUTE)
+            .get(CONFIG_EXPORT_ROUTE)
             .set('Authorization', `Bearer ${token}`),
         ),
       );
