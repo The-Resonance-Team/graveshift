@@ -93,6 +93,17 @@ describe('POST /api/:projectId/envelope (e2e)', () => {
     expect(ctx.publisher.envelopes).toHaveLength(publishedBefore + 1);
   });
 
+  test('accepts an envelope with no content-type header', async () => {
+    const publishedBefore = ctx.publisher.envelopes.length;
+    await request(app.getHttpServer())
+      .post('/api/12345/envelope/')
+      .query({ sentry_key: TEST_KEY })
+      .unset('content-type')
+      .send(fixture)
+      .expect(200);
+    expect(ctx.publisher.envelopes).toHaveLength(publishedBefore + 1);
+  });
+
   test('rejects an invalid key and a project id bound to another Credential', async () => {
     await request(app.getHttpServer())
       .post('/api/12345/envelope/')
