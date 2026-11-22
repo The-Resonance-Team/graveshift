@@ -1,4 +1,10 @@
-import type { AuditEntry, CounterSnapshot, IncidentView, LimitCounters } from '@graveshift/core';
+import type {
+  AuditEntry,
+  ChainResult,
+  CounterSnapshot,
+  IncidentView,
+  LimitCounters,
+} from '@graveshift/core';
 
 import type { McpBackend } from '../../src/mcp/mcp.types';
 
@@ -52,7 +58,7 @@ export class FakeMcpBackend implements McpBackend {
     return Promise.resolve([]);
   }
 
-  verifyChain(): Promise<unknown> {
+  verifyChain(): Promise<ChainResult> {
     return Promise.resolve({ ok: true, length: 0 });
   }
 

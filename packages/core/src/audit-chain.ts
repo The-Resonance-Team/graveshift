@@ -4,6 +4,14 @@ import { type AuditEntry, type ChainResult, AuditEntrySchema } from './schemas';
 
 export const GENESIS_HASH = '0'.repeat(64);
 
+/** Where a retained chain window starts. The head may be evicted after MAX_ENTRIES. */
+export interface ChainAnchor {
+  readonly seq: number;
+  readonly prevHash: string;
+}
+
+export const GENESIS_ANCHOR: ChainAnchor = { seq: 1, prevHash: GENESIS_HASH };
+
 export type AuditDraft = Pick<AuditEntry, 'seq' | 'at' | 'actor' | 'type' | 'payload'> &
   Pick<Partial<AuditEntry>, 'incidentId'>;
 
@@ -53,10 +61,13 @@ export function makeAuditEntry(
   return AuditEntrySchema.parse({ ...draft, prevHash, hash: hashEntry(draft, prevHash) });
 }
 
-export function verifyEntries(entries: readonly AuditEntry[]): VerifyResult {
-  let prevHash = GENESIS_HASH;
+export function verifyEntries(
+  entries: readonly AuditEntry[],
+  anchor: ChainAnchor = GENESIS_ANCHOR,
+): VerifyResult {
+  let prevHash = anchor.prevHash;
   for (const [index, entry] of entries.entries()) {
-    const expectedSeq = index + 1;
+    const expectedSeq = anchor.seq + index;
     if (entry.seq !== expectedSeq) {
       return { ok: false, brokenAtSeq: expectedSeq, reason: 'sequence gap or reorder' };
     }

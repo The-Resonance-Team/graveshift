@@ -60,6 +60,23 @@ describe('daemon read state', () => {
     expect(state.verifyChain()).toMatchObject({ ok: false, reason: 'hash mismatch' });
   });
 
+  test('a chain stays valid after more than 200 entries are appended', () => {
+    const state = createReadState();
+    for (let index = 0; index < 205; index += 1) {
+      state.appendAudit({
+        at: `2026-11-22T00:00:${String(index % 60).padStart(2, '0')}.000Z`,
+        actor: 'wraith',
+        type: 'incident.opened',
+        payload: { index },
+      });
+    }
+    expect(state.verifyChain()).toEqual({ ok: true, length: 200 });
+    const retained = state.listAudit(0, 300);
+    expect(retained).toHaveLength(200);
+    expect(retained[0]?.seq).toBe(6);
+    expect(retained.at(-1)?.seq).toBe(205);
+  });
+
   test('bounds a log tail and keeps the newest lines', () => {
     const state = createReadState();
     for (const line of ['one', 'two', 'three']) state.appendLog('api', line);

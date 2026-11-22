@@ -4,7 +4,7 @@ import {
   type ChainResult,
   type CounterSnapshot,
   type CounterSource,
-  GENESIS_HASH,
+  GENESIS_ANCHOR,
   type IncidentView,
   type LimitCounters,
   makeAuditEntry,
@@ -53,6 +53,8 @@ export const createReadState = (): DaemonReadState => {
     llmSpentTodayUsd: 0,
   };
   let source: CounterSource = 'not_wired';
+  let nextSeq = GENESIS_ANCHOR.seq;
+  let anchor = GENESIS_ANCHOR;
 
   return {
     listServices: () => {
@@ -69,7 +71,7 @@ export const createReadState = (): DaemonReadState => {
     listIncidents: () => incidents,
     getIncident: (id) => incidents.find((view) => view.incident.id === id),
     listAudit: (afterSeq, limit) => audit.filter((entry) => entry.seq > afterSeq).slice(0, limit),
-    verifyChain: () => verifyEntries(audit),
+    verifyChain: () => verifyEntries(audit, anchor),
     tailLogs: (service, lines) => (logs.get(service) ?? []).slice(-lines),
     queryMetric: (promql) => metrics.get(promql) ?? null,
     counters: () => ({ source, counters: limits }),
@@ -80,9 +82,13 @@ export const createReadState = (): DaemonReadState => {
       if (incidents.length > MAX_ENTRIES) incidents.length = MAX_ENTRIES;
     },
     appendAudit: (entry) => {
-      const previous = audit.at(-1)?.hash ?? GENESIS_HASH;
-      audit.push(makeAuditEntry(audit.length + 1, entry.at, entry, previous));
-      if (audit.length > MAX_ENTRIES) audit.shift();
+      const previous = audit.at(-1)?.hash ?? anchor.prevHash;
+      audit.push(makeAuditEntry(nextSeq, entry.at, entry, previous));
+      nextSeq += 1;
+      if (audit.length > MAX_ENTRIES) {
+        const evicted = audit.shift();
+        if (evicted !== undefined) anchor = { seq: evicted.seq + 1, prevHash: evicted.hash };
+      }
     },
     appendLog: (service, line) => {
       const current = logs.get(service) ?? [];

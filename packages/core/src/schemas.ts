@@ -160,3 +160,10 @@ export const ChainResultSchema = z.discriminatedUnion('ok', [
     .strict(),
 ]);
 export type ChainResult = z.infer<typeof ChainResultSchema>;
+
+// Read-response schemas used at the daemon-to-API boundary. One shape per route.
+export const ServiceViewsSchema = z.array(ServiceViewSchema);
+export const IncidentViewsSchema = z.array(IncidentViewSchema);
+export const AuditEntriesSchema = z.array(AuditEntrySchema);
+export const LogLinesSchema = z.array(z.string());
+export const MetricValueSchema = z.object({ value: z.number().nullable() }).strict();

@@ -54,24 +54,28 @@ const policy = parsePolicy({
   default: 'deny',
 });
 
-const fakeDaemon = (countersReply: unknown = snapshot(ZERO_COUNTERS)) => {
+const fakeDaemon = (
+  countersReply: unknown = snapshot(ZERO_COUNTERS),
+  overrides: Record<string, unknown> = {},
+) => {
   const calls: string[] = [];
   const replies: Record<string, unknown> = {
     '/read/services': [{ name: 'api', status: 'haunting' }],
     '/read/incidents': [incident, incident],
+    '/read/incidents/:id': incident,
     '/read/counters': countersReply,
+    '/read/audit': [],
+    '/read/audit/verify': { ok: true, length: 0 },
+    '/read/logs': ['line one', 'line two'],
+    '/read/metrics': { value: 1 },
+    ...overrides,
   };
   return {
     calls,
     client: {
       get: async (url: string) => {
         calls.push(url);
-        if (url.startsWith('/read/incidents/')) return { data: incident };
-        if (url === '/read/logs') return { data: ['line one', 'line two'] };
-        if (url === '/read/metrics') return { data: { value: 1 } };
-        if (url === '/read/audit/verify') return { data: { ok: true, length: 0 } };
-        if (url === '/read/audit') return { data: [] };
-        const data = replies[url];
+        const data = replies[url.startsWith('/read/incidents/') ? '/read/incidents/:id' : url];
         if (data === undefined) throw new Error(`unexpected path ${url}`);
         return { data };
       },
@@ -225,5 +229,55 @@ describe('HTTP MCP backend with a fake daemon', () => {
     await expect(tools.proposeFix({ incidentId: 'inc-1', action: 'open_pr' })).rejects.toThrow(
       DaemonUnavailableError,
     );
+  });
+
+  test('malformed read bodies fail closed at the boundary', async () => {
+    const cases: Array<{
+      path: string;
+      body: unknown;
+      read: (backend: HttpMcpBackend) => Promise<unknown>;
+    }> = [
+      { path: '/read/services', body: [{ name: 7 }], read: (backend) => backend.listServices() },
+      {
+        path: '/read/incidents',
+        body: [{ nope: true }],
+        read: (backend) => backend.listIncidents(),
+      },
+      {
+        path: '/read/incidents/:id',
+        body: { incident: { id: 7 } },
+        read: (backend) => backend.getIncident('inc-1'),
+      },
+      {
+        path: '/read/audit',
+        body: [{ seq: 'one' }],
+        read: (backend) => backend.listAudit({ afterSeq: 0, limit: 10 }),
+      },
+      {
+        path: '/read/audit/verify',
+        body: { ok: 'yes', length: 0 },
+        read: (backend) => backend.verifyChain(),
+      },
+      { path: '/read/logs', body: [7], read: (backend) => backend.tailLogs('api', 5) },
+      { path: '/read/metrics', body: { value: '1' }, read: (backend) => backend.queryMetric('up') },
+    ];
+    await Promise.all(
+      cases.map(async ({ path, body, read }) => {
+        const { backend } = await build(fakeDaemon(undefined, { [path]: body }).client);
+        await expect(read(backend)).rejects.toThrow(DaemonUnavailableError);
+      }),
+    );
+  });
+
+  test('verify_audit_chain redacts the parsed chain result', async () => {
+    const secret = 'AKIAIOSFODNN7EXAMPLE';
+    const { tools } = await build(
+      fakeDaemon(undefined, {
+        '/read/audit/verify': { ok: false, brokenAtSeq: 1, reason: `key ${secret}` },
+      }).client,
+    );
+    const result = (await tools.verifyAuditChain()) as { reason: string };
+    expect(result.reason).not.toContain(secret);
+    expect(result.reason).toContain('[REDACTED:aws_key]');
   });
 });

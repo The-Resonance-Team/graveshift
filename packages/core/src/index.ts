@@ -1,9 +1,11 @@
 export {
+  GENESIS_ANCHOR,
   GENESIS_HASH,
   hashEntry,
   makeAuditEntry,
   type AuditDraft,
   type AuditInput,
+  type ChainAnchor,
   type VerifyResult,
   verifyEntries,
 } from './audit-chain';
@@ -25,6 +27,7 @@ export type { RuntimeEvent, RuntimeSource, ServiceHealth, ServiceInfo } from './
 export {
   ActionProposalSchema,
   ApprovalSchema,
+  AuditEntriesSchema,
   AuditEntrySchema,
   ChainResultSchema,
   CounterSnapshotSchema,
@@ -34,10 +37,14 @@ export {
   INCIDENT_STATES,
   IncidentSchema,
   IncidentStateSchema,
+  IncidentViewsSchema,
   IncidentViewSchema,
   LimitCountersSchema,
+  LogLinesSchema,
+  MetricValueSchema,
   SIGNAL_KINDS,
   ServiceViewSchema,
+  ServiceViewsSchema,
   SignalSchema,
 } from './schemas';
 export type {
