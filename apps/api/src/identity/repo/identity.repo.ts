@@ -1,7 +1,16 @@
+import { randomUUID } from 'node:crypto';
 import { Injectable } from '@nestjs/common';
 import { Prisma, type MembershipRole } from '@prisma/client';
 
 import { PrismaService } from '../../infra/prisma.service';
+import {
+  mapConflict,
+  toAccount,
+  toGrant,
+  toOAuthClient,
+  toOrganization,
+  toProject,
+} from './identity.mapper';
 import {
   IdentityConflictError,
   MIGRATED_ORG_ID,
@@ -37,15 +46,60 @@ export class PrismaIdentityRepo implements IdentityRepo {
     passwordHash: string;
     mustChangePassword: boolean;
   }): Promise<AccountRecord> {
-    return toAccount(
-      await this.db.account.create({
-        data: {
-          email: input.email,
-          passwordHash: input.passwordHash,
-          mustChangePassword: input.mustChangePassword,
-        },
-      }),
-    );
+    try {
+      return toAccount(
+        await this.db.account.create({
+          data: {
+            email: input.email,
+            passwordHash: input.passwordHash,
+            mustChangePassword: input.mustChangePassword,
+          },
+        }),
+      );
+    } catch (error) {
+      throw mapConflict(error, 'The account already exists');
+    }
+  }
+
+  async bootstrapRoot(input: {
+    email: string;
+    passwordHash: string;
+    mustChangePassword: boolean;
+    orgName: string;
+    orgSlug: string;
+  }): Promise<{ account: AccountRecord; organization: OrganizationRecord }> {
+    try {
+      return await this.db.$transaction(async (tx) => {
+        if ((await tx.account.count()) > 0) {
+          throw new IdentityConflictError('The root admin was already seeded');
+        }
+        const account = await tx.account.create({
+          data: {
+            email: input.email,
+            passwordHash: input.passwordHash,
+            mustChangePassword: input.mustChangePassword,
+          },
+        });
+        const organization = await tx.organization.create({
+          data: { name: input.orgName, slug: input.orgSlug },
+        });
+        await tx.membership.create({
+          data: { accountId: account.id, orgId: organization.id, role: 'owner' },
+        });
+        await tx.project.updateMany({
+          where: { orgId: MIGRATED_ORG_ID },
+          data: { orgId: organization.id },
+        });
+        await tx.daemonGrant.upsert({
+          where: { name: 'default' },
+          create: { id: randomUUID(), name: 'default', projectIds: [] },
+          update: {},
+        });
+        return { account: toAccount(account), organization: toOrganization(organization) };
+      });
+    } catch (error) {
+      throw mapConflict(error, 'The root admin or root Organization already exists');
+    }
   }
 
   async setPassword(id: string, passwordHash: string): Promise<void> {
@@ -139,6 +193,26 @@ export class PrismaIdentityRepo implements IdentityRepo {
     }
   }
 
+  async createProjectWithGrant(
+    input: { projectId: string; orgId: string; name: string; slug: string },
+    grantName: string,
+  ): Promise<ProjectRecord> {
+    try {
+      return await this.db.$transaction(async (tx) => {
+        const project = await tx.project.create({ data: input });
+        // array_append is atomic: concurrent grants cannot overwrite each other.
+        await tx.$executeRaw`
+          UPDATE "daemon_grants" SET "project_ids" = array_append("project_ids", ${input.projectId})
+          WHERE "name" = ${grantName}
+            AND NOT (${input.projectId} = ANY("project_ids"))
+        `;
+        return toProject(project);
+      });
+    } catch (error) {
+      throw mapConflict(error, 'The Project slug is already used in this Organization');
+    }
+  }
+
   async findProject(projectId: string): Promise<ProjectRecord | undefined> {
     const row = await this.db.project.findUnique({ where: { projectId } });
     return row === null ? undefined : toProject(row);
@@ -195,56 +269,4 @@ export class PrismaIdentityRepo implements IdentityRepo {
       data: { projectIds: { push: projectId } },
     });
   }
-}
-
-type AccountRow = Awaited<ReturnType<PrismaService['account']['findUnique']>>;
-type OrganizationRow = Awaited<ReturnType<PrismaService['organization']['findUnique']>>;
-type ProjectRow = Awaited<ReturnType<PrismaService['project']['findUnique']>>;
-type OAuthClientRow = Awaited<ReturnType<PrismaService['oAuthClient']['findUnique']>>;
-type GrantRow = Awaited<ReturnType<PrismaService['daemonGrant']['findUnique']>>;
-
-function mapConflict(error: unknown, message: string): unknown {
-  if (error instanceof IdentityConflictError) return error;
-  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-    return new IdentityConflictError(message);
-  }
-  return error;
-}
-
-function toAccount(row: NonNullable<AccountRow>): AccountRecord {
-  return {
-    id: row.id,
-    email: row.email,
-    passwordHash: row.passwordHash,
-    mustChangePassword: row.mustChangePassword,
-    createdAt: row.createdAt.toISOString(),
-  };
-}
-
-function toOrganization(row: NonNullable<OrganizationRow>): OrganizationRecord {
-  return { id: row.id, name: row.name, slug: row.slug, createdAt: row.createdAt.toISOString() };
-}
-
-function toProject(row: NonNullable<ProjectRow>): ProjectRecord {
-  return {
-    projectId: row.projectId,
-    orgId: row.orgId,
-    name: row.name,
-    slug: row.slug,
-    createdAt: row.createdAt.toISOString(),
-  };
-}
-
-function toOAuthClient(row: NonNullable<OAuthClientRow>): OAuthClientRecord {
-  return {
-    clientId: row.clientId,
-    secretHash: row.secretHash,
-    orgId: row.orgId,
-    projectId: row.projectId,
-    scopes: row.scopes,
-  };
-}
-
-function toGrant(row: NonNullable<GrantRow>): DaemonGrantRecord {
-  return { id: row.id, name: row.name, projectIds: row.projectIds };
 }

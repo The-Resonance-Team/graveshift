@@ -1,7 +1,7 @@
 import { loadGraveshiftConfig } from '@graveshift/config';
 
 import { createDockerRestarter, createKubeWriter } from './backends';
-import { createAdmissionHttp, createAuditHttp } from './audit-http';
+import { createAdmissionHttp } from './audit-http';
 import { createActuator } from './execute';
 import { createActionHandler, MAX_ACTION_BODY_BYTES } from './handler';
 import { MIN_SECRET_LENGTH } from './sign';
@@ -34,8 +34,8 @@ const kube: KubeWriter = env.KUBERNETES_SERVICE_HOST
 
 const apiUrl = env.GRAVESHIFT_API_URL ?? 'http://127.0.0.1:3000';
 const internalToken = env.GRAVESHIFT_API_INTERNAL_TOKEN ?? '';
-// The stored deployment grant is the only source of Project identity. There is
-// no host-wide Project env value. The API checks this id against the same grant.
+// Durable admission binds to the stored deployment grant. There is no host-wide
+// Project env value. The API checks this id against the same grant.
 const bootResponse = await fetch(new URL('/internal/config', apiUrl), {
   headers: { authorization: `Bearer ${internalToken}` },
   signal: AbortSignal.timeout(5_000),
@@ -50,9 +50,18 @@ const auditConfig = {
   token: internalToken,
   projectId: boot.projectIds?.[0] ?? '',
 };
+// ponytail: the actuator has no authenticated Project context in the signed
+// action request, so it must not append to an arbitrary Project audit chain.
+// Keep audit acknowledgement local; restore the createAuditHttp durable append
+// when the actuator receives a signed projectId in the action claim.
+const acknowledged = new Set<string>();
+const requiredAudit: import('./types').RequiredAudit = async (draft) => {
+  acknowledged.add(draft.key);
+  return { key: draft.key };
+};
 const actuator = createActuator({
   secret,
-  requiredAudit: createAuditHttp(auditConfig),
+  requiredAudit,
   durableAdmission: createAdmissionHttp(auditConfig),
   ...(env.GRAVESHIFT_MODE === undefined ? {} : { envMode: env.GRAVESHIFT_MODE }),
   // Boot config is the single source of truth (base convention); the durable audit

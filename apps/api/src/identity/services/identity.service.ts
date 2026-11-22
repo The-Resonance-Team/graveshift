@@ -50,22 +50,19 @@ export class IdentityService {
     if ((await this.repo.countAccounts()) > 0) return;
     const root = this.boot.rootAdmin;
     if (root === undefined) return;
-    const account = await this.repo.addAccount({
-      email: root.email.toLowerCase(),
-      passwordHash: await Bun.password.hash(root.password, { algorithm: 'argon2id' }),
-      mustChangePassword: true,
-    });
-    const organization = await this.repo.addOrganization({
-      name: root.orgName,
-      slug: root.orgSlug,
-    });
-    await this.repo.addMembership({
-      accountId: account.id,
-      orgId: organization.id,
-      role: 'owner',
-    });
-    await this.ensureGrant();
-    await this.repo.adoptMigratedProjects(organization.id);
+    try {
+      // Account, Organization, Membership, grant and project adoption are one
+      // store transaction. A stop mid-bootstrap leaves no partial root identity.
+      await this.repo.bootstrapRoot({
+        email: root.email.toLowerCase(),
+        passwordHash: await Bun.password.hash(root.password, { algorithm: 'argon2id' }),
+        mustChangePassword: true,
+        orgName: root.orgName,
+        orgSlug: root.orgSlug,
+      });
+    } catch (error) {
+      throw this.toConflict(error);
+    }
   }
 
   async register(dto: RegisterDto): Promise<AccountProfile> {
@@ -73,11 +70,16 @@ export class IdentityService {
     if ((await this.repo.findAccountByEmail(email)) !== undefined) {
       throw new ConflictException('The account already exists');
     }
-    const account = await this.repo.addAccount({
-      email,
-      passwordHash: await Bun.password.hash(dto.password, { algorithm: 'argon2id' }),
-      mustChangePassword: false,
-    });
+    let account;
+    try {
+      account = await this.repo.addAccount({
+        email,
+        passwordHash: await Bun.password.hash(dto.password, { algorithm: 'argon2id' }),
+        mustChangePassword: false,
+      });
+    } catch (error) {
+      throw this.toConflict(error);
+    }
     return this.profile(account.id);
   }
 
@@ -140,9 +142,16 @@ export class IdentityService {
       throw new ConflictException('The Project slug is already used in this Organization');
     }
     const projectId = await this.repo.nextProjectId();
-    const project = await this.repo.addProject({ ...dto, projectId, orgId });
-    await this.repo.grantProject(DEFAULT_DAEMON_GRANT, projectId);
-    return project;
+    try {
+      // The Project and its grant entry are written in one transaction, so an
+      // internal route can never see a Project that the grant does not list.
+      return await this.repo.createProjectWithGrant(
+        { ...dto, projectId, orgId },
+        DEFAULT_DAEMON_GRANT,
+      );
+    } catch (error) {
+      throw this.toConflict(error);
+    }
   }
 
   async listProjects(accountId: string, orgId: string) {

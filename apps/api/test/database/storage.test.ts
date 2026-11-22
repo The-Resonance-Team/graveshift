@@ -11,13 +11,11 @@ import { CredentialService } from '../../src/auth/services/credential.service';
 import { CreateCredentialDto } from '../../src/auth/dto/create-credential.dto';
 import { PrismaService } from '../../src/infra/prisma.service';
 import { TEST_CONFIG } from '../fakes/auth-test-config';
+import { testDatabaseUrl } from './fixtures';
 
-const url = process.env.DATABASE_URL;
-if (!url || new URL(url).pathname !== '/graveshift_test' || new URL(url).hostname !== '127.0.0.1') {
-  throw new Error(
-    'Run database tests through bun run test:database with the isolated Docker database',
-  );
-}
+// Uses the same isolated-run guard as every other database test. The harness
+// gives each run a unique database name.
+const url = testDatabaseUrl();
 const first = new PrismaService(new ConfigService({ DATABASE_URL: url }));
 const second = new PrismaService(new ConfigService({ DATABASE_URL: url }));
 const audit = new AuditRepo(first);

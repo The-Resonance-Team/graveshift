@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import {
   IdentityConflictError,
+  MIGRATED_ORG_ID,
   type AccountRecord,
   type DaemonGrantRecord,
   type IdentityRepo,
@@ -19,10 +20,58 @@ export class FakeIdentityRepo implements IdentityRepo {
   readonly projects = new Map<string, ProjectRecord>();
   readonly clients = new Map<string, OAuthClientRecord>();
   readonly grants = new Map<string, DaemonGrantRecord>();
+  /** Test seam: fail the root bootstrap before any in-memory write is committed. */
+  failBootstrap = false;
   private sequence = 9999;
 
   async countAccounts(): Promise<number> {
     return this.accounts.size;
+  }
+
+  async bootstrapRoot(input: {
+    email: string;
+    passwordHash: string;
+    mustChangePassword: boolean;
+    orgName: string;
+    orgSlug: string;
+  }): Promise<{ account: AccountRecord; organization: OrganizationRecord }> {
+    if (this.accounts.size > 0) {
+      throw new IdentityConflictError('The root admin was already seeded');
+    }
+    // Stage every write. Nothing is visible until the whole bootstrap succeeds.
+    const account: AccountRecord = {
+      id: randomUUID(),
+      email: input.email,
+      passwordHash: input.passwordHash,
+      mustChangePassword: input.mustChangePassword,
+      createdAt: new Date().toISOString(),
+    };
+    const organization: OrganizationRecord = {
+      id: randomUUID(),
+      name: input.orgName,
+      slug: input.orgSlug,
+      createdAt: new Date().toISOString(),
+    };
+    const membership: MembershipRecord = {
+      accountId: account.id,
+      orgId: organization.id,
+      role: 'owner',
+    };
+    if (this.failBootstrap) throw new Error('Simulated mid-bootstrap failure');
+    this.accounts.set(account.id, account);
+    this.organizations.set(organization.id, organization);
+    this.memberships.set(`${account.id}:${organization.id}`, membership);
+    for (const project of this.projects.values()) {
+      if (project.orgId === MIGRATED_ORG_ID) project.orgId = organization.id;
+    }
+    if (!this.grants.has('default')) {
+      this.grants.set('default', {
+        id: randomUUID(),
+        name: 'default',
+        projectIds: [],
+      });
+    }
+    return { account, organization };
   }
 
   async findAccountByEmail(email: string): Promise<AccountRecord | undefined> {
@@ -117,6 +166,26 @@ export class FakeIdentityRepo implements IdentityRepo {
     slug: string;
   }): Promise<ProjectRecord> {
     const project: ProjectRecord = { ...input, createdAt: new Date().toISOString() };
+    this.projects.set(project.projectId, project);
+    return project;
+  }
+
+  async createProjectWithGrant(
+    input: { projectId: string; orgId: string; name: string; slug: string },
+    grantName: string,
+  ): Promise<ProjectRecord> {
+    if (
+      [...this.projects.values()].some(
+        (item) => item.orgId === input.orgId && item.slug === input.slug,
+      )
+    ) {
+      throw new IdentityConflictError('The Project slug is already used in this Organization');
+    }
+    const project: ProjectRecord = { ...input, createdAt: new Date().toISOString() };
+    const grant = this.grants.get(grantName);
+    if (grant !== undefined && !grant.projectIds.includes(input.projectId)) {
+      grant.projectIds.push(input.projectId);
+    }
     this.projects.set(project.projectId, project);
     return project;
   }

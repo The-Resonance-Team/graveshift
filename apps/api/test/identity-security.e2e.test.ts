@@ -117,4 +117,70 @@ describe('identity security boundaries (e2e)', () => {
       .send({ name: 'Second', slug: 'duplicate' });
     expect(response.status).toBe(409);
   });
+
+  test('a mid-bootstrap failure leaves no partial root Account or Organization', async () => {
+    const context = await buildIdentityApp(true);
+    context.identity.failBootstrap = true;
+    await expect(context.app.get(IdentityService).bootstrap()).rejects.toThrow();
+    expect(await context.identity.countAccounts()).toBe(0);
+    expect(context.identity.organizations.size).toBe(0);
+    expect(context.identity.memberships.size).toBe(0);
+  });
+
+  test('duplicate email and duplicate Project slug return 409 instead of 500', async () => {
+    const context = await buildIdentityApp();
+    await http(context)
+      .post('/api/register')
+      .send({ email: 'duplicate@identity.test', password: 'account-test-password' })
+      .expect(201);
+    const duplicate = await http(context)
+      .post('/api/register')
+      .send({ email: 'duplicate@identity.test', password: 'account-test-password' });
+    expect(duplicate.status).toBe(409);
+
+    const token = await registerAndLogin(context, 'project-owner@identity.test');
+    const onboarded = await http(context)
+      .post('/api/onboarding/org')
+      .set(bearer(token))
+      .send({ name: 'Owner Org', slug: 'owner-org' })
+      .expect(200);
+    const orgId = onboarded.body.organizations[0].orgId as string;
+    await http(context)
+      .post(`/api/organizations/${orgId}/projects`)
+      .set(bearer(token))
+      .send({ name: 'One', slug: 'same-slug' })
+      .expect(201);
+    const repeated = await http(context)
+      .post(`/api/organizations/${orgId}/projects`)
+      .set(bearer(token))
+      .send({ name: 'Two', slug: 'same-slug' });
+    expect(repeated.status).toBe(409);
+    expect(await context.identity.listProjects(orgId)).toHaveLength(1);
+  });
+
+  test('a created Project is in the stored grant and a failed create adds no grant entry', async () => {
+    const context = await buildIdentityApp();
+    const token = await registerAndLogin(context, 'grant@identity.test');
+    const onboarded = await http(context)
+      .post('/api/onboarding/org')
+      .set(bearer(token))
+      .send({ name: 'Grant Org', slug: 'grant-org' })
+      .expect(200);
+    const orgId = onboarded.body.organizations[0].orgId as string;
+    const created = await http(context)
+      .post(`/api/organizations/${orgId}/projects`)
+      .set(bearer(token))
+      .send({ name: 'Granted', slug: 'granted' })
+      .expect(201);
+    const grant = await context.identity.findGrant('default');
+    expect(grant?.projectIds).toContain(created.body.projectId);
+
+    await http(context)
+      .post(`/api/organizations/${orgId}/projects`)
+      .set(bearer(token))
+      .send({ name: 'Duplicate', slug: 'granted' })
+      .expect(409);
+    const after = await context.identity.findGrant('default');
+    expect(after?.projectIds).toEqual(grant?.projectIds);
+  });
 });

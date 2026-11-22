@@ -80,6 +80,14 @@ export interface AccountPrincipal {
 /** Account, Organization, Membership, Project and stored grants in one seam. */
 export interface IdentityRepo {
   countAccounts(): Promise<number>;
+  /** Seeds the root Account, Organization, owner Membership and grant atomically. */
+  bootstrapRoot(input: {
+    email: string;
+    passwordHash: string;
+    mustChangePassword: boolean;
+    orgName: string;
+    orgSlug: string;
+  }): Promise<{ account: AccountRecord; organization: OrganizationRecord }>;
   findAccountByEmail(email: string): Promise<AccountRecord | undefined>;
   findAccountById(id: string): Promise<AccountRecord | undefined>;
   addAccount(input: {
@@ -106,6 +114,11 @@ export interface IdentityRepo {
     name: string;
     slug: string;
   }): Promise<ProjectRecord>;
+  /** Creates the Project and adds it to the stored grant in one transaction. */
+  createProjectWithGrant(
+    input: { projectId: string; orgId: string; name: string; slug: string },
+    grantName: string,
+  ): Promise<ProjectRecord>;
   findProject(projectId: string): Promise<ProjectRecord | undefined>;
   findProjectBySlug(orgId: string, slug: string): Promise<ProjectRecord | undefined>;
   listProjects(orgId: string): Promise<ProjectRecord[]>;

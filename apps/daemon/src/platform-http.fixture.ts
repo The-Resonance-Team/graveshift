@@ -11,6 +11,7 @@ import request from 'supertest';
 import { InternalAuditController } from '../../api/src/audit/audit.controller';
 import { AuditRepo } from '../../api/src/audit/audit.repo';
 import { BOOT_CONFIG } from '../../api/src/config/boot.config';
+import { ProjectGrant } from '../../api/src/internal/project-grant';
 import { DaemonWorkClient } from '../../api/src/fix/daemon-work.client';
 import { HauntingController } from '../../api/src/hauntings/haunting.controller';
 import { HauntingRepo } from '../../api/src/hauntings/haunting.repo';
@@ -93,6 +94,7 @@ export async function platformHttp(db: PrismaService, agents: readonly AgentConf
     ],
     providers: [
       InternalGuard,
+      { provide: ProjectGrant, useValue: testProjectGrant([caller.projectId]) },
       HauntingService,
       PolicyContextService,
       WorkIngressService,
