@@ -39,7 +39,7 @@ graveshift/
 ├── powers/graveshift/             # Kiro Power (stretch)
 ├── scripts/kiro/                  # guard-shell.mjs, secret-scan.mjs (used by hooks)
 ├── docs/                          # ARCHITECTURE.md, SECURITY.md, DECISIONS.md, DEMO.md
-├── graveshift.config.yaml          # one committed config: boot, agents, policy, fix
+├── graveshift.config.yaml         # one committed config: boot, agents, policy, fix
 ├── KIRO_USAGE.md · README.md · LICENSE (Apache-2.0) · NOTICE
 ├── bunfig.toml · package.json · tsconfig.base.json
 ├── .oxfmtrc.json · .oxlintrc.json
