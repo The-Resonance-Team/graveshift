@@ -19,6 +19,14 @@ export function canonicalLines(sql: string): string[] {
       continue;
     }
 
+    // The closing parenthesis ends the CREATE TABLE block. Do not label later
+    // bare-quoted lines with a table that is no longer in scope.
+    if (line === ');') {
+      table = undefined;
+      lines.push(line);
+      continue;
+    }
+
     const addColumn = /^ALTER TABLE\s+"([^"]+)"\s+ADD COLUMN\s+(.+);$/i.exec(line);
     if (addColumn) {
       lines.push(`TABLE ${addColumn[1]} COLUMN ${addColumn[2]!.replace(/,$/, '')}`);
@@ -63,7 +71,7 @@ export function driftMatches(migrationSql: string, generatedSql: string): boolea
 
 if (import.meta.main) {
   const root = dirname(import.meta.dir);
-  const migrationsPath = join(root, 'prisma/migrations');
+  const migrationsPath = process.env.GRAVESHIFT_MIGRATIONS_PATH ?? join(root, 'prisma/migrations');
   const migrationFiles = readdirSync(migrationsPath, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => join(migrationsPath, entry.name, 'migration.sql'))
