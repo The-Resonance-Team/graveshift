@@ -12,6 +12,7 @@ import { BOOT_CONFIG } from '../../src/config/boot.config';
 import { IDENTITY_REPO } from '../../src/identity/identity.types';
 import { FakeIdentityRepo } from '../../src/identity/testing/fake-identity.repo';
 import type { PrismaService } from '../../src/infra/prisma.service';
+import { ReleaseRepo } from '../../src/releases/release.repo';
 import { TEST_CONFIG, testBootConfig } from '../fakes/auth-test-config';
 import { FakeCredentialRepo } from '../fakes/fake-credential-repo';
 import { dbTestEnabled, openTestDatabase, resetDatabase } from './fixtures';
@@ -76,6 +77,10 @@ describe.skipIf(!dbTestEnabled)('v3 release HTTP conflict with real stores', () 
           expiresIn: 3600,
         },
       );
+      // Bypass the service pre-check so the 409 must come from the Prisma
+      // P2002 catch on the real repository.
+      const releases = moduleRef.get(ReleaseRepo);
+      releases.findByVersion = async () => undefined;
       const responses = await Promise.all(
         [0, 1].map(() =>
           request(app.getHttpServer())

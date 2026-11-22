@@ -39,10 +39,12 @@ export class DeploysService {
       }),
     );
     assertProjectBound(principal, targets);
-    const { record: environment } = await this.environments.findOrCreate(
-      principal.orgId,
-      dto.environment,
-    );
+    const { record: environment } = await this.environments.createWithAudit({
+      orgId: principal.orgId,
+      name: dto.environment,
+      projectIds: targets,
+      actor: principal.clientId,
+    });
     return this.repo.append({
       orgId: principal.orgId,
       releaseId: release.id,

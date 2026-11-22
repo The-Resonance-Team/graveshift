@@ -1,4 +1,3 @@
-import { ConflictException } from '@nestjs/common';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 
 import { AuditRepo } from '../../src/audit/repo/audit.repo';
@@ -148,21 +147,26 @@ describe.skipIf(!dbTestEnabled)('v3 deploy database rules', () => {
     ).rejects.toThrow(/immutable while linked/);
   });
 
-  test('an Environment race maps one caller to 409', async () => {
+  test('a concurrent Environment first use writes one audit entry', async () => {
     const { orgA } = await seed();
-    const repo = new EnvironmentRepo(db);
+    const repo = new EnvironmentRepo(db, audit);
+    const input = { orgId: orgA.id, name: 'staging', projectIds: ['1001'], actor: 'test-client' };
     const results = await Promise.allSettled(
-      Array.from({ length: 8 }, () => repo.findOrCreate(orgA.id, 'staging')),
+      Array.from({ length: 8 }, () => repo.createWithAudit(input)),
     );
-    expect(results.some((result) => result.status === 'fulfilled')).toBe(true);
-    const failures = results.filter((result) => result.status === 'rejected');
-    expect(failures.length).toBeGreaterThan(0);
-    expect(
-      failures.every(
-        (result) => result.status === 'rejected' && result.reason instanceof ConflictException,
-      ),
-    ).toBe(true);
+    // The serializable retry makes losing callers see the committed row. They
+    // return created:false instead of writing a second audit entry.
+    expect(results.every((result) => result.status === 'fulfilled')).toBe(true);
+    const created = results.filter(
+      (result) => result.status === 'fulfilled' && result.value.created,
+    );
+    expect(created).toHaveLength(1);
     expect(await db.environment.count({ where: { orgId: orgA.id, name: 'staging' } })).toBe(1);
+    expect(
+      await db.auditEntry.count({
+        where: { projectId: '1001', type: 'environment.created' },
+      }),
+    ).toBe(1);
   });
 
   test('a duplicate Release version is rejected by the database', async () => {
@@ -172,20 +176,31 @@ describe.skipIf(!dbTestEnabled)('v3 deploy database rules', () => {
     ).rejects.toHaveProperty('code', 'P2002');
   });
 
-  test('a non-http Deploy URL is rejected by the database', async () => {
+  test('the Deploy URL CHECK accepts https and rejects other schemes', async () => {
     const { orgA, release, environment } = await seed();
-    await expect(
+    const insert = (url: string) =>
       db.deploy.create({
         data: {
           orgId: orgA.id,
           releaseId: release.id,
           environmentId: environment.id,
-          name: 'bad-url',
+          name: `url-probe-${url.slice(0, 3)}`,
           dateStarted: new Date(),
-          url: 'javascript:alert(1)',
+          url,
         },
-      }),
-    ).rejects.toThrow();
+      });
+    const rejected = await Promise.allSettled(
+      ['javascript:alert(1)', 'ftp://example.test/file'].map((url) => insert(url)),
+    );
+    expect(
+      rejected.every(
+        (result) =>
+          result.status === 'rejected' && /deploys_url_http_check/.test(String(result.reason)),
+      ),
+    ).toBe(true);
+    const accepted = await insert('https://ci.example.test/runs/42');
+    expect(accepted.url).toBe('https://ci.example.test/runs/42');
+    expect(await db.deploy.count()).toBe(2);
   });
 
   test('writes append audit entries keyed by each affected Project', async () => {
@@ -194,6 +209,12 @@ describe.skipIf(!dbTestEnabled)('v3 deploy database rules', () => {
     const created = await releases.create({
       orgId: orgA.id,
       version: 'v2',
+      projectIds: ['1001', '1002'],
+      actor: 'test-client',
+    });
+    await new EnvironmentRepo(db, audit).createWithAudit({
+      orgId: orgA.id,
+      name: 'staging',
       projectIds: ['1001', '1002'],
       actor: 'test-client',
     });
@@ -211,35 +232,29 @@ describe.skipIf(!dbTestEnabled)('v3 deploy database rules', () => {
       ['1001', 'release.created'],
       ['1002', 'release.created'],
       ['1001', 'environment.created'],
+      ['1002', 'environment.created'],
       ['1001', 'deploy.created'],
     ]);
     expect(created.version).toBe('v2');
   });
 
-  test('a failed Deploy keeps the Environment audited on retry', async () => {
-    const { orgA, release } = await seed();
-    const { record: environment } = await new EnvironmentRepo(db).findOrCreate(orgA.id, 'staging');
+  test('an Environment and its audit entry commit in one transaction', async () => {
+    const { orgA } = await seed();
     const failing = {
       appendInTransaction: async () => {
         throw new Error('audit unavailable');
       },
     } as unknown as AuditRepo;
-    const input = {
-      orgId: orgA.id,
-      releaseId: release.id,
-      environmentId: environment.id,
-      name: 'deploy-2',
-      dateStarted: new Date(),
-      projectIds: ['1001'],
-      actor: 'test-client',
-    };
-    await expect(new DeployRepo(db, failing).append(input)).rejects.toThrow('audit unavailable');
-    expect(await db.deploy.count()).toBe(1);
-
-    await new DeployRepo(db, audit).append(input);
-    const entries = await db.auditEntry.findMany({ orderBy: { seq: 'asc' } });
-    expect(entries.map((entry) => entry.type)).toEqual(['environment.created', 'deploy.created']);
-    expect(await db.deploy.count()).toBe(2);
+    await expect(
+      new EnvironmentRepo(db, failing).createWithAudit({
+        orgId: orgA.id,
+        name: 'staging',
+        projectIds: ['1001'],
+        actor: 'test-client',
+      }),
+    ).rejects.toThrow('audit unavailable');
+    expect(await db.environment.count({ where: { orgId: orgA.id, name: 'staging' } })).toBe(0);
+    expect(await db.auditEntry.count()).toBe(0);
   });
 
   test('an audit append failure rolls back the deploy write', async () => {

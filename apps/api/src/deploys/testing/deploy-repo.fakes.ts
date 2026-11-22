@@ -44,18 +44,20 @@ export class FakeEnvironmentRepo {
   readonly rows = new Map<string, EnvironmentRecord>();
   deploys?: FakeDeployRepo;
 
-  async findOrCreate(
-    orgId: string,
-    name: string,
-  ): Promise<{ record: EnvironmentRecord; created: boolean }> {
+  async createWithAudit(input: {
+    orgId: string;
+    name: string;
+    projectIds: string[];
+    actor: string;
+  }): Promise<{ record: EnvironmentRecord; created: boolean }> {
     const existing = [...this.rows.values()].find(
-      (row) => row.orgId === orgId && row.name === name,
+      (row) => row.orgId === input.orgId && row.name === input.name,
     );
     if (existing !== undefined) return { record: existing, created: false };
     const record: EnvironmentRecord = {
       id: randomUUID(),
-      orgId,
-      name,
+      orgId: input.orgId,
+      name: input.name,
       createdAt: new Date().toISOString(),
     };
     this.rows.set(record.id, record);

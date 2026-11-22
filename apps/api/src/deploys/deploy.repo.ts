@@ -71,29 +71,8 @@ export class DeployRepo {
         data: input.projectIds.map((projectId) => ({ deployId: deploy.id, projectId })),
       });
       await Promise.all(
-        input.projectIds.map(async (projectId) => {
-          // Derive the flag from the durable chain inside this transaction. A
-          // retry after a failed Deploy must not lose the Environment audit.
-          const environmentEntry = await tx.auditEntry.findFirst({
-            where: {
-              projectId,
-              type: 'environment.created',
-              payload: { path: ['environmentId'], equals: input.environmentId },
-            },
-            select: { seq: true },
-          });
-          if (environmentEntry === null) {
-            await this.audit.appendInTransaction(tx, projectId, {
-              actor: input.actor,
-              type: 'environment.created',
-              payload: {
-                environmentId: input.environmentId,
-                orgId: input.orgId,
-                projectId,
-              },
-            });
-          }
-          await this.audit.appendInTransaction(tx, projectId, {
+        input.projectIds.map(async (projectId) =>
+          this.audit.appendInTransaction(tx, projectId, {
             actor: input.actor,
             type: 'deploy.created',
             payload: {
@@ -104,8 +83,8 @@ export class DeployRepo {
               dateStarted: deploy.dateStarted.toISOString(),
               projectId,
             },
-          });
-        }),
+          }),
+        ),
       );
       const row = await tx.deploy.findUniqueOrThrow({
         where: { id: deploy.id },
