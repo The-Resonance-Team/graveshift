@@ -135,6 +135,12 @@ fix:
     # the runtimes above live. The host PATH is never inherited, so a command
     # whose program is outside these directories cannot start and no pull request
     # opens. Keep this list short and fixed; the owner sets it per deployment.
+    # Nothing here is expanded, so every entry is written out in full. On Linux a
+    # runtime installed per user — the ~/.bun/bin the official bun installer uses,
+    # i.e. the directory `$HOME/.bun/bin` points at for the user that runs the API
+    # — is invisible to a check until its absolute path appears below. Graveshift's
+    # own CI links the runner's bun into one of the directories below, so the
+    # committed defaults stay true there (.github/actions/setup-bun/action.yml).
     pathDirs:
       - /usr/local/bin
       - /opt/homebrew/bin

@@ -6,6 +6,20 @@ runs:
     - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
       with:
         bun-version-file: package.json
+    - name: Put bun where the committed fix sandbox looks
+      shell: bash
+      # graveshift.config.yaml lists /usr/local/bin and /opt/homebrew/bin as the only
+      # directories a check command may look in, and
+      # apps/api/src/fix/fix.committed-checks.test.ts proves the committed checks'
+      # runtime resolves through them with the host PATH taken away. setup-bun keeps
+      # the runner's bun in its own tool directory, so link it into the committed one
+      # instead of widening the sandbox PATH or teaching the test to skip.
+      run: |
+        set -euo pipefail
+        sudo mkdir -p /usr/local/bin
+        sudo ln -sfn "$(command -v bun)" /usr/local/bin/bun
+        test -x /usr/local/bin/bun
+        /usr/local/bin/bun --version
     - name: Install dependencies
       shell: bash
       run: bun install --frozen-lockfile

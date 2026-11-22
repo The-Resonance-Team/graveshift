@@ -2,6 +2,8 @@ import { existsSync } from 'node:fs';
 
 import { GraveshiftError } from '@graveshift/core';
 
+import { after, readCapped } from './pipes';
+
 export class SandboxUnavailableError extends GraveshiftError<'SANDBOX_UNAVAILABLE'> {
   constructor(message: string) {
     super('SANDBOX_UNAVAILABLE', message);
@@ -32,8 +34,8 @@ const SAFE_ENV_VALUE = /^[\x20-\x7e]*$/;
 // stdout and stderr stay under this limit; see readCapped.
 export const SANDBOX_OUTPUT_CAP = 64 * 1_024;
 
-// Bounded wait for the pipes after the command is gone.
-const PIPE_DRAIN_MS = 500;
+/** Bounded wait for the pipes after the command is gone; then they are cancelled. */
+export const PIPE_DRAIN_MS = 500;
 
 const SANDBOX_EXEC_PROFILE = '(version 1)(allow default)(deny network*)';
 
@@ -57,6 +59,27 @@ export interface SpawnOutcome {
 }
 
 export type CommandRunner = (request: SpawnRequest) => Promise<SpawnOutcome>;
+
+/** The part of a started check the runner touches, kept small so a test can drive it. */
+export interface SpawnedChild {
+  readonly pid: number;
+  /** Null until the process is gone; the runner only signals a process that is ours. */
+  readonly exitCode: number | null;
+  readonly exited: Promise<number>;
+  readonly stdout: ReadableStream<Uint8Array> | null;
+  readonly stderr: ReadableStream<Uint8Array> | null;
+}
+
+export interface SpawnInit {
+  readonly cwd: string;
+  readonly env: Record<string, string>;
+  readonly stdout: 'pipe';
+  readonly stderr: 'pipe';
+}
+
+export type SpawnChild = (argv: readonly string[], init: SpawnInit) => SpawnedChild;
+
+const spawnBunChild: SpawnChild = (argv, init) => Bun.spawn([...argv], init);
 
 /**
  * The per-platform command prefix that blocks network access for a check
@@ -124,9 +147,11 @@ export function sandboxEnv(
 
 /**
  * Signal the whole process group when the command is one, then the process
- * itself. Where the jail gave the command its own group, this takes the
- * grandchildren with it; where it did not, the bounded pipe drain below stops
- * the run from waiting on a surviving grandchild.
+ * itself. The timeout timer is the only caller, and only while the command has
+ * not reported an exit code, so the pid is still ours. Where the jail gave the
+ * command its own group this takes the grandchildren with it; where it did not,
+ * the bounded pipe drain and the reader cancel in the runner keep a surviving
+ * grandchild from holding the run open.
  */
 function killProcessTree(pid: number): void {
   try {
@@ -141,56 +166,6 @@ function killProcessTree(pid: number): void {
   }
 }
 
-interface CappedRead {
-  readonly done: Promise<void>;
-  readonly result: { text: string; truncated: boolean };
-}
-
-/**
- * Read one pipe with memory held to the cap: the first `cap` bytes are kept and
- * the rest is drained without storing it, so a command that prints far more than
- * the cap cannot grow the buffer. The caller puts a deadline on `done`, so a
- * grandchild that inherited the pipe and outlived the direct child cannot hold
- * the run open either.
- */
-function readCapped(stream: ReadableStream<Uint8Array> | null, cap: number): CappedRead {
-  if (stream === null) return { done: Promise.resolve(), result: { text: '', truncated: false } };
-  const result = { text: '', truncated: false };
-  const reader = stream.getReader();
-  const decoder = new TextDecoder('utf-8', { fatal: false });
-  const chunks: string[] = [];
-  let keptBytes = 0;
-  const pump = async (): Promise<void> => {
-    const next = await reader.read().catch(() => ({ done: true, value: undefined }));
-    if (next.done === true) {
-      chunks.push(decoder.decode());
-      result.text = chunks.join('');
-      return;
-    }
-    const bytes = next.value ?? new Uint8Array(0);
-    if (keptBytes >= cap) {
-      result.truncated = true;
-      return pump();
-    }
-    const remaining = cap - keptBytes;
-    const piece = bytes.byteLength > remaining ? bytes.subarray(0, remaining) : bytes;
-    keptBytes += piece.byteLength;
-    chunks.push(decoder.decode(piece, { stream: true }));
-    if (bytes.byteLength > remaining) result.truncated = true;
-    return pump();
-  };
-  return { done: pump(), result };
-}
-
-function after(ms: number): Promise<'expired'> {
-  return new Promise((resolve) => {
-    const timer = setTimeout(() => {
-      clearTimeout(timer);
-      resolve('expired');
-    }, ms);
-  });
-}
-
 /**
  * Run a check command under a jail.
  *
@@ -201,23 +176,30 @@ function after(ms: number): Promise<'expired'> {
  * - `requireJail` is true by default: without a jail the run then fails closed.
  *   Only a caller that accepts checks without the jail — the committed tests on
  *   a host that blocks user namespaces — passes `requireJail: false`.
+ * - `spawn` is the process seam. Production starts through Bun; a test injects a
+ *   child so it can drive the pipes and the kill path directly.
  */
 export function createSpawnRunner(
   jail?: readonly string[] | null,
-  options: { requireJail?: boolean } = {},
+  options: { requireJail?: boolean; spawn?: SpawnChild } = {},
 ): CommandRunner {
   const requireJail = options.requireJail ?? true;
+  const spawn = options.spawn ?? spawnBunChild;
   const explicit = jail !== undefined;
   return async (request) => {
     const chosen = await chosenJail(explicit, jail ?? null, requireJail);
-    const child = Bun.spawn([...(chosen ?? []), ...request.argv], {
+    const child = spawn([...(chosen ?? []), ...request.argv], {
       cwd: request.cwd,
       env: { ...request.env },
       stdout: 'pipe',
       stderr: 'pipe',
     });
     let timedOut = false;
+    // The only place a signal is sent. The guard is the point: while the command is
+    // still running the pid is ours, and once it exited the pid can be reused by
+    // the system, so a signal there could hit an unrelated process.
     const timer = setTimeout(() => {
+      if (child.exitCode !== null) return;
       timedOut = true;
       killProcessTree(child.pid);
     }, request.timeoutMs);
@@ -226,17 +208,16 @@ export function createSpawnRunner(
     const stderr = readCapped(child.stderr, SANDBOX_OUTPUT_CAP);
     const exitCode = await child.exited;
     clearTimeout(timer);
-    // A check leaves no process behind: the direct child and its group are
-    // killed on timeout and reaped after a normal exit, so a grandchild that
-    // inherited the pipes cannot keep the run open.
-    killProcessTree(child.pid);
     const drained = await Promise.race([
       Promise.all([stdout.done, stderr.done]),
       after(PIPE_DRAIN_MS),
     ]);
     if (drained === 'expired') {
-      stdout.result.truncated = true;
-      stderr.result.truncated = true;
+      // A grandchild that inherited the pipes and outlived the direct child is no
+      // longer signalled (its parent's pid is gone); the readers are cancelled
+      // instead, so nothing waits on it and no read stays parked on the pipe.
+      stdout.cancel();
+      stderr.cancel();
     }
     return {
       exitCode: timedOut ? null : exitCode,

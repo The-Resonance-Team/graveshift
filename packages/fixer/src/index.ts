@@ -21,14 +21,19 @@ export {
   jailWorks,
   networkJail,
   sandboxEnv,
+  PIPE_DRAIN_MS,
   SANDBOX_ENV_ALLOWLIST,
   SANDBOX_OUTPUT_CAP,
   SANDBOX_SYSTEM_PATH_DIRS,
   SandboxUnavailableError,
   type CommandRunner,
+  type SpawnChild,
+  type SpawnedChild,
+  type SpawnInit,
   type SpawnOutcome,
   type SpawnRequest,
 } from './spawn';
+export { after, readCapped, type CappedRead } from './pipes';
 export { createGitHubSourceProvider, SourceError } from './source';
 export { MAX_TOTAL_SOURCE_BYTES } from './source';
 export type { BaseSnapshot, SourceFile, SourceProvider } from './source';

@@ -12,6 +12,7 @@ import {
 /**
  * Every test here starts a real subprocess, so each one gets a budget well above
  * bun's 5 s default per-test limit: a shared CI runner is slow, not the check.
+ * `pipes.test.ts` drives the same runner over an injected child instead.
  */
 const REAL_SUBPROCESS_TIMEOUT_MS = 30_000;
 
@@ -74,9 +75,10 @@ describe('createSpawnRunner', () => {
       const runner = createSpawnRunner([]);
       const started = Date.now();
       // The direct child exits at once; the backgrounded grandchild keeps the
-      // inherited stdout pipe open.
+      // inherited stdout pipe open. It ends on its own shortly after, because a
+      // check that already exited is never signalled again.
       const result = await runner({
-        argv: ['/bin/sh', '-c', 'sleep 30 & exit 0'],
+        argv: ['/bin/sh', '-c', 'sleep 2 & exit 0'],
         cwd: '/',
         env: sandboxEnv('/tmp'),
         timeoutMs: 20_000,
@@ -139,13 +141,9 @@ describe('createSpawnRunner', () => {
     REAL_SUBPROCESS_TIMEOUT_MS,
   );
 
-  test(
-    'the network jail exists on this platform',
-    () => {
-      expect(networkJail()).toBeDefined();
-    },
-    REAL_SUBPROCESS_TIMEOUT_MS,
-  );
+  test('the network jail exists on this platform', () => {
+    expect(networkJail()).toBeDefined();
+  });
 
   test(
     'checks really run without network under the jail',

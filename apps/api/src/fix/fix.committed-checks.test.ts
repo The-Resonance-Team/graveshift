@@ -2,16 +2,21 @@
 // pass before a pull request opens. These tests run those exact commands
 // through the real sandbox: they must start on the owner's runtime, and a
 // missing PATH entry must block the fix instead of failing open.
-import { dirname } from 'node:path';
+import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import { homedir } from 'node:os';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { describe, expect, test } from 'bun:test';
 
-import { loadGraveshiftConfig } from '@graveshift/config';
+import { DEFAULT_CONFIG_PATH, loadGraveshiftConfig } from '@graveshift/config';
 import {
   createSandboxWorkspace,
   createSpawnRunner,
   jailWorks,
   networkJail,
+  sandboxEnv,
   type CommandRunner,
   type SandboxConfig,
 } from '@graveshift/fixer';
@@ -22,7 +27,30 @@ import {
  */
 const REAL_SUBPROCESS_TIMEOUT_MS = 60_000;
 
-const committed = await loadGraveshiftConfig();
+const committed = await loadGraveshiftConfig(DEFAULT_CONFIG_PATH);
+
+const repoRoot = dirname(fileURLToPath(DEFAULT_CONFIG_PATH));
+
+/**
+ * The committed `fix.sandbox.pathDirs` are the only directories a check may look
+ * in, so the runtime the committed commands name has to resolve through them.
+ * The one documented case outside that list is a per-user runtime install:
+ * `docs/SECURITY.md` tells a Linux owner to add its directory to the file. The
+ * config itself never holds a tilde or a relative path, because the sandbox
+ * builds its own environment and would not expand one.
+ */
+const perUserRuntimeDir = join(homedir(), '.bun', 'bin');
+
+const runtimeDirsForHost = (): readonly string[] => {
+  const committedDirs = committed.fix.sandbox.pathDirs;
+  if (committedDirs.some((dir) => existsSync(join(dir, 'bun')))) return committedDirs;
+  if (existsSync(join(perUserRuntimeDir, 'bun'))) return [...committedDirs, perUserRuntimeDir];
+  throw new Error(
+    `the check runtime is in neither the committed fix.sandbox.pathDirs ` +
+      `(${committedDirs.join(', ')}) nor the documented per-user directory ` +
+      `${perUserRuntimeDir}: add the directory that holds \`bun\` to fix.sandbox.pathDirs`,
+  );
+};
 
 /**
  * The committed suite starts every check as a real subprocess through the
@@ -85,6 +113,68 @@ describe('the committed sandbox check commands', () => {
     // The file names the runtime directory it expects; the owner sets it per deployment.
     expect(committed.fix.sandbox.pathDirs.every((dir) => dir.startsWith('/'))).toBe(true);
   });
+
+  test('the committed PATH directories are absolute and hold no unexpanded path', async () => {
+    const yaml = await readFile(fileURLToPath(DEFAULT_CONFIG_PATH), 'utf8');
+    for (const dir of committed.fix.sandbox.pathDirs) {
+      expect(dir.startsWith('/')).toBe(true);
+      // The sandbox builds its own environment and never expands one, so an
+      // unexpanded tilde or variable in the file would silently block every fix.
+      expect(dir).not.toContain('~');
+      expect(dir).not.toContain('$');
+    }
+    // At least one committed directory is a real directory the check can run from.
+    expect(committed.fix.sandbox.pathDirs.some((dir) => existsSync(dir))).toBe(true);
+    // The config comment and the security note both keep telling a Linux owner whose
+    // runtime is a per-user install to write that directory out in full.
+    expect(yaml).toContain('pathDirs');
+    expect(yaml).toContain('The host PATH is never inherited');
+    expect(yaml).toContain('$HOME/.bun/bin');
+    const security = await readFile(join(repoRoot, 'docs', 'SECURITY.md'), 'utf8');
+    expect(security).toContain('~/.bun/bin');
+    expect(security).toContain('fix.sandbox.pathDirs');
+  });
+
+  test(
+    'the check runtime resolves through the committed sandbox PATH, never the host PATH',
+    async () => {
+      const dirs = runtimeDirsForHost();
+      const env = sandboxEnv('/tmp', dirs);
+      const pathValue = env.PATH ?? '';
+      // The owner-set directories are what supply the runtime: the system
+      // directories alone do not contain it, and the child sees only what
+      // Graveshift built.
+      expect(pathValue.startsWith('/usr/bin:/bin:')).toBe(true);
+      expect(Bun.which('bun', { PATH: '/usr/bin:/bin' })).toBeNull();
+      const found = Bun.which('bun', { PATH: pathValue });
+      expect(found).not.toBeNull();
+      expect(dirs.some((dir) => found!.startsWith(`${dir}/`))).toBe(true);
+      // Starting it by bare name is what a committed command does, so this is the
+      // real path a fix takes: no absolute program, no host PATH.
+      const started = await runner({
+        argv: ['bun', '--version'],
+        cwd: '/tmp',
+        env,
+        timeoutMs: 30_000,
+      });
+      expect(started.exitCode).toBe(0);
+      expect(started.stdout.trim()).toBe(Bun.version);
+      // Every program the committed commands name starts the same way.
+      const programs = committed.fix.sandbox.commands.flatMap((command) =>
+        command[0] === undefined ? [] : [command[0]],
+      );
+      const startedPrograms = await Promise.all(
+        [...new Set(programs)].map((program) =>
+          runner({ argv: [program, '--version'], cwd: '/tmp', env, timeoutMs: 30_000 }),
+        ),
+      );
+      for (const check of startedPrograms) {
+        expect(check.exitCode).toBe(0);
+        expect(check.timedOut).toBe(false);
+      }
+    },
+    REAL_SUBPROCESS_TIMEOUT_MS,
+  );
 
   test(
     'every committed command starts and passes in the sandbox',
