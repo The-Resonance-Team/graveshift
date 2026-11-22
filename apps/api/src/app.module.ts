@@ -5,6 +5,7 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { HealthController } from './health.controller';
 import { AuditModule } from './audit/audit.module';
 import { AuthConfigModule } from './auth/auth.config.module';
+import { ConfigController } from './config/config.controller';
 import { GraveshiftConfigModule } from './config/config.module';
 import { AuthModule } from './auth/auth.module';
 import { CREDENTIAL_CONFIG, type AuthConfig } from './auth/auth.types';
@@ -41,6 +42,6 @@ import { WorkItemsModule } from './work-items/work-items.module';
     WorkItemsModule,
     AuthModule,
   ],
-  controllers: [HealthController, RulesController],
+  controllers: [HealthController, RulesController, ConfigController],
 })
 export class AppModule {}

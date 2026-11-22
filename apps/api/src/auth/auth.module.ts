@@ -12,6 +12,7 @@ import {
   SentryEventsController,
   SentryHttpExceptionFilter,
 } from './controllers/sentry-events.controller';
+import { OAuthClientAccessStrategy } from './oauth-client-access.strategy';
 import { OAuthClientCredentialsStrategy } from './oauth-client-credentials.strategy';
 import { PluginApiKeyGuard } from './plugin-api-key.guard';
 import { SentryKeyGuard } from './sentry-key.guard';
@@ -31,6 +32,7 @@ import { SentryIngestService } from './services/sentry-ingest.service';
     SentryKeyGuard,
     SentryHttpExceptionFilter,
     OAuthClientCredentialsStrategy,
+    OAuthClientAccessStrategy,
     { provide: NATS_CONNECTOR, useValue: connectNatsPublisher },
     { provide: EVENT_PUBLISHER, useClass: NatsEventPublisher },
   ],
