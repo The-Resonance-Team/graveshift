@@ -34,6 +34,7 @@ const policy = parsePolicy({
 
 describe('POST /mcp bearer auth (e2e)', () => {
   let app!: INestApplication;
+  let jwtService!: JwtService;
   let mcpToken!: string;
   let metricsToken!: string;
   let pluginKey!: string;
@@ -50,14 +51,11 @@ describe('POST /mcp bearer auth (e2e)', () => {
       .useValue(new FakeCredentialRepo())
       .compile();
     app = moduleRef.createNestApplication();
+    jwtService = moduleRef.get(JwtService);
     configureApp(app);
     await app.init();
 
-    const token = accessToken(moduleRef.get(JwtService), [
-      'tokens:manage',
-      'incidents:read',
-      'events:publish',
-    ]);
+    const token = accessToken(jwtService, ['tokens:manage', 'incidents:read', 'events:publish']);
     const create = async (kind: 'mcp' | 'plugin', scopes: string[]) => {
       const response = await request(app.getHttpServer())
         .post('/api/credentials')
@@ -142,6 +140,22 @@ describe('POST /mcp bearer auth (e2e)', () => {
 
   test('denies by default when a method has no scope mapping', async () => {
     await call(mcpToken, 'tools/unknown').expect(403);
+  });
+
+  test('accepts tools/list for a token holding only fix:propose', async () => {
+    const jwt = accessToken(jwtService, ['tokens:manage', 'fix:propose']);
+    const created = await request(app.getHttpServer())
+      .post('/api/credentials')
+      .set('authorization', `Bearer ${jwt}`)
+      .send({ kind: 'mcp', name: 'propose-only-key', scopes: ['fix:propose'] })
+      .expect(201);
+    const proposeToken = created.body.value as string;
+
+    await call(proposeToken, 'tools/list').expect(200);
+    await call(proposeToken, 'tools/call', {
+      name: 'propose_fix',
+      arguments: { incidentId: 'inc-1', action: 'open_pr' },
+    }).expect(200);
   });
 
   test('refuses a primitive outside the token scopes with 403', async () => {

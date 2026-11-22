@@ -1,6 +1,8 @@
 import { readdirSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
+import { migrationOwnershipViolations, normalize } from './prisma-drift';
+
 // ponytail: DB-free comparison assumes additive migrations; upgrade when a second or destructive migration lands, after coordinator approval of a CI service container or external test database.
 const root = dirname(import.meta.dir);
 const migrationsPath = join(root, 'prisma/migrations');
@@ -14,19 +16,16 @@ if (migrationFiles.length === 0) {
   process.exit(1);
 }
 
-const normalize = (sql: string) =>
-  sql
-    .replace(
-      /-- BEGIN unmanaged append-only audit enforcement[\s\S]*?-- END unmanaged append-only audit enforcement\./g,
-      '',
-    )
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(
-      (line) =>
-        line !== '' && !line.startsWith('--') && line !== 'CREATE SCHEMA IF NOT EXISTS "public";',
-    )
-    .join('\n');
+const migrationSql = migrationFiles.map((file) => readFileSync(file, 'utf8')).join('\n');
+
+// The init migration was amended in 20186f0, so its checksum changed. Do not add a
+// follow-up migration. Recreate any local database that applied the old checksum.
+const violations = migrationOwnershipViolations(migrationSql);
+if (violations.length > 0) {
+  console.error('Prisma drift check failed: migration objects are on the wrong table.');
+  for (const violation of violations) process.stderr.write(`  - ${violation}\n`);
+  process.exit(1);
+}
 
 const generated = Bun.spawnSync(
   ['bun', 'x', 'prisma', 'migrate', 'diff', '--from-empty', '--to-schema', 'prisma', '--script'],
@@ -39,7 +38,7 @@ if (generated.exitCode !== 0) {
   process.exit(generated.exitCode);
 }
 
-const expected = normalize(migrationFiles.map((file) => readFileSync(file, 'utf8')).join('\n'));
+const expected = normalize(migrationSql);
 const actual = normalize(generated.stdout.toString());
 
 if (actual !== expected) {
