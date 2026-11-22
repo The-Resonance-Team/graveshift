@@ -1,5 +1,12 @@
-import type { GitHubClient, RepoPolicy } from '@graveshift/fixer';
-import type { Patch, PatchGateway } from '@graveshift/patch';
+import type {
+  BaseSnapshot,
+  FixWorkspace,
+  GitHubClient,
+  RepoPolicy,
+  SandboxConfig,
+  SourceProvider,
+} from '@graveshift/fixer';
+import type { PatchGateway, PatchProposal } from '@graveshift/patch';
 import { parsePolicy, type Policy } from '@graveshift/policy';
 
 import { FIX_DEPS, type FixDeps } from '../../src/fix/fix.types';
@@ -39,8 +46,34 @@ const fixPolicy: Policy = parsePolicy({
   default: 'deny',
 });
 
-const patch: Patch = {
-  files: [{ path: 'src/api.ts', content: 'export const ok = true;\n', linesChanged: 1 }],
+const API_TEXT = 'export const broken = true;\n';
+const API_FIXED_TEXT = 'export const ok = true;\n';
+const BASE_SHA = 'base-sha';
+const BASE_BLOB_SHA = 'blob-base-api';
+
+const snapshot: BaseSnapshot = {
+  baseSha: BASE_SHA,
+  treeSha: 'base-tree',
+  files: [
+    {
+      path: 'src/api.ts',
+      blobSha: BASE_BLOB_SHA,
+      bytes: new TextEncoder().encode(API_TEXT),
+      text: API_TEXT,
+    },
+  ],
+};
+
+const proposal: PatchProposal = {
+  baseSha: BASE_SHA,
+  files: [
+    {
+      path: 'src/api.ts',
+      baseBlobSha: BASE_BLOB_SHA,
+      content: API_FIXED_TEXT,
+      linesChanged: 1,
+    },
+  ],
 };
 
 let recorded: Call[] = [];
@@ -61,21 +94,50 @@ export function fakeFixDeps(over: { confidence?: number; throwOnLoad?: boolean }
       push('patch', task);
       return {
         status: 'ok',
-        value: patch,
+        value: proposal,
         model: 'fake-model',
         usage: { in: 0, out: 0 },
         costUsd: 0,
       };
     },
   };
+  const source: SourceProvider = {
+    async readBase(name, branch) {
+      push('readBase', name, branch);
+      return snapshot;
+    },
+    async currentBaseSha(name, branch) {
+      push('currentBaseSha', name, branch);
+      return BASE_SHA;
+    },
+  };
+  const workspace: FixWorkspace = {
+    async verify(_base, patch, sandbox) {
+      push('verify', patch, sandbox);
+      return {
+        ok: true,
+        checks: [{ command: ['true'], exitCode: 0, timedOut: false, stdout: '', stderr: '' }],
+      };
+    },
+  };
   const client: GitHubClient = {
     async getBaseSha(name, branch) {
       push('getBaseSha', name, branch);
-      return 'base-sha';
+      return BASE_SHA;
     },
     async getCommitTree(name, sha) {
       push('getCommitTree', name, sha);
       return 'base-tree';
+    },
+    async listTree(name, treeSha) {
+      push('listTree', name, treeSha);
+      return snapshot.files.map((file) => ({ path: file.path, blobSha: file.blobSha }));
+    },
+    async getBlobBytes(name, blobSha) {
+      push('getBlobBytes', name, blobSha);
+      const file = snapshot.files.find((candidate) => candidate.blobSha === blobSha);
+      if (file === undefined) throw new Error(`missing blob ${blobSha}`);
+      return file.bytes;
     },
     async createBlob(name, content) {
       push('createBlob', name, content);
@@ -108,11 +170,15 @@ export function fakeFixDeps(over: { confidence?: number; throwOnLoad?: boolean }
       return { state: 'open', merged: false, headSha: 'commit-sha' };
     },
   };
+  const sandbox: SandboxConfig = { commands: [['true']], timeoutMs: 1_000 };
   return {
     policy: fixPolicy,
     repo,
     gateway,
     client,
+    source,
+    workspace,
+    sandbox,
     context: {
       async load() {
         if (over.throwOnLoad) throw new Error('context provider failed');
@@ -134,6 +200,7 @@ export function fakeFixDeps(over: { confidence?: number; throwOnLoad?: boolean }
     },
     agent: 'Exorcist',
     autoFixEnabled: true,
+    now: () => new Date('2026-11-22T00:00:00.000Z'),
     promptTemplate:
       '{{AGENT_NAME}} {{AGENT_ROLE}} {{AGENT_DESCRIPTION}} {{AGENT_PROMPT}} {{MODEL}} {{PROVIDER}} {{DAILY_BUDGET_USD}} {{DIAGNOSIS}} {{RULES}}',
     agentMeta: {

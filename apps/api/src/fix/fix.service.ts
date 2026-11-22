@@ -7,7 +7,13 @@ import {
   type WorkItem,
   withDraftPr,
 } from '@graveshift/core';
-import { type Patch, type PrRef, openDraftPr } from '@graveshift/fixer';
+import {
+  type Patch,
+  type PrRef,
+  RepoNotAllowedError,
+  openDraftPr,
+  StaleBaseError,
+} from '@graveshift/fixer';
 import { generatePatch, type RepoRules } from '@graveshift/patch';
 import { redact } from '@graveshift/redactor';
 import { decide, type Effect } from '@graveshift/policy';
@@ -155,15 +161,38 @@ export class FixService {
     }
 
     const diagnosisText = item.description || item.title;
+
+    // Read the real repository at the base ref. Everything the model may use
+    // comes from this snapshot: it never reaches for source itself.
+    let base;
+    try {
+      base = await this.deps.source.readBase(repo.repo, repo.baseBranch);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'unknown source failure';
+      return blocked(
+        decision.effect,
+        `source_unavailable: ${redact(reason)}`,
+        'source_unavailable',
+      );
+    }
+
     const generated = await generatePatch({
       gateway,
       agent,
       system: systemFrom(this.deps, repo, diagnosisText),
       rules: rulesFrom(repo),
       diagnosis: diagnosisText,
+      base: { baseSha: base.baseSha, files: base.files },
     });
     if (!generated.ok) {
       return blocked(decision.effect, generated.error.message, 'patch_rejected');
+    }
+
+    // The patch runs in a throwaway checkout with no secrets and no network
+    // before anything is pushed. A failed or timed-out check blocks the PR.
+    const verified = await this.deps.workspace.verify(base, generated.patch, this.deps.sandbox);
+    if (!verified.ok) {
+      return blocked(decision.effect, `checks_failed: ${redact(verified.reason)}`, 'checks_failed');
     }
 
     const { incident, diagnosis } = toIncidentAndDiagnosis(item, parsed.data, note);
@@ -174,27 +203,32 @@ export class FixService {
     const patch: Patch = generated.patch;
     let pr: PrRef;
     try {
-      // openDraftPr runs guardPatch before its first client call.
+      // openDraftPr runs guardPatch and the stale-base re-check before its
+      // first mutating client call.
       const opened = await openDraftPr({
         client,
         repo,
         patch,
+        base: { sha: base.baseSha, treeSha: base.treeSha },
+        checks: verified.checks,
+        diff: generated.summary,
         incident,
         diagnosis,
         category,
         dashboardUrl: '',
         headline,
+        now: this.deps.now,
       });
-      pr = {
-        repo: opened.repo,
-        number: opened.number,
-        url: opened.url,
-        branch: opened.branch,
-        headSha: opened.headSha,
-      };
+      pr = opened;
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'unknown PR failure';
-      return blocked(decision.effect, `pr_failed: ${reason}`, 'pr_failed');
+      if (error instanceof StaleBaseError) {
+        return blocked(decision.effect, redact(reason), 'stale_base');
+      }
+      if (error instanceof RepoNotAllowedError) {
+        return blocked('deny', redact(reason), 'policy_denied');
+      }
+      return blocked(decision.effect, `pr_failed: ${redact(reason)}`, 'pr_failed');
     }
     // Fix now promotes the queue only after a successful fix.
     const next = trigger === 'fix_now' ? promoteToFront(item) : item;

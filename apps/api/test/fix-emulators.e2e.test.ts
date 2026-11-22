@@ -1,127 +1,190 @@
-// Offline e2e for the real fix path: real gateway, real GitHub App client, two
-// stateful emulators. No real key, model call, GitHub call or network is used.
-import { createSubtasks, NEEDS_HUMAN, type WorkItem } from '@graveshift/core';
-import type { INestApplication } from '@nestjs/common';
-import { Test } from '@nestjs/testing';
+// Offline e2e for the real fix path: real gateway, real GitHub App client, real
+// source read and real sandbox. The two stateful local emulators stand in for
+// GitHub and the model, so no real key, GitHub call, model call or network.
 import { describe, expect, test } from 'bun:test';
-import request from 'supertest';
 
-import { configureApp } from '../src/app.factory';
-import { AppModule } from '../src/app.module';
-import { createFixDeps } from '../src/fix/fix.deps';
-import { FIX_DEPS, type FixDeps } from '../src/fix/fix.types';
-import { WORK_ITEM_POLICY, type WorkItemPolicy } from '../src/work-items/work-item.policy';
-import { WORK_ITEM_SEED, WorkItemStore } from '../src/work-items/work-item.store';
-import { useFixEmulators, rewriteHost } from './fix-emulator.setup';
+import {
+  aiCalls,
+  openPulls,
+  pushedFixBranches,
+  readFileAtCommit,
+  setCannedReply,
+  useFixEmulators,
+} from './fix-emulator.setup';
+import {
+  API_AFTER,
+  cannedFixReply,
+  checkCommand,
+  fixNow,
+  GIT_EMPTY_BLOB_SHA,
+  harness,
+  buildApp,
+  seed,
+} from './fix-emulator.harness';
 
 const emu = useFixEmulators();
-
-const item: WorkItem = {
-  id: 'wi-e2e',
-  title: 'Fix OOM on api',
-  description: 'A Grave was drained by a leech.',
-  successCriteria: [],
-  subtasks: createSubtasks([]),
-  status: 'todo',
-  priority: 'high',
-  assignee: NEEDS_HUMAN,
-  reporter: 'wraith',
-  startDate: null,
-  dueDate: null,
-  sprint: null,
-  parent: null,
-  labels: [],
-  team: 'sre',
-  watchers: [],
-  severity: 'critical',
-  service: 'api',
-  diagnosisRef: 'diag-e2e',
-  fixPriority: 100,
-  draftPr: null,
-};
-
-const POLICY: WorkItemPolicy = {
-  agentNames: ['Exorcist'],
-  clientConfig: {},
-  autoFixEnabled: true,
-};
-
-async function buildApp(deps: FixDeps): Promise<INestApplication> {
-  const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-    .overrideProvider(WORK_ITEM_SEED)
-    .useValue([])
-    .overrideProvider(WorkItemStore)
-    .useValue({
-      list: () => [item],
-      get: (id: string) => (id === item.id ? item : undefined),
-      save: () => {},
-    })
-    .overrideProvider(WORK_ITEM_POLICY)
-    .useValue(POLICY)
-    .overrideProvider(FIX_DEPS)
-    .useValue(deps)
-    .compile();
-  return configureApp(moduleRef.createNestApplication({ logger: false }));
-}
-
-async function realDeps(): Promise<FixDeps> {
-  const { loadGraveshiftConfig } = await import('@graveshift/config');
-  const config = await loadGraveshiftConfig();
-  const urls = emu.urls();
-  const deps = createFixDeps(config, {
-    env: {
-      ANTHROPIC_API_KEY: 'test-only-key',
-      GRAVESHIFT_GITHUB_APP_ID: '12345',
-      GRAVESHIFT_GITHUB_PRIVATE_KEY: emu.appPrivateKey(),
-    },
-    githubFetch: rewriteHost(urls.github),
-    aiFetch: rewriteHost(urls.ai),
-  });
-  // The daemon read is deferred to #59. Only this collaborator is a fake.
-  return {
-    ...deps,
-    context: {
-      load: async () => ({
-        ok: true as const,
-        value: {
-          confidence: 0.95,
-          category: 'code_bug',
-          signals: ['oom_killed'],
-          counters: {
-            openPrsLastHour: 0,
-            actionsLast10Min: 0,
-            diagnosisLoops: 0,
-            llmSpentTodayUsd: 0,
-          },
-        },
-      }),
-    },
-  };
-}
+const urls = () => emu.urls();
 
 describe('fix path over emulated GitHub and AI', () => {
-  test('Fix now opens one draft PR through the real collaborators', async () => {
-    const app = await buildApp(await realDeps());
+  test('a real source read, sandbox check and draft PR publish the real diff', async () => {
+    const base = await seed(emu);
+    await cannedFixReply(emu, base);
+    const { deps, store, reads } = await harness(emu, {
+      commands: [checkCommand('export const price = 1;')],
+    });
+    const app = await buildApp(deps, store);
     try {
-      await app.init();
+      const body = await fixNow(app);
+      expect(body.ok).toBe(true);
+      expect(body.failure).toBe('none');
+      const pr = body.pr as { number: number; branch: string; headSha: string; openedAt: string };
+      expect(pr.number).toBeGreaterThan(0);
+      expect(pr.branch).toStartWith('refs/heads/graveshift/');
+      expect(pr.headSha).toMatch(/^[0-9a-f]{40}$/);
+      expect(pr.openedAt).toBe('2026-11-22T00:00:00.000Z');
+      expect(reads).toEqual([`xiro/haunted-candy-shop@main`]);
 
-      const response = await request(app.getHttpServer())
-        .post('/api/work-items/wi-e2e/fix-now')
-        .expect(200);
-      expect(response.body.ok).toBe(true);
-      expect(response.body.failure).toBe('none');
-      expect(response.body.pr.number).toBeGreaterThan(0);
-      expect(response.body.pr.branch).toContain('graveshift/');
-
-      const urls = emu.urls();
-      const pulls = (await fetch(`${urls.github}/repos/xiro/haunted-candy-shop/pulls`).then((res) =>
-        res.json(),
-      )) as Array<{ draft?: boolean }>;
+      const pulls = await openPulls(urls().github);
       expect(pulls).toHaveLength(1);
-      expect(pulls[0]?.draft).toBe(true);
-      const calls = await fetch(`${urls.ai}/_ai/calls`).then((res) => res.json());
-      expect(Array.isArray(calls)).toBe(true);
-      expect((calls as unknown[]).length).toBeGreaterThan(0);
+      const pull = pulls[0];
+      if (pull === undefined) throw new Error('expected one pull request');
+      expect(pull['draft']).toBe(true);
+      expect((pull['head'] as { sha: string }).sha).toBe(pr.headSha);
+      expect((pull['base'] as { sha: string }).sha).toBe(base.baseSha);
+      const text = String(pull['body'] ?? '');
+      expect(text).toContain('### Checks');
+      expect(text).toContain(': passed');
+      expect(text).toContain('+1/-1');
+      expect(text).not.toContain('test-only-key');
+
+      // The head tree holds the applied diff, read back as real git objects.
+      expect(await readFileAtCommit(urls().github, pr.headSha, 'src/api.ts')).toBe(API_AFTER);
+      expect(await readFileAtCommit(urls().github, pr.headSha, 'README.md')).toContain('# ');
+
+      const calls = await aiCalls(urls().ai);
+      const prompt = JSON.stringify(calls);
+      // The emulator redacts high-entropy strings in the recorded prompt, so the
+      // SHAs are checked as markers here and as real values in the reply below.
+      expect(prompt).toContain('export const price = null;');
+      expect(prompt).toContain('Base commit SHA:');
+      expect(prompt).toContain('<untrusted_source_file_src/api.ts>');
+      expect(prompt).toContain('Echo baseSha and every baseBlobSha exactly');
+      const reply = JSON.stringify(
+        (calls[0] as { matched?: { rule?: { reply?: unknown } } }).matched,
+      );
+      expect(reply).toContain(base.baseSha);
+      expect(reply).toContain(base.files['src/api.ts']?.blobSha ?? '');
+      expect(prompt).not.toContain('test-only-key');
+      expect(prompt).not.toContain(emu.appPrivateKey());
+    } finally {
+      await app.close();
+    }
+  });
+
+  test('a policy denial stops everything before the first source read', async () => {
+    const base = await seed(emu);
+    await cannedFixReply(emu, base);
+    const { deps, store, reads } = await harness(emu, { denyPolicy: true });
+    const app = await buildApp(deps, store);
+    try {
+      const body = await fixNow(app);
+      expect(body.ok).toBe(false);
+      expect(body.failure).toBe('policy_denied');
+      expect(reads).toHaveLength(0);
+      expect(await pushedFixBranches(urls().github)).toEqual([]);
+      expect(await openPulls(urls().github)).toEqual([]);
+      expect(await aiCalls(urls().ai)).toEqual([]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  test('a failed sandbox check blocks the pull request', async () => {
+    const base = await seed(emu);
+    await cannedFixReply(emu, base);
+    const { deps, store } = await harness(emu, { commands: [checkCommand('never written')] });
+    const app = await buildApp(deps, store);
+    try {
+      const body = await fixNow(app);
+      expect(body.ok).toBe(false);
+      expect(body.failure).toBe('checks_failed');
+      expect(await pushedFixBranches(urls().github)).toEqual([]);
+      expect(await openPulls(urls().github)).toEqual([]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  test('a base that moved after the read publishes nothing', async () => {
+    const base = await seed(emu);
+    await cannedFixReply(emu, base);
+    const { deps, store } = await harness(emu, {
+      commands: [checkCommand('export const price = 1;')],
+      commitAfterRead: true,
+    });
+    const app = await buildApp(deps, store);
+    try {
+      const body = await fixNow(app);
+      expect(body.ok).toBe(false);
+      expect(body.failure).toBe('stale_base');
+      expect(await pushedFixBranches(urls().github)).toEqual([]);
+      expect(await openPulls(urls().github)).toEqual([]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  test('a forbidden path never reaches GitHub', async () => {
+    const base = await seed(emu);
+    await setCannedReply(urls().ai, {
+      baseSha: base.baseSha,
+      files: [
+        {
+          path: '.github/workflows/ci.yaml',
+          baseBlobSha: GIT_EMPTY_BLOB_SHA,
+          content: 'on: push\n',
+          linesChanged: 1,
+        },
+      ],
+    });
+    const { deps, store } = await harness(emu, { commands: [checkCommand('')] });
+    const app = await buildApp(deps, store);
+    try {
+      const body = await fixNow(app);
+      expect(body.ok).toBe(false);
+      expect(body.failure).toBe('patch_rejected');
+      expect(await pushedFixBranches(urls().github)).toEqual([]);
+      expect(await openPulls(urls().github)).toEqual([]);
+    } finally {
+      await app.close();
+    }
+  });
+
+  test('a diff whose context no longer matches is rejected', async () => {
+    const base = await seed(emu);
+    const file = base.files['src/api.ts'];
+    if (file === undefined) throw new Error('the seeded file is missing from the base tree');
+    await setCannedReply(urls().ai, {
+      baseSha: base.baseSha,
+      files: [
+        {
+          path: 'src/api.ts',
+          baseBlobSha: file.blobSha,
+          diff: '@@ -1 +1 @@\n-export const gone = true;\n+export const price = 1;\n',
+          linesChanged: 1,
+        },
+      ],
+    });
+    const { deps, store } = await harness(emu, {
+      commands: [checkCommand('export const price = 1;')],
+    });
+    const app = await buildApp(deps, store);
+    try {
+      const body = await fixNow(app);
+      expect(body.ok).toBe(false);
+      expect(body.failure).toBe('patch_rejected');
+      expect(await pushedFixBranches(urls().github)).toEqual([]);
+      expect(await openPulls(urls().github)).toEqual([]);
     } finally {
       await app.close();
     }

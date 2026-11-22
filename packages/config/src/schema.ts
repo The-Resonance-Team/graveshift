@@ -31,6 +31,15 @@ export const FixConfigSchema = z
         ),
       })
       .strict(),
+    // Check commands come from this file, never from the model or the repository.
+    // An empty command list blocks every fix: there is no unverified publish.
+    sandbox: z
+      .object({
+        commands: z.array(z.array(z.string().min(1)).min(1)).default([]),
+        timeoutMs: z.number().int().positive().default(60_000),
+      })
+      .strict()
+      .default({ commands: [], timeoutMs: 60_000 }),
     github: z
       .object({
         appIdEnv: z.string().regex(ENV_NAME),

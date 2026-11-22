@@ -1,8 +1,9 @@
-import { type Patch } from '@graveshift/patch';
-import { GitHubApiError } from '@graveshift/fixer';
 import { describe, expect, test } from 'bun:test';
+import { GitHubApiError, StaleBaseError } from '@graveshift/fixer';
+import type { PatchProposal } from '@graveshift/patch';
 
-import { baseItem, goodContext, repo, serviceWith } from './fix.test-helpers';
+import { serviceWith } from './fix.test-fakes';
+import { baseItem, emptyBlob, goodContext, goodProposal, repo } from './fix.test-helpers';
 
 describe('fix use case', () => {
   test('auto-fix starts when the boot flag is on', async () => {
@@ -13,6 +14,7 @@ describe('fix use case', () => {
     expect(result.effect).toBe('allow');
     expect(result.failure).toBe('none');
     expect(result.pr?.number).toBe(7);
+    expect(result.pr?.openedAt).toBe('2026-11-22T00:00:00.000Z');
     expect(result.item.draftPr?.number).toBe(7);
     expect(gatewayCalls).toHaveLength(1);
     expect(calls.some((call) => call.method === 'createPullRequest')).toBe(true);
@@ -41,7 +43,7 @@ describe('fix use case', () => {
     expect(result.trigger).toBe('fix_now');
   });
 
-  test('policy deny blocks the patch and the pull request', async () => {
+  test('policy deny blocks the source read, the patch and the pull request', async () => {
     const { service, gatewayCalls, calls } = serviceWith({ allow: false });
     const result = await service.fixNow(baseItem);
     expect(result.ok).toBe(false);
@@ -51,7 +53,7 @@ describe('fix use case', () => {
     expect(calls).toHaveLength(0);
   });
 
-  test('a low-confidence diagnosis blocks the fix before the patch', async () => {
+  test('a low-confidence diagnosis blocks the fix before any read', async () => {
     const { service, gatewayCalls, calls } = serviceWith({
       context: { ...goodContext, confidence: 0.1 },
     });
@@ -63,7 +65,7 @@ describe('fix use case', () => {
     expect(calls).toHaveLength(0);
   });
 
-  test('a high open-PR counter blocks the fix before the patch', async () => {
+  test('a high open-PR counter blocks the fix before any read', async () => {
     const { service, gatewayCalls, calls } = serviceWith({
       context: {
         ...goodContext,
@@ -104,15 +106,26 @@ describe('fix use case', () => {
   });
 
   test('an unguarded patch never reaches the client', async () => {
-    const unsafe: Patch = {
-      files: [{ path: 'policy.yaml', content: 'x', linesChanged: 1 }],
+    const unsafe: PatchProposal = {
+      baseSha: 'base-sha',
+      files: [{ path: 'policy.yaml', baseBlobSha: emptyBlob, content: 'x', linesChanged: 1 }],
     };
     const { service, calls } = serviceWith({ patch: unsafe });
     const result = await service.fixNow(baseItem);
     expect(result.ok).toBe(false);
     expect(result.failure).toBe('patch_rejected');
     expect(result.reason).toContain('forbidden path');
-    expect(calls).toHaveLength(0);
+    expect(calls.some((call) => call.method === 'createBlob')).toBe(false);
+  });
+
+  test('a proposal pinned to an older base is rejected after the model call', async () => {
+    const stale: PatchProposal = { ...goodProposal, baseSha: 'older-commit' };
+    const { service, calls } = serviceWith({ patch: stale });
+    const result = await service.fixNow(baseItem);
+    expect(result.ok).toBe(false);
+    expect(result.failure).toBe('patch_rejected');
+    expect(result.reason).toContain('stale_base');
+    expect(calls.some((call) => call.method === 'createBlob')).toBe(false);
   });
 
   test('a note with a secret and injected tags is wrapped before the PR body', async () => {
@@ -131,6 +144,8 @@ describe('fix use case', () => {
     expect(body).toContain('<untrusted_fix_now_note>');
     expect(body).toContain('<untrusted_root_cause>');
     expect(body).not.toContain('/incidents/');
+    expect(body).toContain('`true`: passed');
+    expect(body).toContain('+1/-1');
   });
 
   test('title, commit subject and branch slug use clean redacted text', async () => {
@@ -164,6 +179,7 @@ describe('fix use case', () => {
         url: 'https://github.test/1',
         branch: 'refs/heads/graveshift/old',
         headSha: 'old-sha',
+        openedAt: '2026-11-21T00:00:00.000Z',
       },
     };
     const { service, gatewayCalls, calls } = serviceWith();
@@ -184,7 +200,9 @@ describe('fix use case', () => {
     const { service, calls } = serviceWith();
     await service.fixNow({ ...baseItem, id: 'wi-a', diagnosisRef: 'diag-shared' });
     await service.fixNow({ ...baseItem, id: 'wi-b', diagnosisRef: 'diag-shared' });
-    const refs = calls.filter((call) => call.method === 'createRef').map((call) => call.args[1]);
+    const refs = calls
+      .filter((call) => call.method === 'createRef')
+      .map((call) => String(call.args[1]));
     expect(refs).toHaveLength(2);
     expect(new Set(refs).size).toBe(2);
   });
@@ -196,6 +214,13 @@ describe('fix use case', () => {
     expect(result.failure).toBe('pr_failed');
     expect(result.reason).toContain('pr_failed: pulls responded 502');
     expect(result.item.draftPr).toBeNull();
+  });
+
+  test('a StaleBaseError from the client becomes the stale_base code', async () => {
+    const { service } = serviceWith({ prError: new StaleBaseError('base moved') });
+    const result = await service.fixNow(baseItem);
+    expect(result.ok).toBe(false);
+    expect(result.failure).toBe('stale_base');
   });
 
   test('no merge method exists or is called', async () => {

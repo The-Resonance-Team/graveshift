@@ -403,6 +403,8 @@ export interface operations {
                   url: string;
                   branch: string;
                   headSha: string;
+                  /** Format: date-time */
+                  openedAt: string;
                 } | null;
               })[];
             total: number;
@@ -462,6 +464,8 @@ export interface operations {
               url: string;
               branch: string;
               headSha: string;
+              /** Format: date-time */
+              openedAt: string;
             } | null;
           };
         };
@@ -527,6 +531,8 @@ export interface operations {
                 url: string;
                 branch: string;
                 headSha: string;
+                /** Format: date-time */
+                openedAt: string;
               } | null;
             };
             autoFix: ({
@@ -535,7 +541,7 @@ export interface operations {
               effect: "allow" | "deny" | "require_approval" | "dry_run";
               reason: string | null;
               /** @enum {string} */
-              failure: "none" | "auto_fix_disabled" | "context_unavailable" | "invalid_context" | "policy_denied" | "patch_rejected" | "pr_failed" | "fix_error" | "already_fixed";
+              failure: "none" | "auto_fix_disabled" | "context_unavailable" | "invalid_context" | "policy_denied" | "source_unavailable" | "patch_rejected" | "checks_failed" | "stale_base" | "pr_failed" | "fix_error" | "already_fixed";
             }) | null;
           };
         };
@@ -609,6 +615,8 @@ export interface operations {
                 url: string;
                 branch: string;
                 headSha: string;
+                /** Format: date-time */
+                openedAt: string;
               } | null;
             };
             /** @enum {string} */
@@ -622,10 +630,12 @@ export interface operations {
               url: string;
               branch: string;
               headSha: string;
+              /** Format: date-time */
+              openedAt: string;
             } | null;
             reason: string | null;
             /** @enum {string} */
-            failure: "none" | "auto_fix_disabled" | "context_unavailable" | "invalid_context" | "policy_denied" | "patch_rejected" | "pr_failed" | "fix_error" | "already_fixed";
+            failure: "none" | "auto_fix_disabled" | "context_unavailable" | "invalid_context" | "policy_denied" | "source_unavailable" | "patch_rejected" | "checks_failed" | "stale_base" | "pr_failed" | "fix_error" | "already_fixed";
           };
         };
       };

@@ -27,12 +27,6 @@ ai:
   strict: true
   models:
     - claude-sonnet-5.5
-  rules:
-    - id: patch-for-code-bug
-      reply:
-        - type: object
-          value:
-            files:
-              - path: src/api.ts
-                content: 'export const ok = true;'
-                linesChanged: 1
+  # Each test sets its canned reply at runtime with PUT /_ai/rules: the reply
+  # must pin the base and blob SHAs that seeding produced for that test.
+  rules: []

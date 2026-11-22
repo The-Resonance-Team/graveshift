@@ -8,7 +8,7 @@ import { openDraftPr } from './open-pr';
 import { renderPrBody } from './pr-body';
 import { PatchRejectedError } from './guard';
 import { createRestClient } from './rest';
-import { diagnosis, fakeClient, file, incident, repo } from './test-helpers';
+import { callArg, diagnosis, fakeClient, file, incident, repo } from './test-helpers';
 import type { Patch } from './types';
 import { checkState, type PrEvent, watchPr } from './watch';
 
@@ -22,13 +22,17 @@ describe('openDraftPr', () => {
   const input = {
     repo,
     patch,
+    base: { sha: 'base-sha', treeSha: 'base-tree' },
+    checks: [{ command: ['bun', 'test'], exitCode: 0, timedOut: false, stdout: 'ok', stderr: '' }],
+    diff: { filesChanged: 2, additions: 13, deletions: 0 },
+    now: () => new Date('2026-11-22T00:00:00.000Z'),
     incident,
     diagnosis,
     category: 'code_bug',
     dashboardUrl: 'https://graveshift.example',
   };
 
-  test('pushes a graveshift/ branch and opens a labelled draft PR', async () => {
+  test('pushes a graveshift/ branch and opens a labelled draft PR against the pinned base', async () => {
     const { client, calls } = fakeClient();
     const pr = await openDraftPr({ client, ...input });
     expect(pr).toMatchObject({
@@ -37,7 +41,6 @@ describe('openDraftPr', () => {
     });
     expect(calls.map((c) => c.method)).toEqual([
       'getBaseSha',
-      'getCommitTree',
       'createBlob',
       'createBlob',
       'createTree',
@@ -46,15 +49,22 @@ describe('openDraftPr', () => {
       'createPullRequest',
       'addLabels',
     ]);
-    const create = calls.find((c) => c.method === 'createPullRequest');
-    expect(create?.args[1]).toMatchObject({ draft: true });
-    expect(calls.find((c) => c.method === 'addLabels')?.args[2]).toEqual([
-      'graveshift',
-      'exorcism',
-    ]);
-    expect(calls.find((c) => c.method === 'createRef')?.args[1]).toStartWith(
-      'refs/heads/graveshift/',
-    );
+    expect(callArg(calls, 'createTree', 1)).toBe('base-tree');
+    expect(callArg(calls, 'createCommit', 3)).toBe('base-sha');
+    const create = callArg(calls, 'createPullRequest', 1) as { draft: boolean; body: string };
+    expect(create.draft).toBe(true);
+    expect(create.body).toContain('`bun test`: passed');
+    expect(create.body).toContain('+13/-0');
+    expect(callArg(calls, 'addLabels', 2)).toEqual(['graveshift', 'exorcism']);
+    expect(String(callArg(calls, 'createRef', 1))).toStartWith('refs/heads/graveshift/');
+  });
+
+  test('a base that moved after the fix read blocks every push', async () => {
+    const { client, calls } = fakeClient();
+    await expect(
+      openDraftPr({ client, ...input, base: { sha: 'old-base-sha', treeSha: 'base-tree' } }),
+    ).rejects.toMatchObject({ code: 'STALE_BASE' });
+    expect(calls.map((c) => c.method)).toEqual(['getBaseSha']);
   });
 
   test('headline drives title, subject and slug while the body keeps the wrapped root cause', async () => {
@@ -112,11 +122,22 @@ describe('openDraftPr', () => {
       category: 'code_bug',
       dashboardUrl: 'https://g.example',
       files: ['src/app.ts'],
+      checks: [
+        {
+          command: ['sh', '-c', 'echo ghp_abcdefghijklmnopqrstuvwxyz0123456789'],
+          exitCode: 1,
+          timedOut: false,
+          stdout: 'token ghp_abcdefghijklmnopqrstuvwxyz0123456789',
+          stderr: 'boom ghp_abcdefghijklmnopqrstuvwxyz0123456789',
+        },
+      ],
+      diff: { filesChanged: 1, additions: 1, deletions: 1 },
     });
     expect(body).not.toContain('ghp_abcdefghijklmnopqrstuvwxyz0123456789');
     expect(body).toContain('[REDACTED:github_token]');
     expect(body).toContain('https://g.example/incidents/inc-7f3a9c21-aaaa');
     expect(body).toContain('never merged automatically');
+    expect(body).toContain('exit 1');
   });
 
   test('an empty dashboard URL adds no broken link to the PR body', () => {
@@ -126,10 +147,13 @@ describe('openDraftPr', () => {
       category: 'code_bug',
       dashboardUrl: '',
       files: ['src/app.ts'],
+      checks: [],
+      diff: { filesChanged: 1, additions: 1, deletions: 1 },
     });
     expect(body).not.toContain('/incidents/');
     expect(body).not.toContain('](');
     expect(body).toContain('never merged automatically');
+    expect(body).toContain('- none configured');
   });
 });
 
@@ -192,6 +216,10 @@ describe('rest client and app auth', () => {
       client,
       repo,
       patch: { files: [file('src/a.ts')] },
+      base: { sha: 'b', treeSha: 't0' },
+      checks: [{ command: ['bun', 'test'], exitCode: 0, timedOut: false, stdout: '', stderr: '' }],
+      diff: { filesChanged: 1, additions: 1, deletions: 0 },
+      now: () => new Date('2026-11-22T00:00:00.000Z'),
       incident,
       diagnosis,
       category: 'code_bug',
