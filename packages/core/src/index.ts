@@ -1,3 +1,14 @@
+export {
+  GENESIS_ANCHOR,
+  GENESIS_HASH,
+  hashEntry,
+  makeAuditEntry,
+  type AuditDraft,
+  type AuditInput,
+  type ChainAnchor,
+  type VerifyResult,
+  verifyEntries,
+} from './audit-chain';
 export { err, GraveshiftError, ok, TransitionError, TriageError } from './errors';
 export type { Result, TransitionErrorCode, TriageErrorCode } from './errors';
 export {
@@ -16,23 +27,40 @@ export type { RuntimeEvent, RuntimeSource, ServiceHealth, ServiceInfo } from './
 export {
   ActionProposalSchema,
   ApprovalSchema,
+  AuditEntriesSchema,
   AuditEntrySchema,
+  ChainResultSchema,
+  CounterSnapshotSchema,
+  CounterSourceSchema,
   DiagnosisSchema,
   EventEnvelopeSchema,
   INCIDENT_STATES,
   IncidentSchema,
   IncidentStateSchema,
+  IncidentViewsSchema,
+  IncidentViewSchema,
+  LimitCountersSchema,
+  LogLinesSchema,
+  MetricValueSchema,
   SIGNAL_KINDS,
+  ServiceViewSchema,
+  ServiceViewsSchema,
   SignalSchema,
 } from './schemas';
 export type {
   ActionProposal,
   Approval,
   AuditEntry,
+  ChainResult,
+  CounterSnapshot,
+  CounterSource,
   Diagnosis,
   EventEnvelope,
   Incident,
   IncidentState,
+  IncidentView,
+  LimitCounters,
+  ServiceView,
   Signal,
 } from './schemas';
 export { BREAKER_WINDOW_MS, shouldTripBreaker, TRANSITIONS, transition } from './state';

@@ -1,5 +1,7 @@
 // Test-only boot config. No real secret is used anywhere in the suite.
 process.env.GRAVESHIFT_OAUTH_JWT_SECRET ??= 'graveshift-test-only-secret-32chars';
+// Test-only placeholder for the deployment-local daemon read token. No real secret.
+process.env.GRAVESHIFT_DAEMON_READ_TOKEN ??= 'test-only-daemon-read-token';
 process.env.GRAVESHIFT_OAUTH_CLIENTS ??= JSON.stringify({
   'client-1': {
     secret: 'test-client-secret-123456',

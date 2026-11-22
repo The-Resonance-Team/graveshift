@@ -105,3 +105,65 @@ export const AuditEntrySchema = z.object({
   hash: z.string().regex(/^[0-9a-f]{64}$/),
 });
 export type AuditEntry = z.infer<typeof AuditEntrySchema>;
+
+// Wire shapes shared by the daemon read API and the MCP client. One schema per shape.
+export const LimitCountersSchema = z
+  .object({
+    openPrsLastHour: z.number().finite().nonnegative(),
+    actionsLast10Min: z.number().finite().nonnegative(),
+    diagnosisLoops: z.number().finite().nonnegative(),
+    llmSpentTodayUsd: z.number().finite().nonnegative(),
+  })
+  .strict();
+export type LimitCounters = z.infer<typeof LimitCountersSchema>;
+
+export const CounterSourceSchema = z.enum(['wired', 'not_wired']);
+export type CounterSource = z.infer<typeof CounterSourceSchema>;
+
+export const CounterSnapshotSchema = z
+  .object({ source: CounterSourceSchema, counters: LimitCountersSchema })
+  .strict();
+export type CounterSnapshot = z.infer<typeof CounterSnapshotSchema>;
+
+export const ServiceViewSchema = z
+  .object({ name: z.string().min(1), status: z.string().min(1) })
+  .strict();
+export type ServiceView = z.infer<typeof ServiceViewSchema>;
+
+export const IncidentViewSchema = z
+  .object({
+    incident: z
+      .object({
+        id,
+        service: id,
+        state: z.string().min(1),
+        diagnosis: z.object({ confidence: z.number() }).catchall(z.unknown()).optional(),
+      })
+      .catchall(z.unknown()),
+    severity: z.string().min(1).optional(),
+    category: z.string().min(1).optional(),
+    detections: z.array(z.object({ rule: z.string().min(1) })).optional(),
+    pr: z.object({ url: z.string(), number: z.number(), branch: z.string() }).optional(),
+    timeline: z.array(z.object({ at: timestamp, type: z.string(), detail: z.string() })).optional(),
+  })
+  .loose();
+export type IncidentView = z.infer<typeof IncidentViewSchema>;
+
+export const ChainResultSchema = z.discriminatedUnion('ok', [
+  z.object({ ok: z.literal(true), length: z.number().int().nonnegative() }).strict(),
+  z
+    .object({
+      ok: z.literal(false),
+      brokenAtSeq: z.number().int().min(1),
+      reason: z.string().min(1),
+    })
+    .strict(),
+]);
+export type ChainResult = z.infer<typeof ChainResultSchema>;
+
+// Read-response schemas used at the daemon-to-API boundary. One shape per route.
+export const ServiceViewsSchema = z.array(ServiceViewSchema);
+export const IncidentViewsSchema = z.array(IncidentViewSchema);
+export const AuditEntriesSchema = z.array(AuditEntrySchema);
+export const LogLinesSchema = z.array(z.string());
+export const MetricValueSchema = z.object({ value: z.number().nullable() }).strict();

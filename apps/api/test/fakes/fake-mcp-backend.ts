@@ -1,6 +1,13 @@
-import type { AuditEntry } from '@graveshift/core';
+import type {
+  AuditEntry,
+  ChainResult,
+  CounterSnapshot,
+  IncidentView,
+  LimitCounters,
+  ServiceView,
+} from '@graveshift/core';
 
-import type { IncidentView, McpBackend } from '../../src/mcp/mcp.types';
+import type { McpBackend } from '../../src/mcp/mcp.types';
 
 export const SECRET = 'AKIAIOSFODNN7EXAMPLE';
 
@@ -27,8 +34,17 @@ export class FakeMcpBackend implements McpBackend {
     throw new Error('propose_fix must never execute an action');
   };
 
-  listServices(): Promise<unknown[]> {
-    return Promise.resolve([{ name: 'api' }]);
+  constructor(
+    private readonly counters: LimitCounters = {
+      openPrsLastHour: 0,
+      actionsLast10Min: 0,
+      diagnosisLoops: 0,
+      llmSpentTodayUsd: 0,
+    },
+  ) {}
+
+  listServices(): Promise<ServiceView[]> {
+    return Promise.resolve([{ name: 'api', status: 'healthy' }]);
   }
 
   listIncidents(): Promise<IncidentView[]> {
@@ -43,7 +59,7 @@ export class FakeMcpBackend implements McpBackend {
     return Promise.resolve([]);
   }
 
-  verifyChain(): Promise<unknown> {
+  verifyChain(): Promise<ChainResult> {
     return Promise.resolve({ ok: true, length: 0 });
   }
 
@@ -53,5 +69,9 @@ export class FakeMcpBackend implements McpBackend {
 
   queryMetric(_promql: string): Promise<number | null> {
     return Promise.resolve(1);
+  }
+
+  getCounters(): Promise<CounterSnapshot> {
+    return Promise.resolve({ source: 'wired', counters: this.counters });
   }
 }

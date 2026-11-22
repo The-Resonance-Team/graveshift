@@ -1,9 +1,14 @@
-import { AuditEntrySchema } from '@graveshift/core';
+import {
+  AuditEntrySchema,
+  makeAuditEntry,
+  type AuditInput,
+  type VerifyResult,
+  verifyEntries,
+} from '@graveshift/core';
 import { Injectable } from '@nestjs/common';
 import { Prisma, type AuditEntry as PrismaAuditEntry } from '@prisma/client';
 
 import { PrismaService } from '../../infra/prisma.service';
-import { makeAuditEntry, type AuditInput, type VerifyResult, verifyEntries } from '../chain';
 
 type AuditTransaction = Prisma.TransactionClient;
 

@@ -1,6 +1,16 @@
-import { type AuditEntry, AuditEntrySchema } from '@graveshift/core';
+import { createHash } from 'node:crypto';
+
+import { type AuditEntry, type ChainResult, AuditEntrySchema } from './schemas';
 
 export const GENESIS_HASH = '0'.repeat(64);
+
+/** Where a retained chain window starts. The head may be evicted after MAX_ENTRIES. */
+export interface ChainAnchor {
+  readonly seq: number;
+  readonly prevHash: string;
+}
+
+export const GENESIS_ANCHOR: ChainAnchor = { seq: 1, prevHash: GENESIS_HASH };
 
 export type AuditDraft = Pick<AuditEntry, 'seq' | 'at' | 'actor' | 'type' | 'payload'> &
   Pick<Partial<AuditEntry>, 'incidentId'>;
@@ -8,10 +18,10 @@ export type AuditDraft = Pick<AuditEntry, 'seq' | 'at' | 'actor' | 'type' | 'pay
 export type AuditInput = Pick<AuditEntry, 'actor' | 'type' | 'payload'> &
   Pick<Partial<AuditEntry>, 'incidentId'>;
 
-export type VerifyResult =
-  | { ok: true; length: number }
-  | { ok: false; brokenAtSeq: number; reason: string };
+/** One result shape for the chain helper and the daemon read route. */
+export type VerifyResult = ChainResult;
 
+/** One canonical byte string for every audit entry. The API and the daemon both use it. */
 function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
   if (value !== null && typeof value === 'object') {
@@ -31,7 +41,7 @@ export function hashEntry(draft: AuditDraft, prevHash: string): string {
     draft.payload,
     prevHash,
   ]);
-  return new Bun.CryptoHasher('sha256').update(body).digest('hex');
+  return createHash('sha256').update(body).digest('hex');
 }
 
 export function makeAuditEntry(
@@ -51,10 +61,13 @@ export function makeAuditEntry(
   return AuditEntrySchema.parse({ ...draft, prevHash, hash: hashEntry(draft, prevHash) });
 }
 
-export function verifyEntries(entries: readonly AuditEntry[]): VerifyResult {
-  let prevHash = GENESIS_HASH;
+export function verifyEntries(
+  entries: readonly AuditEntry[],
+  anchor: ChainAnchor = GENESIS_ANCHOR,
+): VerifyResult {
+  let prevHash = anchor.prevHash;
   for (const [index, entry] of entries.entries()) {
-    const expectedSeq = index + 1;
+    const expectedSeq = anchor.seq + index;
     if (entry.seq !== expectedSeq) {
       return { ok: false, brokenAtSeq: expectedSeq, reason: 'sequence gap or reorder' };
     }

@@ -1,6 +1,12 @@
 import { describe, expect, test } from 'bun:test';
 
-import { makeAuditEntry, verifyEntries } from './chain';
+import { makeAuditEntry, verifyEntries } from './audit-chain';
+
+const draft = (at: string) => ({
+  actor: 'wraith',
+  type: 'incident.opened',
+  payload: { at },
+});
 
 describe('audit chain', () => {
   test('hashes a stable ordered chain and rejects edits, removals and reordering', () => {
@@ -51,5 +57,15 @@ describe('audit chain', () => {
     expect(
       verifyEntries([{ ...persisted, payload: { ...persisted.payload, changed: true } }]).ok,
     ).toBe(false);
+  });
+
+  test('verifies a retained window against an evicted-head anchor', () => {
+    const first = makeAuditEntry(1, '2026-11-22T00:00:00.000Z', draft('one'), '0'.repeat(64));
+    const second = makeAuditEntry(2, '2026-11-22T00:00:01.000Z', draft('two'), first.hash);
+    expect(verifyEntries([second], { seq: 2, prevHash: first.hash })).toEqual({
+      ok: true,
+      length: 1,
+    });
+    expect(verifyEntries([second])).toMatchObject({ ok: false, reason: 'sequence gap or reorder' });
   });
 });
