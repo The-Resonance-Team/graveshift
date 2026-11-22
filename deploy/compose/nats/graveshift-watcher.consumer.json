@@ -1,0 +1,9 @@
+{
+  "durable_name": "graveshift-watcher",
+  "filter_subject": "graveshift.*.detection.>",
+  "ack_policy": "explicit",
+  "ack_wait": 30000000000,
+  "max_deliver": 5,
+  "backoff": [1000000000, 5000000000, 30000000000],
+  "deliver_policy": "all"
+}

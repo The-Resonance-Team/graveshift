@@ -1,6 +1,32 @@
 import type { EventEnvelope } from '@graveshift/core';
 
+import { publishSubject } from './subject';
+
 export type { EventEnvelope } from '@graveshift/core';
+
+export {
+  DETECTION_FILTER_SUBJECT,
+  EVENTS_SUBJECT_FILTER,
+  SUBJECT_PREFIX,
+  deadLetterSubject,
+  laneFor,
+  publishSubject,
+  safeSubjectToken,
+  type Lane,
+} from './subject';
+
+export {
+  EVENTS_DUPLICATE_WINDOW_SECONDS,
+  EVENTS_MAX_AGE_DAYS,
+  EVENTS_MAX_BYTES,
+  EVENTS_MAX_MSG_SIZE,
+  EVENTS_MAX_MSGS,
+  EVENTS_STREAM_NAME,
+  GRAVESHIFT_EVENTS_STREAM,
+  DETECTION_CONSUMER,
+  createEnvelopeDeduplicator,
+  type EnvelopeDeduplicator,
+} from './streams';
 
 export interface Publisher {
   publish(envelope: EventEnvelope): Promise<void>;
@@ -15,16 +41,6 @@ export interface PublishTarget {
 }
 
 export { createHttpPublisher, type HttpPublisherOptions } from './http';
-
-export type Lane = 'telemetry' | 'detection';
-
-export function laneFor(severity: EventEnvelope['severity']): Lane {
-  return severity === 'info' ? 'telemetry' : 'detection';
-}
-
-export function publishSubject(envelope: EventEnvelope): string {
-  return `graveshift.${envelope.tenantId}.${laneFor(envelope.severity)}.${envelope.type}`;
-}
 
 /** Publish each envelope to JetStream with its id as the deduplication key. */
 export function createNatsPublisher(js: PublishTarget): Publisher {
