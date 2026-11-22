@@ -15,7 +15,9 @@ import {
   type CredentialVerifier,
 } from '../../src/auth/auth.types';
 import { BOOT_CONFIG } from '../../src/config/boot.config';
-import { TEST_CONFIG, testBootConfig } from './auth-test-config';
+import { DEFAULT_DAEMON_GRANT, IDENTITY_REPO } from '../../src/identity/identity.types';
+import { FakeIdentityRepo } from '../../src/identity/testing/fake-identity.repo';
+import { TEST_CONFIG, testBootConfig, testOAuthClients } from './auth-test-config';
 import { FakeCredentialRepo } from './fake-credential-repo';
 
 export { TEST_CONFIG };
@@ -24,7 +26,20 @@ export interface AuthTestApp {
   app: INestApplication;
   jwt: JwtService;
   repo: FakeCredentialRepo;
+  identity: FakeIdentityRepo;
   publisher: InMemoryPublisher;
+}
+
+/** Seeds the in-memory OAuth client registry and the stored deployment grant. */
+export function testIdentityRepo(): FakeIdentityRepo {
+  const identity = new FakeIdentityRepo();
+  for (const client of testOAuthClients()) void identity.clients.set(client.clientId, client);
+  void identity.grants.set(DEFAULT_DAEMON_GRANT, {
+    id: 'test-grant',
+    name: DEFAULT_DAEMON_GRANT,
+    projectIds: ['12345', '12346'],
+  });
+  return identity;
 }
 
 export async function buildAuthApp(
@@ -33,6 +48,7 @@ export async function buildAuthApp(
   sentryVerifier?: CredentialVerifier,
 ): Promise<AuthTestApp> {
   const repo = new FakeCredentialRepo();
+  const identity = testIdentityRepo();
   const publisher = publisherOverride ?? createInMemoryPublisher();
   const config = { ...TEST_CONFIG, ...overrides };
   const boot = { ...(await testBootConfig()), auth: config };
@@ -43,6 +59,8 @@ export async function buildAuthApp(
     .useValue(config)
     .overrideProvider(CREDENTIAL_REPO)
     .useValue(repo)
+    .overrideProvider(IDENTITY_REPO)
+    .useValue(identity)
     .overrideProvider(EVENT_PUBLISHER)
     .useValue(publisher);
   if (sentryVerifier) {
@@ -52,7 +70,7 @@ export async function buildAuthApp(
   const app = moduleRef.createNestApplication();
   configureApp(app);
   await app.init();
-  return { app, jwt: moduleRef.get(JwtService), repo, publisher };
+  return { app, jwt: moduleRef.get(JwtService), repo, identity, publisher };
 }
 
 export function accessToken(

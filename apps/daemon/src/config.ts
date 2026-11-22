@@ -55,7 +55,6 @@ const InternalTokenSchema = z
 
 export const DaemonEnvSchema = z
   .object({
-    GRAVESHIFT_PROJECT_ID: z.string().regex(/^[A-Za-z0-9_-]+$/),
     GRAVESHIFT_API_INTERNAL_TOKEN: InternalTokenSchema,
     GRAVESHIFT_DAEMON_INTERNAL_TOKEN: InternalTokenSchema,
     GRAVESHIFT_API_URL: InternalOriginSchema.default('http://127.0.0.1:3000'),

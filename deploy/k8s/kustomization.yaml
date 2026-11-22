@@ -6,3 +6,6 @@ resources:
   - networkpolicy.yaml
   # - deployment.yaml   # TODO (real stack): graveshift Deployment
   # - actuator.yaml     # TODO (real stack): graveshift-actuator Deployment
+  # A future actuator manifest needs a persistent volume for the admission
+  # store (single-use approval tokens must survive restart). RBAC changes need
+  # the k8s-deploy spec. Do not enable this manifest in this PR.

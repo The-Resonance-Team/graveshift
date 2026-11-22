@@ -19,6 +19,34 @@ export interface paths {
   "/api/config/export": {
     get: operations["ConfigController_exportConfig"];
   };
+  "/api/register": {
+    post: operations["AccountController_register"];
+  };
+  "/api/auth/login": {
+    post: operations["AccountController_login"];
+  };
+  "/api/account/profile": {
+    get: operations["AccountController_profile"];
+  };
+  "/api/account/change-password": {
+    post: operations["AccountController_changePassword"];
+  };
+  "/api/onboarding/org": {
+    post: operations["AccountController_onboarding"];
+  };
+  "/api/organizations": {
+    post: operations["OrganizationsController_create"];
+  };
+  "/api/organizations/{orgId}/projects": {
+    get: operations["OrganizationsController_projects"];
+    post: operations["OrganizationsController_createProject"];
+  };
+  "/api/organizations/{orgId}/members": {
+    post: operations["OrganizationsController_addMember"];
+  };
+  "/api/organizations/{orgId}/oauth-clients": {
+    post: operations["OrganizationsController_createOAuthClient"];
+  };
   "/api/credentials": {
     get: operations["CredentialsController_list"];
     post: operations["CredentialsController_create"];
@@ -78,6 +106,14 @@ export interface components {
       clientRules: components["schemas"]["RuleDto"][];
       confirmOverrides?: boolean;
     };
+    RegisterDto: Record<string, never>;
+    LoginDto: Record<string, never>;
+    ChangePasswordDto: Record<string, never>;
+    OnboardingDto: Record<string, never>;
+    CreateOrganizationDto: Record<string, never>;
+    CreateProjectDto: Record<string, never>;
+    AddMemberDto: Record<string, never>;
+    CreateOAuthClientDto: Record<string, never>;
     CreateCredentialDto: {
       /** @enum {string} */
       kind: "mcp" | "plugin";
@@ -333,6 +369,197 @@ export interface operations {
       /** @description The client exceeded the rate limit. */
       429: {
         content: never;
+      };
+    };
+  };
+  AccountController_register: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RegisterDto"];
+      };
+    };
+    responses: {
+      /** @description A registered Account with no Organization. */
+      200: {
+        content: {
+          "application/json": {
+            id: string;
+            email: string;
+            mustChangePassword: boolean;
+            organizations: ({
+                orgId: string;
+                /** @enum {string} */
+                role: "owner" | "member";
+              })[];
+          };
+        };
+      };
+    };
+  };
+  AccountController_login: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["LoginDto"];
+      };
+    };
+    responses: {
+      /** @description An Account session token. */
+      200: {
+        content: {
+          "application/json": {
+            access_token: string;
+          };
+        };
+      };
+      /** @description The email or password is not valid. */
+      401: {
+        content: never;
+      };
+    };
+  };
+  AccountController_profile: {
+    responses: {
+      /** @description The caller Account profile. */
+      200: {
+        content: {
+          "application/json": {
+            id: string;
+            email: string;
+            mustChangePassword: boolean;
+            organizations: ({
+                orgId: string;
+                /** @enum {string} */
+                role: "owner" | "member";
+              })[];
+          };
+        };
+      };
+    };
+  };
+  AccountController_changePassword: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ChangePasswordDto"];
+      };
+    };
+    responses: {
+      200: {
+        content: never;
+      };
+    };
+  };
+  AccountController_onboarding: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["OnboardingDto"];
+      };
+    };
+    responses: {
+      /** @description The new Organization and owner Membership. */
+      200: {
+        content: {
+          "application/json": {
+            id: string;
+            email: string;
+            mustChangePassword: boolean;
+            organizations: ({
+                orgId: string;
+                /** @enum {string} */
+                role: "owner" | "member";
+              })[];
+          };
+        };
+      };
+    };
+  };
+  OrganizationsController_create: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateOrganizationDto"];
+      };
+    };
+    responses: {
+      /** @description A new Organization owned by the caller. */
+      200: {
+        content: {
+          "application/json": {
+            id: string;
+            name: string;
+            slug: string;
+            /** Format: date-time */
+            createdAt: string;
+          };
+        };
+      };
+    };
+  };
+  OrganizationsController_projects: {
+    responses: {
+      /** @description The Projects in one Organization. */
+      200: {
+        content: {
+          "application/json": {
+              projectId: string;
+              orgId: string;
+              name: string;
+              slug: string;
+              /** Format: date-time */
+              createdAt: string;
+            }[];
+        };
+      };
+    };
+  };
+  OrganizationsController_createProject: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateProjectDto"];
+      };
+    };
+    responses: {
+      /** @description A new Project with an assigned numeric id. */
+      200: {
+        content: {
+          "application/json": {
+            projectId: string;
+            orgId: string;
+            name: string;
+            slug: string;
+            /** Format: date-time */
+            createdAt: string;
+          };
+        };
+      };
+    };
+  };
+  OrganizationsController_addMember: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AddMemberDto"];
+      };
+    };
+    responses: {
+      200: {
+        content: never;
+      };
+    };
+  };
+  OrganizationsController_createOAuthClient: {
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateOAuthClientDto"];
+      };
+    };
+    responses: {
+      /** @description A new OAuth client bound to one Project. */
+      200: {
+        content: {
+          "application/json": {
+            clientId: string;
+            clientSecret: string;
+            projectId: string;
+          };
+        };
       };
     };
   };

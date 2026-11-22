@@ -1,5 +1,7 @@
 import { UnauthorizedException } from '@nestjs/common';
 
+import type { IdentityRepo } from '../identity/identity.types';
+import { expandScopes } from './scopes';
 import type { AuthConfig, Principal } from './auth.types';
 
 export interface OAuthPayload {
@@ -11,10 +13,13 @@ export interface OAuthPayload {
   exp?: number;
 }
 
-// One bearer check shared by every OAuth client-credentials strategy: the signature is
-// verified by passport, and the project plus the scope grant come from the boot
-// registry, never from token claims. A route adds its own scope requirement on top.
-export function verifyOAuthPrincipal(payload: OAuthPayload, config: AuthConfig): Principal {
+// The signature is verified by passport. The numeric project and the scope grant
+// come from the stored OAuth client, never from token claims or a boot value.
+export async function verifyOAuthPrincipal(
+  payload: OAuthPayload,
+  config: AuthConfig,
+  identity: IdentityRepo,
+): Promise<Principal> {
   const now = Math.floor(Date.now() / 1000);
   if (
     !payload?.sub ||
@@ -27,10 +32,16 @@ export function verifyOAuthPrincipal(payload: OAuthPayload, config: AuthConfig):
   ) {
     throw new UnauthorizedException();
   }
-  const entry = config.oauthClients[payload.sub];
-  if (!entry || entry.projectId !== payload.projectId) throw new UnauthorizedException();
-  if (!payload.scope.every((scope) => entry.scopes.includes(scope))) {
+  if (!/^\d{1,20}$/.test(payload.projectId)) throw new UnauthorizedException();
+  const client = await identity.findOAuthClient(payload.sub);
+  if (client === undefined || client.projectId !== payload.projectId) {
     throw new UnauthorizedException();
   }
-  return { clientId: payload.sub, projectId: payload.projectId, scopes: payload.scope };
+  const granted = new Set(expandScopes(client.scopes));
+  if (!payload.scope.every((scope) => granted.has(scope))) throw new UnauthorizedException();
+  return {
+    clientId: payload.sub,
+    projectId: payload.projectId,
+    scopes: expandScopes(payload.scope),
+  };
 }

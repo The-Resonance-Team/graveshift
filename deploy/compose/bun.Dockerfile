@@ -7,7 +7,9 @@ COPY package.json bun.lock ./
 COPY apps ./apps
 COPY packages ./packages
 RUN bun install --frozen-lockfile --production
-RUN mkdir -p /data && chown bun:bun /data
+# Create and own the actuator state directory in the image. Docker copies this
+# ownership into a new named volume, so the runtime user can write the store.
+RUN mkdir -p /data/graveshift-actuator && chown -R bun:bun /data
 WORKDIR /app/${APP_PATH}
 USER bun
 CMD ["bun", "src/index.ts"]

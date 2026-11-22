@@ -1,14 +1,10 @@
 import { SharedPolicyContextSchema } from '@graveshift/core/policy-context';
-import {
-  ForbiddenException,
-  Inject,
-  Injectable,
-  ServiceUnavailableException,
-} from '@nestjs/common';
+import { Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
 
 import { AuditRepo } from '../audit/audit.repo';
 import { BOOT_CONFIG, type RootBootConfig } from '../config/boot.config';
 import { HauntingRepo } from '../hauntings/haunting.repo';
+import { ProjectGrant } from './project-grant';
 import { WorkItemRepo } from '../work-items/work-item.repo';
 import type { PolicyContextDto } from './policy-context.dto';
 
@@ -19,10 +15,11 @@ export class PolicyContextService {
     private readonly hauntings: HauntingRepo,
     private readonly workItems: WorkItemRepo,
     private readonly audit: AuditRepo,
+    private readonly grant: ProjectGrant,
   ) {}
 
   async resolve(input: PolicyContextDto) {
-    if (input.projectId !== this.config.projectId) throw new ForbiddenException();
+    await this.grant.assert(input.projectId);
     const view = input.incidentId
       ? await this.hauntings.get(input.projectId, input.incidentId)
       : input.diagnosisRef

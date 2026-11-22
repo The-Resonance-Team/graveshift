@@ -3,6 +3,8 @@ import { HttpStatus, ValidationPipe } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 
+import { ProjectGrant } from '../../internal/project-grant';
+import { testProjectGrant } from '../../internal/testing/project-grant.fixture';
 import { InternalGuard } from '../../internal/internal.guard';
 import { InternalAuditController } from '../audit.controller';
 import { AuditRepo } from '../audit.repo';
@@ -15,12 +17,12 @@ export async function createAuditTestApp(repo: Pick<AuditRepo, 'append'>) {
     controllers: [InternalAuditController],
     providers: [
       InternalGuard,
+      { provide: ProjectGrant, useValue: testProjectGrant([AUDIT_TEST_PROJECT]) },
       { provide: AuditRepo, useValue: repo },
       {
         provide: ConfigService,
         useValue: new ConfigService({
           GRAVESHIFT_API_INTERNAL_TOKEN: AUDIT_TEST_TOKEN,
-          GRAVESHIFT_PROJECT_ID: AUDIT_TEST_PROJECT,
         }),
       },
     ],

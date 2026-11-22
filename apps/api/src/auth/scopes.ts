@@ -1,3 +1,44 @@
+// Simple scopes for the v3 identity model. Current scope strings stay accepted as
+// aliases, so clients from PR #113 and PR #120 keep the same effective grants.
+export const SIMPLE_SCOPES = [
+  'org:read',
+  'project:read',
+  'project:write',
+  'event:read',
+  'org:ci',
+] as const;
+
+export const SCOPE_ALIASES: Record<string, string> = {
+  'org:read': 'org:read',
+  'project:read': 'project:read',
+  'project:write': 'project:write',
+  'event:read': 'event:read',
+  'org:ci': 'org:ci',
+  'incidents:read': 'project:read',
+  'diagnoses:read': 'project:read',
+  'audit:read': 'org:read',
+  'logs:read': 'event:read',
+  'metrics:read': 'project:read',
+  'fix:propose': 'project:write',
+  'events:publish': 'event:read',
+  'config:export': 'config:export',
+  'tokens:manage': 'tokens:manage',
+};
+
+/** Adds the canonical form and every alias with the same meaning to a scope set. */
+export function expandScopes(scopes: readonly string[]): string[] {
+  const result = new Set<string>(scopes);
+  for (const scope of scopes) {
+    const canonical = SCOPE_ALIASES[scope];
+    if (canonical === undefined) continue;
+    result.add(canonical);
+    for (const [alias, target] of Object.entries(SCOPE_ALIASES)) {
+      if (target === canonical) result.add(alias);
+    }
+  }
+  return [...result];
+}
+
 // One scope catalog serves MCP tokens, plugin API keys and the one HTTP config endpoint.
 export const MCP_READ_SCOPES = [
   'incidents:read',
@@ -21,6 +62,15 @@ export const ALL_SCOPES = [...MCP_READ_SCOPES, ...PLUGIN_SCOPES, ...HTTP_CONFIG_
 // The scopes a credential of either kind can be issued with. The request DTO advertises
 // this list, not ALL_SCOPES: the HTTP-only config scopes are never issued as credentials.
 export const CREDENTIAL_ISSUABLE_SCOPES = [...MCP_READ_SCOPES, ...PLUGIN_SCOPES] as const;
+
+// Scopes a console-created OAuth client may hold. config:export and
+// tokens:manage stay out: they are boot-only grants for the one config route
+// and for management tokens, never granted by a public organization route.
+export const CLIENT_ISSUABLE_SCOPES = [...SIMPLE_SCOPES, ...CREDENTIAL_ISSUABLE_SCOPES] as const;
+
+export function isClientIssuableScope(scope: string): boolean {
+  return (CLIENT_ISSUABLE_SCOPES as readonly string[]).includes(scope);
+}
 
 // A client cannot grant these scopes, even when its own access token has them.
 export const FORBIDDEN_SCOPES = ['admin', 'tokens:manage'] as const;

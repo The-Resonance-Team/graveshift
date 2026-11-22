@@ -29,6 +29,13 @@ test('one admission ACK precedes the effect and one distinct terminal handoff fo
   expect(audits.map((draft) => draft.key)).toEqual(other.audits.map((draft) => draft.key));
 });
 
+test('a local audit sink reports pending instead of acknowledged', async () => {
+  const { actuator } = setup(T0, { durableAudit: false });
+  const result = await actuator.execute(signed());
+  expect(result.status).toBe('executed');
+  expect(result.auditStatus).toBe('pending');
+});
+
 test('audit failure before admission runs no effect and releases its token and capacity', async () => {
   let unavailable = true;
   const audits: core.AuditDraft[] = [];

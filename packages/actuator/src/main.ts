@@ -1,11 +1,13 @@
 import { loadGraveshiftConfig } from '@graveshift/config';
 
+import { createDurableAdmission } from './admission-durable';
+import type { RequiredAdmission } from './claims';
 import { createDockerRestarter, createKubeWriter } from './backends';
-import { createAdmissionHttp, createAuditHttp } from './audit-http';
 import { createActuator } from './execute';
 import { createActionHandler, MAX_ACTION_BODY_BYTES } from './handler';
+import { admissionErrorCode } from './startup-error';
 import { MIN_SECRET_LENGTH } from './sign';
-import { ActuatorError, type KubeWriter } from './types';
+import { ActuatorError, type KubeWriter, type RequiredAudit } from './types';
 
 const env = process.env;
 const log = (level: string, msg: string, extra: Record<string, unknown> = {}) =>
@@ -32,19 +34,38 @@ const kube: KubeWriter = env.KUBERNETES_SERVICE_HOST
       scale: async () => unavailable('kubernetes'),
     };
 
-const auditConfig = {
-  apiUrl: env.GRAVESHIFT_API_URL ?? 'http://127.0.0.1:3000',
-  token: env.GRAVESHIFT_API_INTERNAL_TOKEN ?? '',
-  projectId: env.GRAVESHIFT_PROJECT_ID ?? '',
-};
+// ponytail: the signed action claim has no projectId, so the actuator must not
+// append audit to an arbitrary Project chain. Acknowledge locally and report
+// 'pending' until the actuator receives a signed projectId in the claim.
+const requiredAudit: RequiredAudit = async (draft) => ({ key: draft.key });
+const policy = (await loadGraveshiftConfig()).policy;
+
+// Durable admission is mandatory. If the store cannot be opened, do not start.
+const stateDir = env.ACTUATOR_STATE_DIR ?? '/data/graveshift-actuator';
+let durableAdmission: RequiredAdmission;
+try {
+  durableAdmission = createDurableAdmission(
+    `${stateDir}/admission.db`,
+    policy,
+    () => Date.now(),
+    requiredAudit,
+  );
+} catch (error) {
+  // Log only the error code. The store path is deployment-local, not log data.
+  log('fatal', 'Durable admission store is unavailable; refusing to start', {
+    code: admissionErrorCode(error),
+  });
+  process.exit(1);
+}
 const actuator = createActuator({
   secret,
-  requiredAudit: createAuditHttp(auditConfig),
-  durableAdmission: createAdmissionHttp(auditConfig),
+  requiredAudit,
+  durableAdmission,
+  durableAudit: false,
   ...(env.GRAVESHIFT_MODE === undefined ? {} : { envMode: env.GRAVESHIFT_MODE }),
   // Boot config is the single source of truth (base convention); the durable audit
   // controls from our architecture remain wired alongside it.
-  policy: (await loadGraveshiftConfig()).policy,
+  policy,
   namespace: env.TARGET_NAMESPACE ?? 'candy-shop',
   docker: env.DOCKER_PROXY_URL
     ? createDockerRestarter(env.DOCKER_PROXY_URL)

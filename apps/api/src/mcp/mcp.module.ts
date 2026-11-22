@@ -1,4 +1,4 @@
-import { Module, UseGuards } from '@nestjs/common';
+import { Global, Module, UseGuards } from '@nestjs/common';
 import { McpModule } from '@nestjs/mcp';
 import { ApiExcludeController } from '@nestjs/swagger';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
@@ -19,12 +19,19 @@ import { McpPrompts } from './mcp.prompts';
 import { McpResources } from './mcp.resources';
 import { McpHttpScopeGuard } from './mcp-http-scope.guard';
 import { McpBearerGuard, McpTokenVerifierService } from './mcp-token.verifier';
+import { McpProjectContext } from './mcp-project-context';
 import { MCP_BACKEND, MCP_ENV_MODE, MCP_POLICY } from './mcp.types';
 import { McpTools } from './mcp.tools';
+
+/** The authenticated Project is shared by the feature module and the MCP module guards. */
+@Global()
+@Module({ providers: [McpProjectContext], exports: [McpProjectContext] })
+export class McpProjectContextModule {}
 
 /** The MCP primitives. Kept separate so tests can override the backend and policy. */
 @Module({
   imports: [
+    McpProjectContextModule,
     AuthModule,
     ThrottlerModule,
     AuditModule,

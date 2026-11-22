@@ -89,15 +89,30 @@ describe('CI workflows', () => {
     const ci = workflows.find((workflow) => workflow.name === 'ci.yml');
     expect(ci).toBeDefined();
     const blocks = jobBlocks(ci!.content);
-    const needsLine = blocks.get('verify')?.find((line) => /^\s+needs:\s*\[/.test(line));
-    expect(needsLine).toBeDefined();
+    const verifyLines = blocks.get('verify') ?? [];
+    const needsIndex = verifyLines.findIndex((line) => /^\s+needs:/.test(line));
+    expect(needsIndex).toBeGreaterThanOrEqual(0);
+    // A long dependency list is formatted across several lines. Read the whole
+    // needs block, not just its first line.
+    const needsBlock = verifyLines.slice(needsIndex).join('\n');
     const listed =
-      needsLine!
+      needsBlock
         .match(/\[([^\]]+)\]/)?.[1]
         ?.split(',')
-        .map((name) => name.trim()) ?? [];
+        .map((name) => name.trim())
+        .filter((name) => name.length > 0) ?? [];
     const expected = [...blocks.keys()].filter((name) => name !== 'verify');
     expect(listed.sort()).toEqual(expected.sort());
+  });
+
+  test('the database gate runs test:database without a Graveshift daemon', () => {
+    const ci = workflows.find((workflow) => workflow.name === 'ci.yml');
+    expect(ci).toBeDefined();
+    const job = jobBlocks(ci!.content).get('test-database');
+    expect(job).toBeDefined();
+    const body = job!.join('\n');
+    expect(body).toContain('bun run test:database');
+    expect(/graveshift[\w-]*daemon|apps\/daemon\/src\/main\.ts/i.test(body)).toBe(false);
   });
 
   test('every action ref is a full SHA with a version comment', () => {

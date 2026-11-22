@@ -2,17 +2,16 @@ import {
   Body,
   ConflictException,
   Controller,
-  ForbiddenException,
   HttpCode,
   HttpStatus,
   Post,
   ServiceUnavailableException,
   UseGuards,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import { ApiExcludeController } from '@nestjs/swagger';
 
 import { InternalGuard } from '../internal/internal.guard';
+import { ProjectGrant } from '../internal/project-grant';
 import { AuditBusy, AuditConflict } from './audit.errors';
 import { AuditRepo } from './audit.repo';
 import { AppendAuditDto } from './dto/append-audit.dto';
@@ -23,15 +22,13 @@ import { AppendAuditDto } from './dto/append-audit.dto';
 export class InternalAuditController {
   constructor(
     private readonly audit: AuditRepo,
-    private readonly config: ConfigService,
+    private readonly grant: ProjectGrant,
   ) {}
 
   @Post()
   @HttpCode(HttpStatus.OK)
   async append(@Body() input: AppendAuditDto): Promise<{ key: string }> {
-    if (input.projectId !== this.config.getOrThrow<string>('GRAVESHIFT_PROJECT_ID')) {
-      throw new ForbiddenException('Internal project does not match this API');
-    }
+    await this.grant.assert(input.projectId);
     try {
       await this.audit.append(input.projectId, input.draft);
     } catch (error) {

@@ -20,7 +20,7 @@ const gateway = {
   priceTableUsdPer1M: { 'recorded-model': { in: 1, out: 2 } },
 };
 const boot = {
-  projectId: caller.projectId,
+  projectIds: ['12345'],
   agents: [agent()],
   policy,
   gateway,
@@ -30,7 +30,6 @@ const boot = {
 describe('daemon private transport and config', () => {
   test('requires private auth and project settings and rejects public addresses', () => {
     const env = {
-      GRAVESHIFT_PROJECT_ID: caller.projectId,
       GRAVESHIFT_API_INTERNAL_TOKEN: apiToken,
       GRAVESHIFT_DAEMON_INTERNAL_TOKEN: daemonToken,
     };
@@ -71,19 +70,9 @@ describe('daemon private transport and config', () => {
     );
   });
 
-  test('boot consumes resolved canonical config and rejects secret fields or another project', async () => {
-    expect(
-      await loadBootConfig(
-        fakeApi(() => boot),
-        caller.projectId,
-      ),
-    ).toEqual(BootConfigSchema.parse(boot));
-    await expect(
-      loadBootConfig(
-        fakeApi(() => ({ ...boot, projectId: 'foreign' })),
-        caller.projectId,
-      ),
-    ).rejects.toThrow('another project');
+  test('boot consumes the stored project grant and rejects secret fields', async () => {
+    expect(await loadBootConfig(fakeApi(() => boot))).toEqual(BootConfigSchema.parse(boot));
+    expect(BootConfigSchema.safeParse({ ...boot, projectIds: ['project-1'] }).success).toBe(false);
     expect(BootConfigSchema.safeParse({ ...boot, apiKey: 'must-not-cross-http' }).success).toBe(
       false,
     );

@@ -7,6 +7,7 @@ import { openTestDatabase, resetDatabase, workItemData } from '../../../test/dat
 import { AuditRepo } from '../../audit/audit.repo';
 import type { PrismaService } from '../../infra/prisma.service';
 import { WorkItemRepo } from '../work-item.repo';
+import { testProjectGrant } from '../../internal/testing/project-grant.fixture';
 
 export const WORK_TEST_AGENTS = [false, true].map((autoFix) =>
   AgentConfigSchema.parse({
@@ -47,7 +48,7 @@ export function setupWorkDatabase() {
   beforeAll(async () => {
     db = await openTestDatabase();
     audit = new AuditRepo(db);
-    repo = new WorkItemRepo(db, audit, WORK_TEST_AGENTS, { projectId: 'project-1' });
+    repo = new WorkItemRepo(db, audit, WORK_TEST_AGENTS, testProjectGrant(['project-1']));
   });
   beforeEach(async () => {
     await resetDatabase(db);

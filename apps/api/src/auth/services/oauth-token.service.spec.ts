@@ -1,14 +1,29 @@
+import { createHash } from 'node:crypto';
 import { JwtService } from '@nestjs/jwt';
 import { describe, expect, test } from 'bun:test';
 
-import { TEST_CLIENT_SECRET, TEST_CONFIG } from '../../../test/fakes/auth-test-config';
+import {
+  TEST_CLIENT_SECRET,
+  TEST_CONFIG,
+  testOAuthClients,
+} from '../../../test/fakes/auth-test-config';
+import { FakeIdentityRepo } from '../../identity/testing/fake-identity.repo';
 import { OAUTH_TOKEN_TTL_SECONDS, OAuthTokenService } from './oauth-token.service';
+
+const digest = (value: string) => createHash('sha256').update(value).digest('hex');
+
+function setup() {
+  const identity = new FakeIdentityRepo();
+  for (const client of testOAuthClients()) void identity.clients.set(client.clientId, client);
+  const jwt = new JwtService();
+  return { identity, jwt, service: new OAuthTokenService(jwt, TEST_CONFIG, identity) };
+}
 
 describe('OAuthTokenService registry ownership', () => {
   test.each(['constructor', '__proto__', 'toString'])(
     'an inherited client name %s returns 401',
     async (clientId) => {
-      const service = new OAuthTokenService(new JwtService(), TEST_CONFIG);
+      const { service } = setup();
       await expect(service.exchange(clientId, TEST_CLIENT_SECRET)).rejects.toHaveProperty(
         'status',
         401,
@@ -16,14 +31,19 @@ describe('OAuthTokenService registry ownership', () => {
     },
   );
 
-  test('an explicit own registry entry may use a prototype property name', async () => {
-    const entry = { secret: TEST_CLIENT_SECRET, projectId: 'project-1', scopes: ['tokens:manage'] };
-    const jwt = new JwtService();
-    const config = {
-      ...TEST_CONFIG,
-      oauthClients: { ['constructor']: entry, ['__proto__']: entry },
-    };
-    const service = new OAuthTokenService(jwt, config);
+  test('a stored registry entry may use a prototype property name', async () => {
+    const { identity, jwt, service } = setup();
+    const projectId = '12345';
+    const scopes = ['tokens:manage'];
+    for (const clientId of ['constructor', '__proto__']) {
+      void identity.clients.set(clientId, {
+        clientId,
+        secretHash: digest(TEST_CLIENT_SECRET),
+        orgId: 'test-org',
+        projectId,
+        scopes,
+      });
+    }
     await Promise.all(
       ['constructor', '__proto__'].map(async (clientId) => {
         const issued = await service.exchange(clientId, TEST_CLIENT_SECRET);
@@ -34,14 +54,14 @@ describe('OAuthTokenService registry ownership', () => {
           iat: number;
           exp: number;
         }>(issued.access_token, {
-          secret: config.jwtSecret,
-          issuer: config.jwtIssuer,
-          audience: config.jwtAudience,
+          secret: TEST_CONFIG.jwtSecret,
+          issuer: TEST_CONFIG.jwtIssuer,
+          audience: TEST_CONFIG.jwtAudience,
           algorithms: ['HS256'],
         });
         expect(payload.sub).toBe(clientId);
-        expect(payload.projectId).toBe(entry.projectId);
-        expect(payload.scope).toEqual(entry.scopes);
+        expect(payload.projectId).toBe(projectId);
+        expect(payload.scope).toEqual(scopes);
         expect(payload.exp - payload.iat).toBe(OAUTH_TOKEN_TTL_SECONDS);
         expect(issued.expires_in).toBe(OAUTH_TOKEN_TTL_SECONDS);
       }),

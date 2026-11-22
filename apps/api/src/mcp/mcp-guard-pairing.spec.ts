@@ -61,7 +61,8 @@ describe('MCP guard pairing', () => {
     const http = new ExecutionContextHost([request, { setHeader() {} }]);
     http.setType('http');
 
-    expect(await new McpBearerGuard(credentials).canActivate(http)).toBe(true);
+    const projectContext = { enter: (_projectId: string) => {} } as never;
+    expect(await new McpBearerGuard(credentials, projectContext).canActivate(http)).toBe(true);
     expect(request.authInfo).toMatchObject({ scopes: ['incidents:read'], projectId: 'project-1' });
     expect(() => new McpScopeGuard().canActivate(mcpContext(request))).toThrow(ForbiddenException);
     expect(new McpScopeGuard().canActivate(mcpContext())).toBe(true);

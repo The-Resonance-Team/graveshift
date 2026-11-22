@@ -9,6 +9,7 @@ import type { AuthInfo } from '@modelcontextprotocol/server';
 
 import { CredentialService } from '../auth/services/credential.service';
 import type { VerifiedCredential } from '../auth/auth.types';
+import { McpProjectContext } from './mcp-project-context';
 
 function credentialAuthInfo(
   token: string,
@@ -39,7 +40,10 @@ export class McpTokenVerifierService implements McpTokenVerifier {
 /** Guards the HTTP endpoint with the same check; stdio has no authentication by design. */
 @Injectable()
 export class McpBearerGuard implements CanActivate {
-  constructor(private readonly credentials: CredentialService) {}
+  constructor(
+    private readonly credentials: CredentialService,
+    private readonly projectContext: McpProjectContext,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<{
@@ -53,6 +57,7 @@ export class McpBearerGuard implements CanActivate {
       const principal = await this.credentials.verify(token, 'mcp');
       request.mcpPrincipal = principal;
       request.authInfo = credentialAuthInfo(token, principal);
+      this.projectContext.enter(principal.projectId);
       return true;
     } catch {
       const response = context

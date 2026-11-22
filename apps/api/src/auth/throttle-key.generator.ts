@@ -1,8 +1,9 @@
 import { type ExecutionContext, Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 
+import { IDENTITY_REPO, type IdentityRepo } from '../identity/identity.types';
 import { CREDENTIAL_CONFIG, type AuthConfig, type VerifiedCredential } from './auth.types';
-import { MANAGEMENT_SCOPE } from './scopes';
+import { expandScopes, MANAGEMENT_SCOPE } from './scopes';
 import { sentryKeyCandidates } from './sentry-auth';
 import { CredentialService } from './services/credential.service';
 
@@ -34,6 +35,7 @@ export class ThrottleKeyGenerator {
     private readonly jwt: JwtService,
     private readonly credentials: CredentialService,
     @Inject(CREDENTIAL_CONFIG) private readonly config: AuthConfig,
+    @Inject(IDENTITY_REPO) private readonly identity: IdentityRepo,
   ) {}
 
   async track(request: ThrottleRequest): Promise<string> {
@@ -47,7 +49,7 @@ export class ThrottleKeyGenerator {
     if (!token) return anonymous;
 
     try {
-      return JSON.stringify(this.managementPrincipal(this.verifyJwt(token)));
+      return JSON.stringify(this.managementPrincipal(await this.verifyJwt(token)));
     } catch {
       // An issued credential is not a management JWT. Check it with the verifier.
     }
@@ -72,7 +74,7 @@ export class ThrottleKeyGenerator {
     return `${target}:${tracker}`;
   }
 
-  private verifyJwt(token: string): OAuthPayload {
+  private async verifyJwt(token: string): Promise<OAuthPayload> {
     const payload = this.jwt.verify<OAuthPayload>(token, {
       secret: this.config.jwtSecret,
       issuer: this.config.jwtIssuer,
@@ -93,12 +95,13 @@ export class ThrottleKeyGenerator {
     ) {
       throw new UnauthorizedException();
     }
-    const entry = this.config.oauthClients[payload.sub];
-    if (!entry || entry.projectId !== payload.projectId) throw new UnauthorizedException();
+    const client = await this.identity.findOAuthClient(payload.sub);
+    if (client === undefined || client.projectId !== payload.projectId) {
+      throw new UnauthorizedException();
+    }
     if (!payload.scope.includes(MANAGEMENT_SCOPE)) throw new UnauthorizedException();
-    if (
-      !payload.scope.every((scope) => typeof scope === 'string' && entry.scopes.includes(scope))
-    ) {
+    const granted = new Set(expandScopes(client.scopes));
+    if (!payload.scope.every((scope) => typeof scope === 'string' && granted.has(scope))) {
       throw new UnauthorizedException();
     }
     return payload;

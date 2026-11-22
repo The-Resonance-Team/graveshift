@@ -18,6 +18,7 @@ import {
   workCaller,
 } from './testing/work-db.fixture';
 import { WorkIngressService } from './work-ingress.service';
+import { testProjectGrant } from '../internal/testing/project-grant.fixture';
 
 const input = { projectId: 'project-1', eventId: 'event-1', incidentId: 'haunting-1' };
 
@@ -32,10 +33,12 @@ describe.skipIf(!dbTestEnabled)('verified Haunting to durable Work item ingress'
     await hauntings.upsert('project-1', 'recorded-event-1', view);
     const agent = WORK_TEST_AGENTS.find((entry) => entry.autoFix);
     if (!agent) throw new Error('Expected automatic Agent');
-    const service = new WorkIngressService(hauntings, fixture.repo, {
-      projectId: 'project-1',
-      agents: [{ ...agent, description: 'failure runtime restart-loop code bug' }],
-    });
+    const service = new WorkIngressService(
+      hauntings,
+      fixture.repo,
+      testProjectGrant(['project-1']),
+      { agents: [{ ...agent, description: 'failure runtime restart-loop code bug' }] },
+    );
     return { service, hauntings, view };
   }
 
@@ -228,10 +231,12 @@ describe.skipIf(!dbTestEnabled)('verified Haunting to durable Work item ingress'
 
   test('no matching Agent creates a Human assignment with auto-fix disabled', async () => {
     const { hauntings } = await ingress();
-    const service = new WorkIngressService(hauntings, fixture.repo, {
-      projectId: 'project-1',
-      agents: [],
-    });
+    const service = new WorkIngressService(
+      hauntings,
+      fixture.repo,
+      testProjectGrant(['project-1']),
+      { agents: [] },
+    );
     expect(await service.fromHaunting(input)).toMatchObject({
       created: true,
       item: {

@@ -31,6 +31,7 @@ import { z } from 'zod';
 import type { VerifyResult } from '../audit/audit.types';
 import { AuditRepo } from '../audit/audit.repo';
 import { DaemonUnavailableError } from './mcp.errors';
+import { McpProjectContext } from './mcp-project-context';
 import type { McpBackend } from './mcp.types';
 
 const missingIncident = (body: unknown): boolean =>
@@ -49,7 +50,7 @@ export class HttpMcpBackend {
   constructor(
     @InjectHttpClient('daemon-read') private readonly http: HttpClient,
     @Optional() private readonly audit?: AuditRepo,
-    @Optional() private readonly config?: ConfigService,
+    @Optional() private readonly projectContext?: McpProjectContext,
   ) {}
 
   private fail(error: unknown): never {
@@ -135,9 +136,9 @@ export class HttpMcpBackend {
 
   async auditDecision(draft: AuditDraft): Promise<Pick<AuditDraft, 'key'>> {
     // ponytail: the daemon read API has no append route; persist in the API-owned
-    // audit store when both the store and project config are available.
-    const projectId = this.config?.get<string>('GRAVESHIFT_PROJECT_ID');
-    if (this.audit && projectId) await this.audit.append(projectId, draft);
+    // audit store using the authenticated caller's Project. stdio has no token.
+    const projectId = this.projectContext?.projectId;
+    if (this.audit && projectId !== undefined) await this.audit.append(projectId, draft);
     return { key: draft.key };
   }
 }
@@ -157,10 +158,11 @@ export class DaemonMcpBackend implements McpBackend {
     @InjectHttpClient('daemon') private readonly http: HttpClient,
     private readonly audit: AuditRepo,
     private readonly config: ConfigService,
+    private readonly projectContext: McpProjectContext,
   ) {}
 
   private get projectId(): string {
-    return this.config.getOrThrow<string>('GRAVESHIFT_PROJECT_ID');
+    return this.projectContext.require();
   }
 
   private async read<Schema extends z.ZodType>(path: string, input: object, schema: Schema) {
@@ -196,11 +198,11 @@ export class DaemonMcpBackend implements McpBackend {
     }
   }
 
-  listAudit(opts: { afterSeq: number; limit: number }): Promise<AuditEntry[]> {
+  async listAudit(opts: { afterSeq: number; limit: number }): Promise<AuditEntry[]> {
     return this.audit.list(this.projectId, opts);
   }
 
-  verifyChain(): Promise<VerifyResult> {
+  async verifyChain(): Promise<VerifyResult> {
     return this.audit.verifyChain(this.projectId);
   }
 

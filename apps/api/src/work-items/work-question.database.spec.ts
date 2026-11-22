@@ -9,6 +9,7 @@ import {
   workCaller,
 } from './testing/work-db.fixture';
 import { WorkItemRepo } from './work-item.repo';
+import { testProjectGrant } from '../internal/testing/project-grant.fixture';
 
 describe.skipIf(!dbTestEnabled)('Postgres Work item routing progress', () => {
   const fixture = setupWorkDatabase();
@@ -18,9 +19,12 @@ describe.skipIf(!dbTestEnabled)('Postgres Work item routing progress', () => {
     expect(asked.failure).toBe('awaiting_answer');
     const fresh = await openTestDatabase();
     try {
-      const restarted = new WorkItemRepo(fresh, new AuditRepo(fresh), WORK_TEST_AGENTS, {
-        projectId: 'project-1',
-      });
+      const restarted = new WorkItemRepo(
+        fresh,
+        new AuditRepo(fresh),
+        WORK_TEST_AGENTS,
+        testProjectGrant(['project-1']),
+      );
       const snapshot = await restarted.read({ projectId: 'project-1', id: 'work-1' });
       const attempt = snapshot.activeAttempt;
       if (!attempt || !attempt.questionId) throw new Error('Expected saved question');
@@ -242,9 +246,12 @@ describe.skipIf(!dbTestEnabled)('Postgres Work item routing progress', () => {
     const snapshot = await fixture.read();
     const attempt = snapshot.activeAttempt;
     if (!attempt?.questionId) throw new Error('Expected a saved question');
-    const afterRestart = new WorkItemRepo(fixture.db, fixture.audit, [], {
-      projectId: 'project-1',
-    });
+    const afterRestart = new WorkItemRepo(
+      fixture.db,
+      fixture.audit,
+      [],
+      testProjectGrant(['project-1']),
+    );
     const result = await afterRestart.applyAnswer({
       caller: workCaller('answer-1'),
       id: 'work-1',

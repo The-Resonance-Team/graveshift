@@ -61,18 +61,20 @@ describe.skipIf(!dbTestEnabled)('Postgres FixAttempt schema foundation', () => {
 
   test('the Work item relation refuses a FixAttempt in another project', async () => {
     await expect(
-      db.fixAttempt.create({
-        data: {
-          id: 'foreign-attempt',
-          projectId: 'project-2',
-          commandId: 'command-1',
-          workItemId: 'work-1',
-          agent: 'fixture',
-          trigger: 'auto_fix',
-          state: 'claimed',
-          params: {},
-        },
-      }),
+      Promise.resolve(
+        db.fixAttempt.create({
+          data: {
+            id: 'foreign-attempt',
+            projectId: 'project-2',
+            commandId: 'command-1',
+            workItemId: 'work-1',
+            agent: 'fixture',
+            trigger: 'auto_fix',
+            state: 'claimed',
+            params: {},
+          },
+        }),
+      ),
     ).rejects.toHaveProperty('code', 'P2003');
     expect(await db.fixAttempt.count()).toBe(0);
   });

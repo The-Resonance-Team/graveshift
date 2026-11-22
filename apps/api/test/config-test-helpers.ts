@@ -11,7 +11,9 @@ import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.factory';
 import { CREDENTIAL_CONFIG, type AuthConfig } from '../src/auth/auth.types';
 import { AuditRepo, type AuditAppendInput } from '../src/audit/repo/audit.repo';
+import { IDENTITY_REPO } from '../src/identity/identity.types';
 import { TEST_CONFIG } from './fakes/auth-test-config';
+import { testIdentityRepo } from './fakes/auth-test-helpers';
 
 export const FAKE_CONFIG = new URL('./fixtures/config.fake.yaml', import.meta.url);
 export const FAKE_CONFIG_PATH = fileURLToPath(FAKE_CONFIG);
@@ -74,8 +76,7 @@ export class FakeAuditRepo {
 // boot error, and the boot-validation tests must catch the error instead.
 // CREDENTIAL_CONFIG is pinned so the auth config (and with it the ThrottlerGuard limit,
 // which ThrottlerModule.forRootAsync injects) is explicit per app, as in buildAuthApp.
-// The OAuth client registry still comes from the test boot env, so the config clients of
-// apps/api/test/setup.ts can exchange tokens.
+// The OAuth client registry is the in-memory store, so no env JSON is needed.
 export async function appFromConfigFile(
   path: string,
   audit: FakeAuditRepo = new FakeAuditRepo(),
@@ -84,9 +85,6 @@ export async function appFromConfigFile(
   withFakeEnv(path);
   const credentialConfig: AuthConfig = {
     ...TEST_CONFIG,
-    oauthClients: JSON.parse(
-      process.env.GRAVESHIFT_OAUTH_CLIENTS ?? '{}',
-    ) as AuthConfig['oauthClients'],
     ...credential,
   };
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
@@ -94,6 +92,8 @@ export async function appFromConfigFile(
     .useValue(audit)
     .overrideProvider(CREDENTIAL_CONFIG)
     .useValue(credentialConfig)
+    .overrideProvider(IDENTITY_REPO)
+    .useValue(testIdentityRepo())
     .compile();
   const app = configureApp(moduleRef.createNestApplication({ logger: false }));
   await app.init();

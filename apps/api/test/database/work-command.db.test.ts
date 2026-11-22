@@ -62,7 +62,7 @@ describe.skipIf(!dbTestEnabled)('Postgres WorkCommand foundation', () => {
   test('the command id is project-scoped and the Work item foreign key is project-safe', async () => {
     await db.workCommand.create({ data: command });
     await expect(
-      db.workCommand.create({ data: { ...command, projectId: 'project-2' } }),
+      Promise.resolve(db.workCommand.create({ data: { ...command, projectId: 'project-2' } })),
     ).rejects.toHaveProperty('code', 'P2003');
     await db.workItem.create({ data: workItemData('project-2', 'work-2') });
     const other = await db.workCommand.create({

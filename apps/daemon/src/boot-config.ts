@@ -8,7 +8,7 @@ import { gatewayAudit, type WriteAudit } from './audit';
 
 export const BootConfigSchema = z
   .object({
-    projectId: z.string().min(1),
+    projectIds: z.array(z.string().regex(/^\d{1,20}$/)),
     agents: z.array(AgentConfigSchema),
     policy: PolicySchema,
     gateway: GatewayConfigSchema,
@@ -18,11 +18,8 @@ export const BootConfigSchema = z
   .strict();
 export type BootConfig = z.infer<typeof BootConfigSchema>;
 
-export async function loadBootConfig(api: PrivateApi, projectId: string): Promise<BootConfig> {
-  const config = await api.get('/internal/config', BootConfigSchema);
-  if (config.projectId !== projectId)
-    throw new Error('Daemon configuration belongs to another project');
-  return config;
+export async function loadBootConfig(api: PrivateApi): Promise<BootConfig> {
+  return api.get('/internal/config', BootConfigSchema);
 }
 
 export function configuredGateway(

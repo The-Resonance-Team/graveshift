@@ -50,6 +50,83 @@ enum FixAttemptState {
   uncertain
 }
 
+enum MembershipRole {
+  owner
+  member
+}
+
+model Account {
+  id                 String       @id @default(uuid())
+  email              String       @unique
+  passwordHash       String       @map("password_hash")
+  mustChangePassword Boolean      @default(false) @map("must_change_password")
+  createdAt          DateTime     @default(now()) @map("created_at")
+  memberships        Membership[]
+
+  @@map("accounts")
+}
+
+model Organization {
+  id           String        @id @default(uuid())
+  name         String
+  slug         String        @unique
+  createdAt    DateTime      @default(now()) @map("created_at")
+  memberships  Membership[]
+  projects     Project[]
+  oauthClients OAuthClient[]
+
+  @@map("organizations")
+}
+
+model Membership {
+  accountId    String         @map("account_id")
+  orgId        String         @map("org_id")
+  role         MembershipRole
+  account      Account        @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  organization Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@id([accountId, orgId])
+  @@index([orgId])
+  @@map("memberships")
+}
+
+model Project {
+  projectId    String        @id @map("project_id")
+  orgId        String        @map("org_id")
+  name         String
+  slug         String
+  createdAt    DateTime      @default(now()) @map("created_at")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  oauthClients OAuthClient[]
+
+  @@unique([orgId, slug])
+  @@index([orgId])
+  @@map("projects")
+}
+
+model OAuthClient {
+  clientId     String       @id @map("client_id")
+  secretHash   String       @map("secret_hash")
+  orgId        String       @map("org_id")
+  projectId    String       @map("project_id")
+  scopes       String[]
+  createdAt    DateTime     @default(now()) @map("created_at")
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  project      Project      @relation(fields: [projectId], references: [projectId], onDelete: Cascade)
+
+  @@index([orgId])
+  @@map("oauth_clients")
+}
+
+model DaemonGrant {
+  id         String   @id @default(uuid())
+  name       String   @unique
+  projectIds String[] @map("project_ids")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@map("daemon_grants")
+}
+
 model WorkItem {
   id              String           @id
   projectId       String           @map("project_id")
