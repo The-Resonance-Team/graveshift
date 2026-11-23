@@ -270,7 +270,6 @@ model AuditEntry {
   actor        String
   type         String
   incidentId   String?  @map("incident_id")
-  deploymentId String?  @map("deployment_id")
   payload      Json
   prevHash     String   @map("prev_hash")
   hash         String

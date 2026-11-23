@@ -92,11 +92,8 @@ test('a changed base SHA after verification fails before the first GitHub write'
 test('publication never re-reads the branch HEAD after source verification', async () => {
   const { input, calls } = await fixture();
   const plan = planPublication(input);
-  input.client.getBaseSha = async () => {
-    throw new Error('the branch HEAD must not be read again');
-  };
   expect((await publishVerified({ ...input, plan })).number).toBe(42);
-  expect(calls.some((call) => call.method === 'getBaseSha')).toBe(false);
+  expect(calls.some((call) => call.method === 'getCommitTree')).toBe(false);
 });
 
 test('recovery returns the known draft without checking a newer base or writing again', async () => {
@@ -116,9 +113,6 @@ test('recovery returns the known draft without checking a newer base or writing 
       baseSha: plan.baseSha,
     });
     return reference;
-  };
-  input.client.getBaseSha = async () => {
-    throw new Error('must not recheck an already published draft');
   };
   expect(await recoverPublication(input.client, plan)).toEqual(reference);
   expect(await publishVerified({ ...input, plan })).toEqual(reference);

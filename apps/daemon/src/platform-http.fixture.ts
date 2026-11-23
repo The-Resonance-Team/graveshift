@@ -126,8 +126,8 @@ export async function platformHttp(db: PrismaService, agents: readonly AgentConf
         context.switchToHttp().getRequest<{ user: object }>().user = {
           projectId: caller.projectId,
           clientId: 'platform-person',
-          // The management surface plus the Fix trigger: this composition runs real Fix routes.
-          scopes: ['tokens:manage', 'fix:trigger'],
+          // The management surface, the read scope and the Fix trigger: this composition runs real routes.
+          scopes: ['tokens:manage', 'incidents:read', 'fix:trigger'],
         };
         return true;
       },

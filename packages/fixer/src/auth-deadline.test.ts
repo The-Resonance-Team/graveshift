@@ -150,7 +150,7 @@ test('a REST call waiting for credentials stops at the refresh deadline', async 
     { preconnect: fetch.preconnect },
   );
   const client = createRestClient(auth, repositoryFetch);
-  await expect(client.getBaseSha(repo.repo, 'main')).rejects.toMatchObject({
+  await expect(client.getCommitTree(repo.repo, 'base-sha')).rejects.toMatchObject({
     code: 'GITHUB_AUTH_FAILED',
     message: 'installation token request timed out',
   });

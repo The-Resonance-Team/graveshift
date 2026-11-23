@@ -1,7 +1,8 @@
 import type { Diagnosis, Incident } from '@graveshift/core';
 
 import type { GitHubClient } from './client';
-import type { RepoPolicy } from './types';
+import { publicationText, type OpenDraftPrInput, writeDraft } from './open-pr';
+import type { PrRef, RepoPolicy } from './types';
 
 export const TEST_BASE_SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 export const TEST_BLOB_SHA = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
@@ -55,7 +56,6 @@ export function fakeClient() {
       return result(...args);
     };
   const client: GitHubClient = {
-    getBaseSha: record('getBaseSha', () => TEST_BASE_SHA),
     getCommitTree: record('getCommitTree', () => 'base-tree'),
     getTree: record('getTree', () => []),
     readBlob: record('readBlob', () => ''),
@@ -71,6 +71,11 @@ export function fakeClient() {
     addLabels: record('addLabels', () => undefined),
   };
   return { client, calls };
+}
+
+/** Drives the production text and write steps with a base pinned by the test. */
+export async function publishPinned(input: OpenDraftPrInput): Promise<PrRef> {
+  return writeDraft(input, publicationText(input), TEST_BASE_SHA, 'base-tree');
 }
 
 export const file = (

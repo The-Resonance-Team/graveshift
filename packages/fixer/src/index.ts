@@ -4,7 +4,7 @@ export { assertBranchPrefix, BranchError, branchRef } from './branch';
 export type { GitHubClient, SourceEntry, TreeEntry } from './client';
 export { FixerFault, PublicationError } from './faults';
 export type { FixerFaultCode, PublicationPhase } from './faults';
-export { openDraftPr, PR_LABELS, RepoNotAllowedError } from './open-pr';
+export { PR_LABELS, RepoNotAllowedError } from './open-pr';
 export type { OpenDraftPrInput } from './open-pr';
 export { renderPrBody } from './pr-body';
 export { createRestClient, GitHubApiError } from './rest';

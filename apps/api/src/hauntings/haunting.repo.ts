@@ -25,18 +25,13 @@ export class HauntingRepo {
     if (view.detections.some((entry) => entry.projectId !== projectId))
       throw new HauntingConflict();
     return inAuditTransaction(this.prisma, async (tx) => {
-      const entry = await this.audit.appendInTx(
-        tx,
-        projectId,
-        {
-          key: `haunting:${eventId}`,
-          actor: 'daemon',
-          type: 'haunting.recorded',
-          incidentId: view.incident.id,
-          payload: { view, deploymentId },
-        },
-        deploymentId,
-      );
+      const entry = await this.audit.appendInTx(tx, projectId, {
+        key: `haunting:${eventId}`,
+        actor: 'daemon',
+        type: 'haunting.recorded',
+        incidentId: view.incident.id,
+        payload: { view, deploymentId },
+      });
       const where = { projectId_id: { projectId, id: view.incident.id } };
       const row = await tx.haunting.findUnique({ where, select: HAUNTING_SELECT });
       const prior = row ? toRecordedHaunting(row) : undefined;

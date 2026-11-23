@@ -21,9 +21,12 @@ import { InMemoryAuditSink } from '../../audit/testing/in-memory-audit.sink';
 import { WorkItemsController } from '../controllers/work-items.controller';
 import { WorkItemRepo } from '../work-item.repo';
 
+const DEFAULT_WORK_SCOPES = ['tokens:manage', 'fix:trigger', 'incidents:read'];
+
 export async function workHttpApp(
   repo: WorkItemRepo,
   commands: WorkCommands,
+  scopes: readonly string[] = DEFAULT_WORK_SCOPES,
 ): Promise<{ app: INestApplication; token: string; audit: InMemoryAuditSink }> {
   const audit = new InMemoryAuditSink();
   const moduleRef = await Test.createTestingModule({
@@ -59,7 +62,7 @@ export async function workHttpApp(
         request.user = {
           clientId: 'client-1',
           projectId: 'project-1',
-          scopes: ['tokens:manage', 'fix:trigger'],
+          scopes: [...scopes],
         };
         return true;
       },
@@ -76,7 +79,7 @@ export async function workHttpApp(
   );
   await app.init();
   const token = moduleRef.get(JwtService).sign(
-    { sub: 'client-1', projectId: 'project-1', scope: ['tokens:manage', 'fix:trigger'] },
+    { sub: 'client-1', projectId: 'project-1', scope: [...scopes] },
     {
       secret: TEST_CONFIG.jwtSecret,
       issuer: TEST_CONFIG.jwtIssuer,

@@ -49,14 +49,15 @@ export class DeploysController {
   @Get()
   @RequireScopes('org:read', 'project:read')
   @ApiOkResponse({
-    description: 'The Deployments in the caller Organization.',
+    description: 'The Deployments of the route Project in the caller Organization.',
     standardSchema: deployListSchema,
   })
   list(
     @RequestDeployPrincipal() principal: DeployPrincipal,
+    @Param() params: DeploymentParamsDto,
     @Query() query: DeploymentListQueryDto,
   ) {
-    return this.deploys.list(principal, query);
+    return this.deploys.list(principal, params.projectId, query);
   }
 
   @Post()

@@ -48,6 +48,7 @@ export class DeploysService {
       orgId: principal.orgId,
       name: dto.environment,
       projectId,
+      deploymentId: dto.deploymentId,
       actor: principal.clientId,
     });
     try {
@@ -75,8 +76,21 @@ export class DeploysService {
     }
   }
 
-  list(principal: DeployPrincipal, query: DeploymentListQueryDto): Promise<DeployRecord[]> {
-    return this.repo.list(principal.orgId, readProjectFilter(principal), {
+  list(
+    principal: DeployPrincipal,
+    projectId: string,
+    query: DeploymentListQueryDto,
+  ): Promise<DeployRecord[]> {
+    // DeployAuthGuard binds the route Project to this principal. A bound reader can
+    // only reach its own Project; an org-wide reader still sees only the route Project.
+    const boundProjectId = readProjectFilter(principal);
+    if (
+      boundProjectId !== undefined &&
+      boundProjectId !== (principal.routeProjectId ?? projectId)
+    ) {
+      throw new ForbiddenException('The route Project is outside the bound Project');
+    }
+    return this.repo.list(principal.orgId, principal.routeProjectId ?? projectId, {
       ...(query.deploymentId === undefined ? {} : { deploymentId: query.deploymentId }),
       ...(query.environment === undefined ? {} : { environment: query.environment }),
     });

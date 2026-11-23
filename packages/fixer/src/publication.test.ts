@@ -3,8 +3,15 @@ import type { Patch } from '@graveshift/patch/schemas';
 import { describe, expect, test } from 'bun:test';
 
 import { BranchError } from './branch';
-import { openDraftPr } from './open-pr';
-import { diagnosis, fakeClient, file, incident, repo, TEST_BASE_SHA } from './test-helpers';
+import {
+  diagnosis,
+  fakeClient,
+  file,
+  incident,
+  publishPinned,
+  repo,
+  TEST_BASE_SHA,
+} from './test-helpers';
 
 const input = {
   repo,
@@ -48,7 +55,7 @@ const rejected: Array<[string, Patch]> = [
 describe('direct publication safety', () => {
   test.each(rejected)('%s makes zero client calls', async (_name, patch) => {
     const { client, calls } = fakeClient();
-    await expect(openDraftPr({ client, ...input, patch })).rejects.toBeInstanceOf(
+    await expect(publishPinned({ client, ...input, patch })).rejects.toBeInstanceOf(
       PatchRejectedError,
     );
     expect(calls).toHaveLength(0);
@@ -57,7 +64,7 @@ describe('direct publication safety', () => {
   test('a stale patch base blocks before any GitHub write', async () => {
     const { client, calls } = fakeClient();
     const stale: Patch = { ...input.patch, baseSha: 'd'.repeat(40) };
-    await expect(openDraftPr({ client, ...input, patch: stale })).rejects.toMatchObject({
+    await expect(publishPinned({ client, ...input, patch: stale })).rejects.toMatchObject({
       code: 'STALE_BASE',
     });
     expect(calls.some((call) => call.method.startsWith('create'))).toBe(false);
@@ -73,7 +80,7 @@ describe('direct publication safety', () => {
   ])('rejects an unsafe branch prefix before any client call: %s', async (branchPrefix) => {
     const { client, calls } = fakeClient();
     await expect(
-      openDraftPr({ client, ...input, repo: { ...repo, branchPrefix } }),
+      publishPinned({ client, ...input, repo: { ...repo, branchPrefix } }),
     ).rejects.toBeInstanceOf(BranchError);
     expect(calls).toHaveLength(0);
   });
@@ -84,7 +91,7 @@ describe('direct publication safety', () => {
       const { client, calls } = fakeClient();
       const secret = 'ghp_abcdefghijklmnopqrstuvwxyz0123456789';
       const text = `Repair ${secret}\nprice\r\ncheck\0`;
-      await openDraftPr({
+      await publishPinned({
         client,
         ...input,
         ...(source === 'explicit headline' ? { headline: text } : {}),
@@ -112,7 +119,7 @@ describe('direct publication safety', () => {
 
   test('redacts every freeform body field without caller preparation', async () => {
     const { client, calls } = fakeClient();
-    await openDraftPr({
+    await publishPinned({
       client,
       ...input,
       headline: 'Repair price',
@@ -152,7 +159,7 @@ describe('direct publication safety', () => {
     'javascript:alert(1)',
   ])('omits an unsafe dashboard link: %s', async (dashboardUrl) => {
     const { client, calls } = fakeClient();
-    await openDraftPr({ client, ...input, dashboardUrl });
+    await publishPinned({ client, ...input, dashboardUrl });
     expect(calls.find((call) => call.method === 'createPullRequest')?.args[1]).toMatchObject({
       body: expect.not.stringContaining('[Open the incident in the dashboard]'),
     });
@@ -164,7 +171,7 @@ describe('direct publication safety', () => {
     client.addLabels = async () => {
       throw new Error('labels unavailable');
     };
-    const createdPrRef = await openDraftPr({ client, ...input });
+    const createdPrRef = await publishPinned({ client, ...input });
     expect(createdPrRef).toEqual({
       repo: repo.repo,
       number: 42,

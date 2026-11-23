@@ -11,6 +11,7 @@ export class FakeEnvironmentRepo {
     orgId: string;
     name: string;
     projectId: string;
+    deploymentId: string;
     actor: string;
   }): Promise<{ record: EnvironmentRecord; created: boolean }> {
     const existing = [...this.rows.values()].find(
@@ -100,11 +101,12 @@ export class FakeDeployRepo {
     );
   }
 
-  async closeFirst(projectId: string, deploymentId: string): Promise<boolean> {
+  async closeFirst(projectId: string, deploymentId: string, environment: string): Promise<boolean> {
     for (const [key, row] of this.rows) {
       if (
         row.projectId === projectId &&
         row.deploymentId === deploymentId &&
+        row.environment === environment &&
         row.closedAt === null
       ) {
         this.rows.set(key, { ...row, closedAt: new Date().toISOString() });

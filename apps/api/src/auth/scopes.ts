@@ -26,16 +26,18 @@ export const SCOPE_ALIASES: Record<string, string> = {
   'tokens:manage': 'tokens:manage',
 };
 
-/** Adds the canonical form and every alias with the same meaning to a scope set. */
+/**
+ * Normalizes each alias to its canonical scope. Expansion is one-directional:
+ * an alias admits its canonical scope, but a canonical scope does not admit its
+ * aliases. A holder of `audit:read` gains `org:read`, while a holder of
+ * `org:read` does not gain `audit:read`; a holder of `logs:read` does not gain
+ * `events:publish`.
+ */
 export function expandScopes(scopes: readonly string[]): string[] {
   const result = new Set<string>(scopes);
   for (const scope of scopes) {
     const canonical = SCOPE_ALIASES[scope];
-    if (canonical === undefined) continue;
-    result.add(canonical);
-    for (const [alias, target] of Object.entries(SCOPE_ALIASES)) {
-      if (target === canonical) result.add(alias);
-    }
+    if (canonical !== undefined) result.add(canonical);
   }
   return [...result];
 }
@@ -86,6 +88,10 @@ export const CONFIG_EXPORT_SCOPE = 'config:export';
 // rejects it for every credential kind and a console-created client can never hold it. Only
 // an operator-registered OAuth client carries it, and only the Fix routes demand it.
 export const FIX_TRIGGER_SCOPE = 'fix:trigger';
+
+// The read scope required by the Work-item GET routes. The OAuth guard admits the
+// management surface with tokens:manage; the route guard narrows reads to this scope.
+export const INCIDENTS_READ_SCOPE = 'incidents:read';
 
 export type CredentialKind = 'mcp' | 'plugin';
 

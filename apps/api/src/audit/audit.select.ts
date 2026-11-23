@@ -6,7 +6,6 @@ export const AUDIT_SELECT = {
   actor: true,
   type: true,
   incidentId: true,
-  deploymentId: true,
   payload: true,
   prevHash: true,
   hash: true,

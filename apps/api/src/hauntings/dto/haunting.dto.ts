@@ -38,6 +38,12 @@ export class RecordHauntingDto extends HauntingProjectDto {
   @MaxLength(180)
   eventId!: string;
 
+  @ValidateIf((_, value) => value !== undefined && value !== null)
+  @IsString()
+  @MinLength(1)
+  @MaxLength(100)
+  environment?: string | null;
+
   @IsObject()
   @Validate(RecordedHauntingConstraint)
   view!: RecordedHaunting;

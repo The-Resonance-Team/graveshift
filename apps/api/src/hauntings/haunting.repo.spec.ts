@@ -64,21 +64,16 @@ describe('HauntingRepo ownership and redelivery', () => {
     fixture.appendInTx.mockResolvedValue({ seq: 3 });
     try {
       await fixture.repo.upsert('project-1', 'event-3', HAUNTING_FIXTURE);
-      expect(fixture.appendInTx).toHaveBeenCalledWith(
-        fixture.tx,
-        'project-1',
-        {
-          key: 'haunting:event-3',
-          actor: 'daemon',
-          type: 'haunting.recorded',
-          incidentId: 'haunting-1',
-          payload: {
-            view: HAUNTING_FIXTURE,
-            deploymentId: HAUNTING_FIXTURE.deploymentId,
-          },
+      expect(fixture.appendInTx).toHaveBeenCalledWith(fixture.tx, 'project-1', {
+        key: 'haunting:event-3',
+        actor: 'daemon',
+        type: 'haunting.recorded',
+        incidentId: 'haunting-1',
+        payload: {
+          view: HAUNTING_FIXTURE,
+          deploymentId: HAUNTING_FIXTURE.deploymentId,
         },
-        HAUNTING_FIXTURE.deploymentId,
-      );
+      });
       expect(fixture.tx.haunting.upsert).toHaveBeenCalledWith({
         where: { projectId_id: { projectId: 'project-1', id: 'haunting-1' } },
         create: { projectId: 'project-1', ...hauntingData(HAUNTING_FIXTURE, 3) },

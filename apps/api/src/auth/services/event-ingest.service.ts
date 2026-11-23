@@ -57,7 +57,6 @@ export class EventIngestService {
           deploymentId: body.deploymentId ?? null,
           environment: body.environment ?? null,
         },
-        deploymentId: body.deploymentId ?? null,
       });
     }
     await this.publisher.publish(envelope);

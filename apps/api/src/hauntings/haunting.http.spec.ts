@@ -15,7 +15,12 @@ import { HauntingService } from './haunting.service';
 import { HAUNTING_FIXTURE } from './testing/haunting.fixture';
 
 const token = 'haunting-test-internal-only-32-chars';
-const body = { projectId: 'project-1', eventId: 'event-1', view: HAUNTING_FIXTURE };
+const body = {
+  projectId: 'project-1',
+  eventId: 'event-1',
+  environment: 'production',
+  view: HAUNTING_FIXTURE,
+};
 const upsert = mock<HauntingRepo['upsert']>(async () => HAUNTING_FIXTURE);
 const list = mock<HauntingRepo['list']>(async () => [HAUNTING_FIXTURE]);
 const get = mock<HauntingRepo['get']>(async () => HAUNTING_FIXTURE);
@@ -105,7 +110,11 @@ describe('private Haunting boundary', () => {
 
   test('a recorded Haunting closes the Deployment inherited from its Event', async () => {
     await call('', body).expect(200);
-    expect(closeFirst).toHaveBeenCalledWith('project-1', HAUNTING_FIXTURE.deploymentId);
+    expect(closeFirst).toHaveBeenCalledWith(
+      'project-1',
+      HAUNTING_FIXTURE.deploymentId,
+      'production',
+    );
   });
 
   test('a reused event key produces a conflict with no success acknowledgement', async () => {

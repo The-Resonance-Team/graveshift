@@ -27,10 +27,6 @@ export function githubRecording() {
   const calls: string[] = [];
   const writes: unknown[] = [];
   const client: GitHubClient = {
-    getBaseSha: async () => {
-      calls.push('base');
-      return 'base-sha';
-    },
     getCommitTree: async () => {
       calls.push('tree');
       return 'tree-sha';

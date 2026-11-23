@@ -57,6 +57,7 @@ export async function createObservations(options: ObservationOptions) {
       {
         projectId,
         eventId,
+        environment: current.environment ?? undefined,
         view: {
           ...view,
           deploymentId: current.deploymentId ?? view.deploymentId ?? null,

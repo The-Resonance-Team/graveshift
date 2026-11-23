@@ -639,9 +639,13 @@ export interface operations {
         /** @description The Organization-scoped Environment name. */
         environment?: string;
       };
+      path: {
+        orgId: string;
+        projectId: string;
+      };
     };
     responses: {
-      /** @description The Deployments in the caller Organization. */
+      /** @description The Deployments of the route Project in the caller Organization. */
       200: {
         content: {
           "application/json": ({

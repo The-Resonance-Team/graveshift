@@ -79,9 +79,9 @@ describe('work item Fix route scopes', () => {
   test('a token without fix:trigger is denied on every Fix mutation but keeps reads', async () => {
     const started = await boot();
     app = started.app;
-    const managementOnly = started.sign(['tokens:manage']);
+    const managementOnly = started.sign(['tokens:manage', 'incidents:read']);
 
-    // The read surface keeps working under the management scope alone.
+    // The read surface keeps working under the read scope, without fix:trigger.
     await request(app.getHttpServer())
       .get('/api/work-items')
       .auth(managementOnly, { type: 'bearer' })

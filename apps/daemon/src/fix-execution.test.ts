@@ -11,11 +11,7 @@ const TEST_BASE_SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 // Blob SHA of the source text recorded by githubRecording() for src/main.ts.
 const BASE_BLOB_SHA = '96759cc1f604468aa78a72be3c5be39abfc788b2';
 
-const recorded = () => {
-  const recording = githubRecording();
-  recording.client.getBaseSha = async () => TEST_BASE_SHA;
-  return recording;
-};
+const recorded = () => githubRecording();
 
 function configured(failAudit = false) {
   const selected = agent();

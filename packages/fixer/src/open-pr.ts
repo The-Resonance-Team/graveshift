@@ -109,12 +109,3 @@ export async function writeDraft(
   }
   return createdPrRef;
 }
-
-// Direct callers still cross the canonical guard before the first client call.
-export async function openDraftPr(input: OpenDraftPrInput): Promise<PrRef> {
-  const text = publicationText(input);
-  const { client, repo } = input;
-  const baseSha = await client.getBaseSha(repo.repo, repo.baseBranch);
-  const baseTree = await client.getCommitTree(repo.repo, baseSha);
-  return writeDraft(input, text, baseSha, baseTree);
-}

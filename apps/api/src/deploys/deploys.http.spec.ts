@@ -182,14 +182,19 @@ describe('deployment routes (HTTP)', () => {
     expect(context.deploys.auditTypes.length).toBe(entriesAfterFirst);
   });
 
-  test('GET lists all Deployments of the Organization for org:read', async () => {
+  test('GET lists only the route Project Deployments even for org:read', async () => {
     const token = await clientToken(context, context.clientA, context.projectA, ['org:read']);
     const result = await http(context)
       .get(route(context.orgA, context.projectA))
       .set(bearer(token))
       .expect(200);
-    expect(result.body).toHaveLength(4);
-    expect(result.body.every((row: { orgId: string }) => row.orgId === context.orgA)).toBe(true);
+    expect(result.body).toHaveLength(3);
+    expect(
+      result.body.every(
+        (row: { orgId: string; projectId: string }) =>
+          row.orgId === context.orgA && row.projectId === context.projectA,
+      ),
+    ).toBe(true);
     expect(result.body.some((row: { id?: string }) => row.id !== undefined)).toBe(false);
   });
 

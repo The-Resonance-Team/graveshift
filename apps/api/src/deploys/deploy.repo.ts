@@ -96,7 +96,6 @@ export class DeployRepo {
           title: input.title,
           environment: input.environment,
         },
-        deploymentId: input.deploymentId,
       });
       return toRecord(row);
     });
@@ -120,19 +119,18 @@ export class DeployRepo {
     return rows.map(toRecord);
   }
 
-  /** Closes the first Deployment for this SHA. Later events write no further entry. */
-  async closeFirst(projectId: string, deploymentId: string): Promise<boolean> {
+  /** Closes the first Deployment for this SHA in one Environment. Later events write no entry. */
+  async closeFirst(projectId: string, deploymentId: string, environment: string): Promise<boolean> {
     return inAuditTransaction(this.db, async (tx) => {
       const closed = await tx.deploy.updateMany({
-        where: { projectId, deploymentId, closedAt: null },
+        where: { projectId, deploymentId, closedAt: null, environment: { name: environment } },
         data: { closedAt: new Date() },
       });
       if (closed.count === 0) return false;
       await this.audit.appendInTransaction(tx, projectId, {
         actor: 'daemon',
         type: 'deployment.closed',
-        payload: { deploymentId, projectId },
-        deploymentId,
+        payload: { deploymentId, projectId, environment },
       });
       return true;
     });

@@ -116,7 +116,13 @@ describe.skipIf(!dbTestEnabled)('v3 deployment database rules', () => {
   test('a concurrent Environment first use writes one audit entry', async () => {
     const { orgA } = await seed();
     const repo = new EnvironmentRepo(db, audit);
-    const input = { orgId: orgA.id, name: 'staging', projectId: '1001', actor: 'test-client' };
+    const input = {
+      orgId: orgA.id,
+      name: 'staging',
+      projectId: '1001',
+      deploymentId: SHA,
+      actor: 'test-client',
+    };
     const results = await Promise.allSettled(
       Array.from({ length: 8 }, () => repo.createWithAudit(input)),
     );
@@ -186,6 +192,7 @@ describe.skipIf(!dbTestEnabled)('v3 deployment database rules', () => {
       orgId: orgA.id,
       name: 'staging',
       projectId: '1001',
+      deploymentId: 'f'.repeat(40),
       actor: 'test-client',
     });
     await deployRepo.append({
@@ -203,8 +210,9 @@ describe.skipIf(!dbTestEnabled)('v3 deployment database rules', () => {
       ['1001', 'environment.created'],
       ['1001', 'deploy.created'],
     ]);
+    const environmentCreated = entries[0];
+    expect(environmentCreated?.payload).toMatchObject({ deploymentId: 'f'.repeat(40) });
     const created = entries[1];
-    expect(created?.deploymentId).toBe('f'.repeat(40));
     expect(created?.payload).toMatchObject({
       deploymentId: 'f'.repeat(40),
       projectId: '1001',
@@ -217,8 +225,8 @@ describe.skipIf(!dbTestEnabled)('v3 deployment database rules', () => {
   test('closure sets closedAt once and writes one deployment.closed entry', async () => {
     const { deploy } = await seed();
     const repo = new DeployRepo(db, audit);
-    expect(await repo.closeFirst('1001', SHA)).toBe(true);
-    expect(await repo.closeFirst('1001', SHA)).toBe(false);
+    expect(await repo.closeFirst('1001', SHA, 'production')).toBe(true);
+    expect(await repo.closeFirst('1001', SHA, 'production')).toBe(false);
     const stored = await db.deploy.findUniqueOrThrow({ where: { id: deploy.id } });
     expect(stored.closedAt).not.toBeNull();
     expect(await repo.listClosedIds('1001')).toEqual([SHA]);
@@ -228,7 +236,7 @@ describe.skipIf(!dbTestEnabled)('v3 deployment database rules', () => {
     const entry = await db.auditEntry.findFirstOrThrow({
       where: { projectId: '1001', type: 'deployment.closed' },
     });
-    expect(entry.deploymentId).toBe(SHA);
+    expect(entry.payload).toMatchObject({ deploymentId: SHA });
     await rejects(
       db.deploy.update({ where: { id: deploy.id }, data: { closedAt: new Date() } }),
     ).rejects.toThrow(/append-only/);
@@ -246,6 +254,7 @@ describe.skipIf(!dbTestEnabled)('v3 deployment database rules', () => {
         orgId: orgA.id,
         name: 'staging',
         projectId: '1001',
+        deploymentId: SHA,
         actor: 'test-client',
       }),
     ).rejects.toThrow('audit unavailable');

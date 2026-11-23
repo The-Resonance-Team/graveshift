@@ -25,9 +25,6 @@ CREATE TABLE "deploys" (
     CONSTRAINT "deploys_pkey" PRIMARY KEY ("id")
 );
 
--- AlterTable. The audit chain keeps one projectId per row; deploymentId is optional context.
-ALTER TABLE "audit_entries" ADD COLUMN     "deployment_id" TEXT;
-
 -- AlterTable. A Haunting inherits the Deployment of the Event that opened it.
 ALTER TABLE "hauntings" ADD COLUMN     "deployment_id" TEXT;
 

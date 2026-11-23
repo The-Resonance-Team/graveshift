@@ -1,4 +1,4 @@
-import { ConflictException, Injectable } from '@nestjs/common';
+import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 
 import { AuditRepo } from '../audit/repo/audit.repo';
@@ -24,42 +24,50 @@ export class EnvironmentRepo {
   ) {}
 
   /**
-   * Creates the Environment and its audit entries in one transaction. A caller
-   * that loses the unique (org, name) race gets a 409 and writes no audit entry.
+   * Creates the Environment and its audit entry in one transaction. A caller that
+   * loses the unique (org, name) race re-reads the committed row and returns it as
+   * a reuse; it writes no second audit entry and reports no conflict.
    */
   async createWithAudit(input: {
     orgId: string;
     name: string;
     projectId: string;
+    deploymentId: string;
     actor: string;
   }): Promise<{ record: EnvironmentRecord; created: boolean }> {
-    return inAuditTransaction(this.db, async (tx) => {
-      const existing = await tx.environment.findUnique({
-        where: { orgId_name: { orgId: input.orgId, name: input.name } },
-      });
-      if (existing !== null) return { record: toRecord(existing), created: false };
-      let row: EnvironmentRow;
-      try {
-        row = await tx.environment.create({
+    try {
+      return await inAuditTransaction(this.db, async (tx) => {
+        const existing = await tx.environment.findUnique({
+          where: { orgId_name: { orgId: input.orgId, name: input.name } },
+        });
+        if (existing !== null) return { record: toRecord(existing), created: false };
+        const row = await tx.environment.create({
           data: { orgId: input.orgId, name: input.name },
         });
-      } catch (error) {
-        if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-          throw new ConflictException('The Environment name is already used in this Organization');
-        }
+        await this.audit.appendInTransaction(tx, input.projectId, {
+          actor: input.actor,
+          type: 'environment.created',
+          payload: {
+            environmentId: row.id,
+            orgId: input.orgId,
+            projectId: input.projectId,
+            deploymentId: input.deploymentId,
+          },
+        });
+        return { record: toRecord(row), created: true };
+      });
+    } catch (error) {
+      if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
         throw error;
       }
-      await this.audit.appendInTransaction(tx, input.projectId, {
-        actor: input.actor,
-        type: 'environment.created',
-        payload: {
-          environmentId: row.id,
-          orgId: input.orgId,
-          projectId: input.projectId,
-        },
+      // A concurrent insert committed the row. The failed transaction is aborted,
+      // so read outside it and report reuse with no new audit entry.
+      const winner = await this.db.environment.findUnique({
+        where: { orgId_name: { orgId: input.orgId, name: input.name } },
       });
-      return { record: toRecord(row), created: true };
-    });
+      if (winner === null) throw error;
+      return { record: toRecord(winner), created: false };
+    }
   }
 
   async list(orgId: string, projectId?: string): Promise<EnvironmentRecord[]> {

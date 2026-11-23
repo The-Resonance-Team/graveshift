@@ -40,8 +40,13 @@ export class HauntingService {
       const view = await this.repo.upsert(input.projectId, input.eventId, input.view);
       // The first Event with a known Deployment closes that Deployment. A later Event
       // for the same SHA writes no second entry and never reopens it.
-      if (view.deploymentId !== null && view.deploymentId !== undefined) {
-        await this.deploys.closeFirst(input.projectId, view.deploymentId);
+      if (
+        view.deploymentId !== null &&
+        view.deploymentId !== undefined &&
+        input.environment !== null &&
+        input.environment !== undefined
+      ) {
+        await this.deploys.closeFirst(input.projectId, view.deploymentId, input.environment);
       }
       return view;
     } catch (error) {

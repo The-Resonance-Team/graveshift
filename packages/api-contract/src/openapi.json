@@ -1429,6 +1429,24 @@
         "operationId": "DeploysController_list",
         "parameters": [
           {
+            "name": "orgId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "example": "00000000-0000-4000-8000-000000000000",
+              "type": "string"
+            }
+          },
+          {
+            "name": "projectId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "example": "1001",
+              "type": "string"
+            }
+          },
+          {
             "name": "deploymentId",
             "required": false,
             "in": "query",
@@ -1450,7 +1468,7 @@
         ],
         "responses": {
           "200": {
-            "description": "The Deployments in the caller Organization.",
+            "description": "The Deployments of the route Project in the caller Organization.",
             "content": {
               "application/json": {
                 "schema": {
