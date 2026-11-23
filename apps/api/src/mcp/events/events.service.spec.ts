@@ -198,12 +198,27 @@ describe('EventPollService', () => {
     expect(errorCode(invalid)).toBe(-32602);
   });
 
-  test('stops polling a closed Deployment without stopping the Project watcher', async () => {
+  test('skips a closed Deployment only in its Environment', async () => {
     const source = new InMemoryEventSource();
-    const closed = new Set<string>(['a'.repeat(40)]);
-    const service = new EventPollService(source, { listClosedIds: async () => [...closed] });
-    const sha = [...closed][0]!;
-    source.push(validEnvelope({ id: 'closed-event', type: 'signal.oom', deploymentId: sha }));
+    const sha = 'a'.repeat(40);
+    const closed = [{ deploymentId: sha, environment: 'staging' }];
+    const service = new EventPollService(source, { listClosed: async () => closed });
+    source.push(
+      validEnvelope({
+        id: 'closed-event',
+        type: 'signal.oom',
+        deploymentId: sha,
+        environment: 'staging',
+      }),
+    );
+    source.push(
+      validEnvelope({
+        id: 'same-sha-open-event',
+        type: 'signal.oom',
+        deploymentId: sha,
+        environment: 'production',
+      }),
+    );
     source.push(
       validEnvelope({
         id: 'open-event',
@@ -215,6 +230,7 @@ describe('EventPollService', () => {
     const result = await poll(service, { name: 'incident.changed', cursor: START });
     expect(result.events.map((event) => event.eventId).sort()).toEqual([
       'open-event',
+      'same-sha-open-event',
       'unassigned',
     ]);
     expect(result.hasMore).toBe(false);

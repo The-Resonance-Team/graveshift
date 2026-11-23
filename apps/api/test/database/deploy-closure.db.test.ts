@@ -41,6 +41,9 @@ describe.skipIf(!dbTestEnabled)('Deployment closure is Environment-scoped', () =
     await db.deploy.create({ data: { ...data, environmentId: staging.id } });
     const repo = new DeployRepo(db, audit);
     expect(await repo.closeFirst('1001', SHA, 'production')).toBe(true);
+    expect(await repo.listClosed('1001')).toEqual([
+      { deploymentId: SHA, environment: 'production' },
+    ]);
     const open = await db.deploy.findMany({
       where: { projectId: '1001', deploymentId: SHA, closedAt: null },
       include: { environment: true },

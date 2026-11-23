@@ -113,7 +113,7 @@ describe('MCP Events extension through /mcp (e2e)', () => {
       .overrideProvider(MCP_EVENT_SOURCE)
       .useValue(source)
       .overrideProvider(CLOSED_DEPLOYMENTS)
-      .useValue({ listClosedIds: async () => [] })
+      .useValue({ listClosed: async () => [] })
       .compile();
     app = moduleRef.createNestApplication();
     configureApp(app);

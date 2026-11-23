@@ -9,8 +9,12 @@ export const MCP_EVENT_SOURCE = Symbol('MCP_EVENT_SOURCE');
 
 /** Read-only port over closed Deployments. No per-poll timeout: closure is final. */
 export const CLOSED_DEPLOYMENTS = Symbol('CLOSED_DEPLOYMENTS');
+export interface ClosedDeploymentKey {
+  deploymentId: string;
+  environment: string;
+}
 export interface ClosedDeploymentQuery {
-  listClosedIds(projectId: string): Promise<string[]>;
+  listClosed(projectId: string): Promise<ClosedDeploymentKey[]>;
 }
 
 /** Six MCP scopes serve as Event scopes. One event type declares one of them. */

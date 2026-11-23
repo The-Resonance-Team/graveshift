@@ -62,7 +62,7 @@ describe('POST /mcp bearer auth (e2e)', () => {
       .overrideProvider(MCP_EVENT_SOURCE)
       .useValue(eventSource)
       .overrideProvider(CLOSED_DEPLOYMENTS)
-      .useValue({ listClosedIds: async () => [] })
+      .useValue({ listClosed: async () => [] })
       .compile();
     app = moduleRef.createNestApplication();
     jwtService = moduleRef.get(JwtService);

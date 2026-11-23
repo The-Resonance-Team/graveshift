@@ -136,13 +136,18 @@ export class DeployRepo {
     });
   }
 
-  /** The poll uses this set to stop serving events for a closed Deployment. */
-  async listClosedIds(projectId: string): Promise<string[]> {
+  /** The poll uses these keys to stop serving events for a closed Deployment only. */
+  async listClosed(
+    projectId: string,
+  ): Promise<Array<{ deploymentId: string; environment: string }>> {
     const rows = await this.db.deploy.findMany({
       where: { projectId, closedAt: { not: null } },
-      select: { deploymentId: true },
+      select: { deploymentId: true, environment: { select: { name: true } } },
     });
-    return rows.map((row) => row.deploymentId);
+    return rows.map((row) => ({
+      deploymentId: row.deploymentId,
+      environment: row.environment.name,
+    }));
   }
 
   /** Repository rule: a Deployment cannot be changed except by closeFirst above. */

@@ -54,7 +54,6 @@ export function createFixExecutor(options: ExecutorOptions): FixExecutor {
           type: FIX_BASE_SHA_AUDIT_TYPE,
           incidentId: input.context.incident.id,
           payload: {
-            baseSha,
             deploymentId: baseSha,
             repo: input.context.repo.repo,
             workItemId: input.snapshot.item.id,

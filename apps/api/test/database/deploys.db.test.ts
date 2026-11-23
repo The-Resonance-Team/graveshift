@@ -229,7 +229,9 @@ describe.skipIf(!dbTestEnabled)('v3 deployment database rules', () => {
     expect(await repo.closeFirst('1001', SHA, 'production')).toBe(false);
     const stored = await db.deploy.findUniqueOrThrow({ where: { id: deploy.id } });
     expect(stored.closedAt).not.toBeNull();
-    expect(await repo.listClosedIds('1001')).toEqual([SHA]);
+    expect(await repo.listClosed('1001')).toEqual([
+      { deploymentId: SHA, environment: 'production' },
+    ]);
     expect(
       await db.auditEntry.count({ where: { projectId: '1001', type: 'deployment.closed' } }),
     ).toBe(1);

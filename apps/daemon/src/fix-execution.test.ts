@@ -96,7 +96,6 @@ describe('concrete daemon fix executor', () => {
     expect(audits).toContainEqual({
       type: 'fix.base_sha',
       payload: expect.objectContaining({
-        baseSha: TEST_BASE_SHA,
         deploymentId: TEST_BASE_SHA,
         repo: 'team/grave',
       }),

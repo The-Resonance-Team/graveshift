@@ -117,9 +117,11 @@ export class FakeDeployRepo {
     return false;
   }
 
-  async listClosedIds(projectId: string): Promise<string[]> {
+  async listClosed(
+    projectId: string,
+  ): Promise<Array<{ deploymentId: string; environment: string }>> {
     return [...this.rows.values()]
       .filter((row) => row.projectId === projectId && row.closedAt !== null)
-      .map((row) => row.deploymentId);
+      .map((row) => ({ deploymentId: row.deploymentId, environment: row.environment }));
   }
 }

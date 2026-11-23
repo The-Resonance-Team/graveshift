@@ -81,7 +81,7 @@ All inputs include `projectId`. The incident input adds `id`; the context input 
 
 ## Daemon environment
 
-The v2 transport setup requires the bootstrap value `GRAVESHIFT_PROJECT_ID`, `GRAVESHIFT_API_INTERNAL_TOKEN`, and `GRAVESHIFT_DAEMON_INTERNAL_TOKEN`. [ADR 0023](../../docs/adr/0023-organization-is-the-tenant-root.md) supersedes that bootstrap. Optional
+The transport setup requires `GRAVESHIFT_API_INTERNAL_TOKEN` and `GRAVESHIFT_DAEMON_INTERNAL_TOKEN`. There is no host-wide project value: `projectId` comes from the authenticated request. [ADR 0023](../../docs/adr/0023-organization-is-the-tenant-root.md) records this rule. Optional
 settings are `GRAVESHIFT_API_URL`, `GRAVESHIFT_DAEMON_URL`, `GRAVESHIFT_NATS_URL`,
 `GRAVESHIFT_COMMAND_TIMEOUT_MS`, `GRAVESHIFT_API_TIMEOUT_MS`, and `GRAVESHIFT_BODY_MAX_BYTES`.
 The API boot config supplies the NATS stream. Both HTTP origins must use loopback.

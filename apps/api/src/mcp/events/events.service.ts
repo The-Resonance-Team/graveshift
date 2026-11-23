@@ -174,13 +174,17 @@ export class EventPollService {
     };
     // Closure is final and has no timeout. Once a Deployment is closed, its events are
     // no longer pulled; the Project's watcher and all other Deployments stay alive.
-    const closedIds =
+    const closedKeys =
       this.closed === undefined || projectId === undefined
         ? new Set<string>()
-        : new Set(await this.closed.listClosedIds(projectId));
+        : new Set(
+            (await this.closed.listClosed(projectId)).map(
+              (key) => `${key.deploymentId}\u0000${key.environment}`,
+            ),
+          );
     // A wider raw window limits recursion when many entries do not match.
     const window = this.windowSize ?? Math.max(maxEvents + 1, 100);
-    await this.scan(state, descriptor, args, floor, maxEvents, window, projectId, closedIds);
+    await this.scan(state, descriptor, args, floor, maxEvents, window, projectId, closedKeys);
 
     const hasMore = state.found.length > maxEvents || !state.reachedHead;
     const page = state.found.slice(0, maxEvents);
@@ -210,7 +214,7 @@ export class EventPollService {
     maxEvents: number,
     window: number,
     projectId: string | undefined,
-    closedIds: ReadonlySet<string>,
+    closedKeys: ReadonlySet<string>,
   ): Promise<void> {
     const read = await this.source.read(state.scanCursor, window);
     state.last = read;
@@ -219,7 +223,7 @@ export class EventPollService {
     state.scannedTotal += Math.max(progress, 0);
 
     for (const stored of read.events) {
-      if (!this.matches(stored, descriptor, args, projectId, closedIds)) continue;
+      if (!this.matches(stored, descriptor, args, projectId, closedKeys)) continue;
       if (floor !== undefined && Date.parse(stored.envelope.observedAt) < floor) {
         state.truncated = true;
         continue;
@@ -236,7 +240,7 @@ export class EventPollService {
     }
     if (state.scanCursor !== null && read.scannedThroughSeq <= state.scanCursor) return;
     state.scanCursor = read.scannedThroughSeq;
-    return this.scan(state, descriptor, args, floor, maxEvents, window, projectId, closedIds);
+    return this.scan(state, descriptor, args, floor, maxEvents, window, projectId, closedKeys);
   }
 
   /** Project isolation, Deployment closure, and the descriptor's declared filters. */
@@ -245,10 +249,11 @@ export class EventPollService {
     descriptor: EventTypeDescriptor,
     args: EventFilter,
     projectId: string | undefined,
-    closedIds: ReadonlySet<string>,
+    closedKeys: ReadonlySet<string>,
   ): boolean {
     if (projectId !== undefined && stored.envelope.projectId !== projectId) return false;
-    if (closedIds.has(stored.envelope.deploymentId ?? '')) return false;
+    const key = `${stored.envelope.deploymentId ?? ''}\u0000${stored.envelope.environment ?? ''}`;
+    if (closedKeys.has(key)) return false;
     return descriptor.matches(stored.envelope, args);
   }
 
