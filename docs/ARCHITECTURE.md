@@ -271,7 +271,7 @@ The root `graveshift.config.yaml` holds the `agents.system` list with three name
 
 Audit append owns canonical payload encoding, project-scoped sequence assignment, previous hash and SHA-256. PostgreSQL triggers reject UPDATE and DELETE. A stable producer key makes exact append retries idempotent; changed facts under that key conflict. The private acknowledgement follows commit. A database transaction does not include GitHub or runtime effects.
 
-The foundation PR merged during this effort. Its initial migration remains byte-for-byte unchanged. A frozen historical schema describes the merged baseline. `generate-migration.ts` writes only the architecture follow-up from that schema to the runtime schema plus `prisma/append-only.sql`. The database-free drift check verifies the immutable baseline and exact follow-up artifact. Local Docker tests replay both migrations. An unregistered third migration fails the check until the history registry is extended; merged SQL remains immutable.
+The foundation PR merged during this effort. Its initial migration remains byte-for-byte unchanged. Later migrations are additive and their files stay unchanged. The database-free drift check (`bun run migrate:drift:check`) compares generated schema SQL with every committed migration and verifies that the hand-written audit and deployment enforcement blocks sit on their intended tables. Local Docker database tests replay all migrations. A destructive migration needs a shadow-database drift check before it can land; see the drift section above.
 
 ## MCP
 

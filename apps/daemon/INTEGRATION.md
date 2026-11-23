@@ -71,9 +71,10 @@ test; production leaves it unset and uses the platform sandbox.
 
 `src/platform.database.test.ts` exercises both HTTP hops and the real Work, Haunting,
 policy context, and Audit repos in Postgres. It skips unless the existing database fixture
-is enabled. Run it through `bun scripts/test-db.ts apps/daemon/src/platform.database.test.ts`.
-Nest test imports need the API TypeScript override used by that script. Model and GitHub
-responses are recorded; the sandbox test runner permits only local Git commands.
+is enabled. Run it with `bun run test:database` from the repo root. That script starts a
+throwaway Docker Postgres, applies every migration, and runs the file with the API TypeScript
+override that its Nest imports need. Model and GitHub responses are recorded; the sandbox
+test runner permits only local Git commands.
 
 The daemon also serves authenticated POST `/internal/read/{services,incidents,incident,logs,metric,context}`.
 All inputs include `projectId`. The incident input adds `id`; the context input adds

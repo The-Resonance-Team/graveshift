@@ -90,11 +90,11 @@ bun run test:database
 
 The root gate checks formatting, lint, types, test types and tests. Formatting precedes lint. Contract generation reads the actual decorated routes without booting runtime providers, loading YAML or inventing secrets.
 
-Database tests create a unique Docker Postgres instance with no shared volumes, apply the migration, run the suite and remove the instance. The fixture guard refuses another database. Database tests are opt-in and remain outside CI.
+Database tests create a unique Docker Postgres instance with no shared volumes, apply every migration, run the suite and remove the instance. The fixture guard refuses another database. Database tests are opt-in and remain outside CI.
 
 The API in `apps/api` serves `graveshift-mcp` through the official `@nestjs/mcp` module (v0.0.4). It exposes nine tools (`list_services`, `list_incidents`, `get_incident`, `get_diagnosis`, `get_audit_log`, `verify_audit_chain`, `propose_fix`, `tail_logs`, `query_metric`), two prompts (`triage_incident`, `write_postmortem`), the Autopsy resource at `graveshift://incidents/{id}/postmortem`, and the Beta Events poll extension. Every reply passes through the redactor. `propose_fix` only asks the policy engine and never executes an action.
 
-The merged initial migration is immutable. A frozen historical schema describes it, and `bun run migrate:generate` writes only the current architecture follow-up from that schema to the runtime schema plus `prisma/append-only.sql`. The drift check verifies the baseline and exact follow-up SQL. Docker tests replay both migrations. A later migration must extend the registered history; merged migration files stay unchanged.
+The merged initial migration is immutable. Later migrations are additive and their files also stay unchanged. `bun run migrate:drift:check` compares SQL generated from `apps/api/prisma/schema.prisma` with all committed migration SQL. It also checks that the hand-written audit and deployment enforcement blocks sit on their intended tables. `bun run migrate:drift:local` runs Prisma's shadow-database diff and needs Docker Postgres. Database tests replay every migration in a fresh instance.
 
 Tests use recorded model/GitHub responses and controlled broker/runtime adapters. No test needs production credentials. See the delivery ledger for exact verified results and retained limits.
 
