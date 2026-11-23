@@ -102,7 +102,7 @@ export class DeployRepo {
       },
       // Order by the columns of deploys_project_id_created_at_id_idx so a filtered
       // list uses the index instead of a sort.
-      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
     });
     return rows.map(toRecord);
   }

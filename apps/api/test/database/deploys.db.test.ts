@@ -57,6 +57,31 @@ describe.skipIf(!dbTestEnabled)('v3 deployment database rules', () => {
     expect(deploy).not.toHaveProperty('environmentId');
   });
 
+  test('list orders by created_at descending then id ascending', async () => {
+    await seed();
+    const createdAt = new Date('2026-11-22T08:00:00.000Z');
+    const base = {
+      projectId: '1001',
+      environment: 'staging',
+      dateStarted: createdAt,
+      createdAt,
+    };
+    await db.deploy.create({
+      data: { ...base, deploymentId: 'b'.repeat(40), title: 'tie-first' },
+    });
+    await db.deploy.create({
+      data: { ...base, deploymentId: 'c'.repeat(40), title: 'tie-second' },
+    });
+    const expected = (
+      await db.deploy.findMany({
+        where: { projectId: '1001' },
+        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+      })
+    ).map((row) => row.title);
+    const actual = (await new DeployRepo(db, audit).list('1001')).map((row) => row.title);
+    expect(actual).toEqual(expected);
+  });
+
   test('database rejects UPDATE and DELETE on deploys', async () => {
     const { deploy } = await seed();
     await rejects(
