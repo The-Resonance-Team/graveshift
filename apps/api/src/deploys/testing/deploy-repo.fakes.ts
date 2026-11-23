@@ -1,44 +1,4 @@
-import { randomUUID } from 'node:crypto';
-
-import type { DeployRecord, EnvironmentRecord } from '../deploy.types';
-
-/** In-memory Environment store for HTTP tests. No database or network call is made. */
-export class FakeEnvironmentRepo {
-  readonly rows = new Map<string, EnvironmentRecord>();
-  deploys?: FakeDeployRepo;
-
-  async createWithAudit(input: {
-    orgId: string;
-    name: string;
-    projectId: string;
-    deploymentId: string;
-    actor: string;
-  }): Promise<{ record: EnvironmentRecord; created: boolean }> {
-    const existing = [...this.rows.values()].find(
-      (row) => row.orgId === input.orgId && row.name === input.name,
-    );
-    if (existing !== undefined) return { record: existing, created: false };
-    const record: EnvironmentRecord = {
-      id: randomUUID(),
-      orgId: input.orgId,
-      name: input.name,
-      createdAt: new Date().toISOString(),
-    };
-    this.rows.set(record.id, record);
-    return { record, created: true };
-  }
-
-  async list(orgId: string, projectId?: string): Promise<EnvironmentRecord[]> {
-    return [...this.rows.values()].filter(
-      (row) =>
-        row.orgId === orgId &&
-        (projectId === undefined ||
-          [...(this.deploys?.rows.values() ?? [])].some(
-            (deploy) => deploy.environment === row.name && deploy.projectId === projectId,
-          )),
-    );
-  }
-}
+import type { DeployRecord } from '../deploy.types';
 
 /** In-memory Deployment store for HTTP tests. The uuid row key stays internal. */
 export class FakeDeployRepo {
@@ -58,9 +18,7 @@ export class FakeDeployRepo {
   }
 
   async append(input: {
-    orgId: string;
     projectId: string;
-    environmentId: string;
     environment: string;
     deploymentId: string;
     title: string;
@@ -70,7 +28,6 @@ export class FakeDeployRepo {
     actor: string;
   }): Promise<DeployRecord> {
     const record: DeployRecord = {
-      orgId: input.orgId,
       projectId: input.projectId,
       deploymentId: input.deploymentId,
       environment: input.environment,
@@ -88,13 +45,11 @@ export class FakeDeployRepo {
   }
 
   async list(
-    orgId: string,
     projectId?: string,
     filter: { deploymentId?: string; environment?: string } = {},
   ): Promise<DeployRecord[]> {
     return [...this.rows.values()].filter(
       (row) =>
-        row.orgId === orgId &&
         (projectId === undefined || row.projectId === projectId) &&
         (filter.deploymentId === undefined || row.deploymentId === filter.deploymentId) &&
         (filter.environment === undefined || row.environment === filter.environment),

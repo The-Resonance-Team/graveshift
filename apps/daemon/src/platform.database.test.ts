@@ -168,14 +168,10 @@ describe.skipIf(!dbTestEnabled)('Postgres API and daemon composition over privat
         slug: 'platform',
       },
     });
-    const environment = await db.environment.create({
-      data: { orgId: org.id, name: 'production' },
-    });
     await db.deploy.create({
       data: {
-        orgId: org.id,
         projectId: caller.projectId,
-        environmentId: environment.id,
+        environment: 'production',
         deploymentId: TEST_BASE_SHA,
         title: 'platform-deploy',
         dateStarted: new Date('2026-11-21T10:00:00.000Z'),

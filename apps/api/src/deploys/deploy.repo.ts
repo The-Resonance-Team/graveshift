@@ -1,31 +1,28 @@
 import { Injectable } from '@nestjs/common';
+import { redact } from '@graveshift/redactor';
 
 import { inAuditTransaction } from '../audit/audit.transaction';
 import { AuditRepo } from '../audit/repo/audit.repo';
 import { PrismaService } from '../infra/prisma.service';
 import { AppendOnlyDeployError, type DeployRecord } from './deploy.types';
 
-const DEPLOY_INCLUDE = { environment: { select: { name: true } } } as const;
-
 type DeployRow = {
-  orgId: string;
+  id: string;
   projectId: string;
-  environmentId: string;
   deploymentId: string;
+  environment: string;
   title: string;
   dateStarted: Date;
   dateFinished: Date | null;
   url: string | null;
   closedAt: Date | null;
   createdAt: Date;
-  environment: { name: string };
 };
 
 const toRecord = (row: DeployRow): DeployRecord => ({
-  orgId: row.orgId,
   projectId: row.projectId,
   deploymentId: row.deploymentId,
-  environment: row.environment.name,
+  environment: row.environment,
   title: row.title,
   dateStarted: row.dateStarted.toISOString(),
   dateFinished: row.dateFinished?.toISOString() ?? null,
@@ -54,16 +51,13 @@ export class DeployRepo {
     environment: string,
   ): Promise<DeployRecord | undefined> {
     const row = await this.db.deploy.findFirst({
-      where: { projectId, deploymentId, environment: { name: environment } },
-      include: DEPLOY_INCLUDE,
+      where: { projectId, deploymentId, environment },
     });
     return row === null ? undefined : toRecord(row);
   }
 
   async append(input: {
-    orgId: string;
     projectId: string;
-    environmentId: string;
     environment: string;
     deploymentId: string;
     title: string;
@@ -75,16 +69,14 @@ export class DeployRepo {
     return inAuditTransaction(this.db, async (tx) => {
       const row = await tx.deploy.create({
         data: {
-          orgId: input.orgId,
           projectId: input.projectId,
-          environmentId: input.environmentId,
+          environment: input.environment,
           deploymentId: input.deploymentId,
           title: input.title,
           dateStarted: input.dateStarted,
           dateFinished: input.dateFinished ?? null,
           url: input.url ?? null,
         },
-        include: DEPLOY_INCLUDE,
       });
       await this.audit.appendInTransaction(tx, input.projectId, {
         actor: input.actor,
@@ -92,28 +84,22 @@ export class DeployRepo {
         payload: {
           deploymentId: input.deploymentId,
           projectId: input.projectId,
-          orgId: input.orgId,
           title: input.title,
-          environment: input.environment,
+          // The Environment is client-supplied, so it is redacted in the audit payload.
+          environment: redact(input.environment),
         },
       });
       return toRecord(row);
     });
   }
 
-  async list(
-    orgId: string,
-    projectId?: string,
-    filter: DeployListFilter = {},
-  ): Promise<DeployRecord[]> {
+  async list(projectId?: string, filter: DeployListFilter = {}): Promise<DeployRecord[]> {
     const rows = await this.db.deploy.findMany({
       where: {
-        orgId,
         ...(projectId === undefined ? {} : { projectId }),
         ...(filter.deploymentId === undefined ? {} : { deploymentId: filter.deploymentId }),
-        ...(filter.environment === undefined ? {} : { environment: { name: filter.environment } }),
+        ...(filter.environment === undefined ? {} : { environment: filter.environment }),
       },
-      include: DEPLOY_INCLUDE,
       orderBy: [{ dateStarted: 'asc' }, { createdAt: 'asc' }],
     });
     return rows.map(toRecord);
@@ -123,7 +109,7 @@ export class DeployRepo {
   async closeFirst(projectId: string, deploymentId: string, environment: string): Promise<boolean> {
     return inAuditTransaction(this.db, async (tx) => {
       const closed = await tx.deploy.updateMany({
-        where: { projectId, deploymentId, closedAt: null, environment: { name: environment } },
+        where: { projectId, deploymentId, closedAt: null, environment },
         data: { closedAt: new Date() },
       });
       if (closed.count === 0) return false;
@@ -142,11 +128,11 @@ export class DeployRepo {
   ): Promise<Array<{ deploymentId: string; environment: string }>> {
     const rows = await this.db.deploy.findMany({
       where: { projectId, closedAt: { not: null } },
-      select: { deploymentId: true, environment: { select: { name: true } } },
+      select: { deploymentId: true, environment: true },
     });
     return rows.map((row) => ({
       deploymentId: row.deploymentId,
-      environment: row.environment.name,
+      environment: row.environment,
     }));
   }
 

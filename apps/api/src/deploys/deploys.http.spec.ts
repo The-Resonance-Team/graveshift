@@ -43,7 +43,6 @@ describe('deployment routes (HTTP)', () => {
     }).expect(201);
 
     expect(result.body).toMatchObject({
-      orgId: context.orgA,
       projectId: context.projectA,
       deploymentId: SHA_A,
       environment: 'production',
@@ -190,10 +189,7 @@ describe('deployment routes (HTTP)', () => {
       .expect(200);
     expect(result.body).toHaveLength(3);
     expect(
-      result.body.every(
-        (row: { orgId: string; projectId: string }) =>
-          row.orgId === context.orgA && row.projectId === context.projectA,
-      ),
+      result.body.every((row: { projectId: string }) => row.projectId === context.projectA),
     ).toBe(true);
     expect(result.body.some((row: { id?: string }) => row.id !== undefined)).toBe(false);
   });
@@ -235,25 +231,17 @@ describe('deployment routes (HTTP)', () => {
       .expect(422);
   });
 
-  test('environments stay Organization-scoped and filtered for a bound reader', async () => {
-    const orgToken = await clientToken(context, context.clientA, context.projectA, ['org:read']);
-    const orgResult = await http(context)
-      .get(`/api/organizations/${context.orgA}/environments`)
-      .set(bearer(orgToken))
-      .expect(200);
-    expect(orgResult.body.map((row: { name: string }) => row.name).sort()).toEqual([
-      'bound-env',
-      'production',
-      'staging',
-    ]);
-
-    const projectToken = await clientToken(context, context.clientA2, context.projectA2, [
-      'project:read',
-    ]);
-    const projectResult = await http(context)
-      .get(`/api/organizations/${context.orgA}/environments`)
-      .set(bearer(projectToken))
-      .expect(200);
-    expect(projectResult.body.map((row: { name: string }) => row.name)).toEqual(['staging']);
+  test('Environment is a string on the Deployment, not a separate row', async () => {
+    const token = await ciToken();
+    const result = await create(token, context.orgA, context.projectA, {
+      deploymentId: 'e'.repeat(40),
+      title: 'env-as-string',
+      environment: 'sandbox',
+      dateStarted: STARTED,
+    }).expect(201);
+    expect(typeof result.body.environment).toBe('string');
+    expect(result.body.environment).toBe('sandbox');
+    expect(result.body.environmentId).toBeUndefined();
+    expect(context.deploys.rows.size).toBe(5);
   });
 });

@@ -6,7 +6,7 @@ On 2026-11-23 the owner decided how Graveshift identifies a Deployment. `deploym
 
 The client supplies the SHA at Deployment create and the server checks its 40-hex format. The server verifies the SHA against the source tree at patch time. CI supplies the human label `title` from `git log -1 --format=%s`, so the label works on any git-compatible platform.
 
-A UNIQUE key on (project_id, deployment_id, environment_id) makes redeploy of the same SHA to the same environment idempotent. A rollback reuses the old Deployment bucket; it does not create a new one.
+A UNIQUE key on (project_id, deployment_id, environment) makes redeploy of the same SHA to the same Environment name idempotent. A rollback reuses the old Deployment bucket; it does not create a new one.
 
 The agent patches at the deployed SHA. Tree and blob SHA checks run at that SHA. The branch-HEAD freshness check is dropped.
 

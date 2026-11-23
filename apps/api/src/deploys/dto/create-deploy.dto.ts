@@ -33,7 +33,7 @@ export class DeploymentListQueryDto {
   @Matches(DEPLOYMENT_ID_PATTERN)
   deploymentId?: string;
 
-  @ApiPropertyOptional({ description: 'The Organization-scoped Environment name.' })
+  @ApiPropertyOptional({ description: 'The Environment name on the Deployment.' })
   @IsOptional()
   @IsString()
   @MinLength(1)
@@ -53,7 +53,7 @@ export class CreateDeployDto {
   @MaxLength(200)
   title!: string;
 
-  @ApiProperty({ description: 'The Organization-scoped Environment name.', example: 'production' })
+  @ApiProperty({ description: 'The Environment name on the Deployment.', example: 'production' })
   @IsString()
   @MinLength(1)
   @MaxLength(100)

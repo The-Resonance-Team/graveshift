@@ -1,7 +1,6 @@
 import { z } from 'zod';
 
 export const deploySchema = z.object({
-  orgId: z.string(),
   projectId: z.string(),
   deploymentId: z.string().regex(/^[0-9a-f]{40}$/),
   environment: z.string(),

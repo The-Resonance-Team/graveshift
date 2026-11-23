@@ -2,7 +2,6 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 
 import { AuditRepo } from '../../src/audit/repo/audit.repo';
 import { DeployRepo } from '../../src/deploys/deploy.repo';
-import { EnvironmentRepo } from '../../src/environments/environment.repo';
 import type { PrismaService } from '../../src/infra/prisma.service';
 import { dbTestEnabled, openTestDatabase, resetDatabase } from './fixtures';
 
@@ -39,21 +38,24 @@ describe.skipIf(!dbTestEnabled)('v3 deployment database rules', () => {
     await db.project.create({
       data: { projectId: '2001', orgId: orgB.id, name: 'Foreign', slug: 'foreign' },
     });
-    const environment = await db.environment.create({
-      data: { orgId: orgA.id, name: 'production' },
-    });
     const deploy = await db.deploy.create({
       data: {
-        orgId: orgA.id,
         projectId: '1001',
-        environmentId: environment.id,
         deploymentId: SHA,
+        environment: 'production',
         title: 'deploy-1',
         dateStarted: new Date('2026-11-22T07:00:00.000Z'),
       },
     });
-    return { orgA, orgB, environment, deploy };
+    return { orgA, orgB, deploy };
   }
+
+  test('a Deployment stores the Environment as a plain string', async () => {
+    const { deploy } = await seed();
+    expect(deploy.environment).toBe('production');
+    expect(deploy).not.toHaveProperty('orgId');
+    expect(deploy).not.toHaveProperty('environmentId');
+  });
 
   test('database rejects UPDATE and DELETE on deploys', async () => {
     const { deploy } = await seed();
@@ -65,105 +67,56 @@ describe.skipIf(!dbTestEnabled)('v3 deployment database rules', () => {
   });
 
   test('parent deletes cannot cascade away a deployment', async () => {
-    const { orgA, environment } = await seed();
+    const { orgA } = await seed();
     await rejects(db.organization.delete({ where: { id: orgA.id } })).rejects.toThrow();
-    await rejects(db.environment.delete({ where: { id: environment.id } })).rejects.toThrow();
     await rejects(db.project.delete({ where: { projectId: '1001' } })).rejects.toThrow();
     expect(await db.deploy.count()).toBe(1);
   });
 
-  test('organization triggers reject cross-Organization links', async () => {
-    const { orgA, orgB } = await seed();
-    const foreignEnvironment = await db.environment.create({
-      data: { orgId: orgB.id, name: 'foreign-env' },
-    });
-    await rejects(
-      db.deploy.create({
-        data: {
-          orgId: orgB.id,
-          projectId: '1001',
-          environmentId: foreignEnvironment.id,
-          deploymentId: 'b'.repeat(40),
-          title: 'foreign-project',
-          dateStarted: new Date(),
-        },
-      }),
-    ).rejects.toThrow(/deploy project belongs to another organization/);
-    await rejects(
-      db.deploy.create({
-        data: {
-          orgId: orgA.id,
-          projectId: '1001',
-          environmentId: foreignEnvironment.id,
-          deploymentId: 'b'.repeat(40),
-          title: 'foreign-environment',
-          dateStarted: new Date(),
-        },
-      }),
-    ).rejects.toThrow(/deploy environment belongs to another organization/);
-  });
-
-  test('organization scope columns are immutable while linked', async () => {
-    const { orgB, environment } = await seed();
-    await rejects(
-      db.environment.update({ where: { id: environment.id }, data: { orgId: orgB.id } }),
-    ).rejects.toThrow(/immutable/);
+  test('a Project Organization is immutable while linked to a Deployment', async () => {
+    const { orgB } = await seed();
     await rejects(
       db.project.update({ where: { projectId: '1001' }, data: { orgId: orgB.id } }),
     ).rejects.toThrow(/immutable while linked/);
-  });
-
-  test('a concurrent Environment first use writes one audit entry', async () => {
-    const { orgA } = await seed();
-    const repo = new EnvironmentRepo(db, audit);
-    const input = {
-      orgId: orgA.id,
-      name: 'staging',
+    expect(await db.project.findUniqueOrThrow({ where: { projectId: '1001' } })).toMatchObject({
       projectId: '1001',
-      deploymentId: SHA,
-      actor: 'test-client',
-    };
-    const results = await Promise.allSettled(
-      Array.from({ length: 8 }, () => repo.createWithAudit(input)),
-    );
-    expect(results.every((result) => result.status === 'fulfilled')).toBe(true);
-    const created = results.filter(
-      (result) => result.status === 'fulfilled' && result.value.created,
-    );
-    expect(created).toHaveLength(1);
-    expect(await db.environment.count({ where: { orgId: orgA.id, name: 'staging' } })).toBe(1);
-    expect(
-      await db.auditEntry.count({
-        where: { projectId: '1001', type: 'environment.created' },
-      }),
-    ).toBe(1);
+    });
   });
 
   test('the database rejects a duplicate Project, SHA and Environment tuple', async () => {
-    const { orgA, environment } = await seed();
+    await seed();
     await rejects(
       db.deploy.create({
         data: {
-          orgId: orgA.id,
           projectId: '1001',
-          environmentId: environment.id,
           deploymentId: SHA,
+          environment: 'production',
           title: 'duplicate',
           dateStarted: new Date(),
         },
       }),
     ).rejects.toHaveProperty('code', 'P2002');
+    // The same SHA in another Environment is a different Deployment.
+    await db.deploy.create({
+      data: {
+        projectId: '1001',
+        deploymentId: SHA,
+        environment: 'staging',
+        title: 'other-environment',
+        dateStarted: new Date(),
+      },
+    });
+    expect(await db.deploy.count()).toBe(2);
   });
 
   test('the Deploy URL CHECK accepts https and rejects other schemes', async () => {
-    const { orgA, environment } = await seed();
+    await seed();
     const insert = (url: string, sha: string) =>
       db.deploy.create({
         data: {
-          orgId: orgA.id,
           projectId: '1001',
-          environmentId: environment.id,
           deploymentId: sha,
+          environment: 'production',
           title: `url-probe-${sha[0]}`,
           dateStarted: new Date(),
           url,
@@ -185,21 +138,11 @@ describe.skipIf(!dbTestEnabled)('v3 deployment database rules', () => {
   });
 
   test('writes one audit entry per Deployment with the SHA column set', async () => {
-    const { orgA } = await seed();
-    const environmentRepo = new EnvironmentRepo(db, audit);
+    await seed();
     const deployRepo = new DeployRepo(db, audit);
-    const { record: environment } = await environmentRepo.createWithAudit({
-      orgId: orgA.id,
-      name: 'staging',
-      projectId: '1001',
-      deploymentId: 'f'.repeat(40),
-      actor: 'test-client',
-    });
     await deployRepo.append({
-      orgId: orgA.id,
       projectId: '1001',
-      environmentId: environment.id,
-      environment: environment.name,
+      environment: 'staging',
       deploymentId: 'f'.repeat(40),
       title: 'deploy-2',
       dateStarted: new Date(),
@@ -207,19 +150,36 @@ describe.skipIf(!dbTestEnabled)('v3 deployment database rules', () => {
     });
     const entries = await db.auditEntry.findMany({ orderBy: { seq: 'asc' } });
     expect(entries.map((entry) => [entry.projectId, entry.type])).toEqual([
-      ['1001', 'environment.created'],
       ['1001', 'deploy.created'],
     ]);
-    const environmentCreated = entries[0];
-    expect(environmentCreated?.payload).toMatchObject({ deploymentId: 'f'.repeat(40) });
-    const created = entries[1];
+    const created = entries[0];
     expect(created?.payload).toMatchObject({
       deploymentId: 'f'.repeat(40),
       projectId: '1001',
-      orgId: orgA.id,
       title: 'deploy-2',
       environment: 'staging',
     });
+  });
+
+  test('redacts a client-supplied Environment in the deploy.created audit payload', async () => {
+    await seed();
+    const deployRepo = new DeployRepo(db, audit);
+    await deployRepo.append({
+      projectId: '1001',
+      environment: 'Authorization: Bearer abcdef123456',
+      deploymentId: 'f'.repeat(40),
+      title: 'deploy-2',
+      dateStarted: new Date(),
+      actor: 'test-client',
+    });
+    const entry = await db.auditEntry.findFirstOrThrow({
+      where: { projectId: '1001', type: 'deploy.created' },
+    });
+    expect(JSON.stringify(entry.payload)).not.toContain('abcdef123456');
+    const stored = await db.deploy.findFirstOrThrow({
+      where: { projectId: '1001', deploymentId: 'f'.repeat(40) },
+    });
+    expect(stored.environment).toBe('Authorization: Bearer abcdef123456');
   });
 
   test('closure sets closedAt once and writes one deployment.closed entry', async () => {
@@ -244,28 +204,8 @@ describe.skipIf(!dbTestEnabled)('v3 deployment database rules', () => {
     ).rejects.toThrow(/append-only/);
   });
 
-  test('an Environment and its audit entry commit in one transaction', async () => {
-    const { orgA } = await seed();
-    const failing = {
-      appendInTransaction: async () => {
-        throw new Error('audit unavailable');
-      },
-    } as unknown as AuditRepo;
-    await expect(
-      new EnvironmentRepo(db, failing).createWithAudit({
-        orgId: orgA.id,
-        name: 'staging',
-        projectId: '1001',
-        deploymentId: SHA,
-        actor: 'test-client',
-      }),
-    ).rejects.toThrow('audit unavailable');
-    expect(await db.environment.count({ where: { orgId: orgA.id, name: 'staging' } })).toBe(0);
-    expect(await db.auditEntry.count()).toBe(0);
-  });
-
   test('an audit append failure rolls back the deploy write', async () => {
-    const { orgA, environment } = await seed();
+    await seed();
     const failing = {
       appendInTransaction: async () => {
         throw new Error('audit unavailable');
@@ -273,10 +213,8 @@ describe.skipIf(!dbTestEnabled)('v3 deployment database rules', () => {
     } as unknown as AuditRepo;
     await expect(
       new DeployRepo(db, failing).append({
-        orgId: orgA.id,
         projectId: '1001',
-        environmentId: environment.id,
-        environment: environment.name,
+        environment: 'staging',
         deploymentId: 'f'.repeat(40),
         title: 'deploy-2',
         dateStarted: new Date(),

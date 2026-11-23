@@ -145,17 +145,10 @@ export function migrationOwnershipViolations(sql: string): string[] {
 const V3_TRIGGERS = [
   { name: 'deploys_no_update', event: 'UPDATE', table: 'deploys' },
   { name: 'deploys_no_delete', event: 'DELETE', table: 'deploys' },
-  { name: 'deploys_org_consistency', event: 'INSERT', table: 'deploys' },
-  { name: 'environments_org_immutable', event: 'UPDATE', table: 'environments' },
   { name: 'projects_org_link_guard', event: 'UPDATE', table: 'projects' },
 ] as const;
 
-const V3_RESTRICT_CONSTRAINTS = [
-  'environments_org_id_fkey',
-  'deploys_org_id_fkey',
-  'deploys_project_id_fkey',
-  'deploys_environment_id_fkey',
-] as const;
+const V3_RESTRICT_CONSTRAINTS = ['deploys_project_id_fkey'] as const;
 
 const REMOVED_V3_OBJECTS = [
   'CREATE TABLE "releases"',

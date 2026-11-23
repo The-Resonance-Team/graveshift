@@ -28,17 +28,14 @@ describe.skipIf(!dbTestEnabled)('Deployment closure is Environment-scoped', () =
     await db.project.create({
       data: { projectId: '1001', orgId: org.id, name: 'First', slug: 'first' },
     });
-    const production = await db.environment.create({ data: { orgId: org.id, name: 'production' } });
-    const staging = await db.environment.create({ data: { orgId: org.id, name: 'staging' } });
     const data = {
-      orgId: org.id,
       projectId: '1001',
       deploymentId: SHA,
       title: 'deploy',
       dateStarted: new Date(),
     };
-    await db.deploy.create({ data: { ...data, environmentId: production.id } });
-    await db.deploy.create({ data: { ...data, environmentId: staging.id } });
+    await db.deploy.create({ data: { ...data, environment: 'production' } });
+    await db.deploy.create({ data: { ...data, environment: 'staging' } });
     const repo = new DeployRepo(db, audit);
     expect(await repo.closeFirst('1001', SHA, 'production')).toBe(true);
     expect(await repo.listClosed('1001')).toEqual([
@@ -46,8 +43,7 @@ describe.skipIf(!dbTestEnabled)('Deployment closure is Environment-scoped', () =
     ]);
     const open = await db.deploy.findMany({
       where: { projectId: '1001', deploymentId: SHA, closedAt: null },
-      include: { environment: true },
     });
-    expect(open.map((row) => row.environment.name)).toEqual(['staging']);
+    expect(open.map((row) => row.environment)).toEqual(['staging']);
   });
 });

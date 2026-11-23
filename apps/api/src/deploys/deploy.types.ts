@@ -31,16 +31,8 @@ export function assertProjectBound(
   }
 }
 
-export interface EnvironmentRecord {
-  id: string;
-  orgId: string;
-  name: string;
-  createdAt: string;
-}
-
 /** The API never exposes the internal uuid row key of a Deployment. */
 export interface DeployRecord {
-  orgId: string;
   projectId: string;
   deploymentId: string;
   environment: string;

@@ -47,9 +47,6 @@ export interface paths {
   "/api/organizations/{orgId}/oauth-clients": {
     post: operations["OrganizationsController_createOAuthClient"];
   };
-  "/api/organizations/{orgId}/environments": {
-    get: operations["EnvironmentsController_list"];
-  };
   "/api/organizations/{orgId}/projects/{projectId}/deployments": {
     get: operations["DeploysController_list"];
     post: operations["DeploysController_create"];
@@ -133,7 +130,7 @@ export interface components {
        */
       title: string;
       /**
-       * @description The Organization-scoped Environment name.
+       * @description The Environment name on the Deployment.
        * @example production
        */
       environment: string;
@@ -177,7 +174,7 @@ export interface components {
       fingerprint: string;
       /** @description The deployed commit SHA, resolved by the server. */
       deploymentId?: string;
-      /** @description The Organization-scoped Environment name. */
+      /** @description The Environment name on the Deployment. */
       environment?: string;
       payload: {
         [key: string]: unknown;
@@ -603,40 +600,12 @@ export interface operations {
       };
     };
   };
-  EnvironmentsController_list: {
-    responses: {
-      /** @description The Environments in the caller Organization. */
-      200: {
-        content: {
-          "application/json": {
-              id: string;
-              orgId: string;
-              name: string;
-              /** Format: date-time */
-              createdAt: string;
-            }[];
-        };
-      };
-      /** @description No valid bearer client token was presented. */
-      401: {
-        content: never;
-      };
-      /** @description The Organization or scope is not allowed. */
-      403: {
-        content: never;
-      };
-      /** @description The client exceeded the rate limit. */
-      429: {
-        content: never;
-      };
-    };
-  };
   DeploysController_list: {
     parameters: {
       query?: {
         /** @description The deployed commit SHA. */
         deploymentId?: string;
-        /** @description The Organization-scoped Environment name. */
+        /** @description The Environment name on the Deployment. */
         environment?: string;
       };
       path: {
@@ -649,7 +618,6 @@ export interface operations {
       200: {
         content: {
           "application/json": ({
-              orgId: string;
               projectId: string;
               deploymentId: string;
               environment: string;
@@ -697,7 +665,6 @@ export interface operations {
       201: {
         content: {
           "application/json": {
-            orgId: string;
             projectId: string;
             deploymentId: string;
             environment: string;

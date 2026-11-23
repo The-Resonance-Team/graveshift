@@ -1363,67 +1363,6 @@
         ]
       }
     },
-    "/api/organizations/{orgId}/environments": {
-      "get": {
-        "operationId": "EnvironmentsController_list",
-        "parameters": [],
-        "responses": {
-          "200": {
-            "description": "The Environments in the caller Organization.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "properties": {
-                      "id": {
-                        "type": "string"
-                      },
-                      "orgId": {
-                        "type": "string"
-                      },
-                      "name": {
-                        "type": "string"
-                      },
-                      "createdAt": {
-                        "type": "string",
-                        "format": "date-time",
-                        "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
-                      }
-                    },
-                    "required": [
-                      "id",
-                      "orgId",
-                      "name",
-                      "createdAt"
-                    ],
-                    "additionalProperties": false
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No valid bearer client token was presented."
-          },
-          "403": {
-            "description": "The Organization or scope is not allowed."
-          },
-          "429": {
-            "description": "The client exceeded the rate limit."
-          }
-        },
-        "security": [
-          {
-            "bearer": []
-          }
-        ],
-        "tags": [
-          "environments"
-        ]
-      }
-    },
     "/api/organizations/{orgId}/projects/{projectId}/deployments": {
       "get": {
         "operationId": "DeploysController_list",
@@ -1460,7 +1399,7 @@
             "name": "environment",
             "required": false,
             "in": "query",
-            "description": "The Organization-scoped Environment name.",
+            "description": "The Environment name on the Deployment.",
             "schema": {
               "type": "string"
             }
@@ -1476,9 +1415,6 @@
                   "items": {
                     "type": "object",
                     "properties": {
-                      "orgId": {
-                        "type": "string"
-                      },
                       "projectId": {
                         "type": "string"
                       },
@@ -1520,7 +1456,6 @@
                       }
                     },
                     "required": [
-                      "orgId",
                       "projectId",
                       "deploymentId",
                       "environment",
@@ -1596,9 +1531,6 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "orgId": {
-                      "type": "string"
-                    },
                     "projectId": {
                       "type": "string"
                     },
@@ -1640,7 +1572,6 @@
                     }
                   },
                   "required": [
-                    "orgId",
                     "projectId",
                     "deploymentId",
                     "environment",
@@ -4439,7 +4370,7 @@
           },
           "environment": {
             "type": "string",
-            "description": "The Organization-scoped Environment name.",
+            "description": "The Environment name on the Deployment.",
             "example": "production"
           },
           "dateStarted": {
@@ -4552,7 +4483,7 @@
           },
           "environment": {
             "type": "string",
-            "description": "The Organization-scoped Environment name."
+            "description": "The Environment name on the Deployment."
           },
           "payload": {
             "type": "object",

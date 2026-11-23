@@ -54,7 +54,6 @@ describe('EventIngestService deployment binding', () => {
   test('stamps a resolved Deployment onto the published envelope', async () => {
     const { service, published, findByDeployment, appended } = setup();
     findByDeployment.mockResolvedValue({
-      orgId: 'org-1',
       projectId: '12345',
       deploymentId: SHA,
       environment: 'production',

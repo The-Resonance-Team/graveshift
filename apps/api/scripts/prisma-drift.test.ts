@@ -106,14 +106,14 @@ describe('v3 deployment migration ownership', () => {
 
   test('fails when a deploy trigger moves to a removed table', () => {
     const moved = v3Sql.replace(
-      'BEFORE INSERT ON "deploys"\nFOR EACH ROW EXECUTE FUNCTION enforce_deploy_organization();',
-      'BEFORE INSERT ON "deploy_projects"\nFOR EACH ROW EXECUTE FUNCTION enforce_deploy_organization();',
+      'BEFORE UPDATE ON "deploys"\nFOR EACH ROW EXECUTE FUNCTION prevent_deploy_mutation();',
+      'BEFORE UPDATE ON "deploy_projects"\nFOR EACH ROW EXECUTE FUNCTION prevent_deploy_mutation();',
     );
     expect(moved).not.toBe(v3Sql);
     expect(v3DeployViolations(moved).join('\n')).toContain(
-      'v3 trigger deploys_org_consistency targets INSERT on "deploy_projects"',
+      'v3 trigger deploys_no_update targets UPDATE on "deploy_projects"',
     );
-    expect(v3DeployViolations(moved).join('\n')).toContain('expected INSERT on "deploys"');
+    expect(v3DeployViolations(moved).join('\n')).toContain('expected UPDATE on "deploys"');
   });
 
   test('fails when a removed table returns to the migration', () => {

@@ -43,9 +43,7 @@ describe('POST /api/events deployment binding (e2e)', () => {
     const key = await pluginKey('bound-deploy');
     const sha = 'a'.repeat(40);
     await ctx.deploys.append({
-      orgId: 'org-1',
       projectId: '12345',
-      environmentId: 'env-1',
       environment: 'production',
       deploymentId: sha,
       title: 'deploy-1',

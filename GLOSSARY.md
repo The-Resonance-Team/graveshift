@@ -27,7 +27,7 @@ This file holds system-wide domain terms only. Each area's terms live in the `GL
 ## Delivery
 
 - **Deployment** — one commit SHA deployed by one Project into one Environment. It is the root for triage of Events, data, Incidents and the agent's resolution point. Deployment is the user-facing noun. Code identifiers keep the legacy name Deploy, as in the Deploy model, DeployRepo and the deploys table.
-- **Environment** — an Organization-scoped name for the place where code runs, such as production or sandbox.
+- **Environment** — a name on a Deployment, such as production or sandbox; it is not a separate table.
 - **Deploy** — to place code in an Environment.
 - **title** — the commit or tag title read from git at the deployed SHA.
 

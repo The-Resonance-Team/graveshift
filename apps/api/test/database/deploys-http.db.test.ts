@@ -82,7 +82,7 @@ describe.skipIf(!dbTestEnabled)('v3 deployment HTTP with real stores', () => {
     );
     const runningApp = app;
     if (runningApp === undefined) throw new Error('Test application did not boot');
-    return { org, token, close: () => runningApp.close() };
+    return { org, identity, token, close: () => runningApp.close() };
   }
 
   test('concurrent redeploys append one row and one audit entry', async () => {
@@ -112,6 +112,64 @@ describe.skipIf(!dbTestEnabled)('v3 deployment HTTP with real stores', () => {
       const stored = await db.deploy.findFirstOrThrow({ where: { deploymentId: SHA } });
       expect(stored.title).toBe('ci-deploy');
       expect(stored.deploymentId).toBe(SHA);
+    } finally {
+      await close();
+    }
+  });
+
+  test('a cross-Organization Project cannot be used through the Deployment routes', async () => {
+    const { org, identity, token, close } = await boot();
+    const running = app;
+    if (running === undefined) throw new Error('Test application did not boot');
+    try {
+      // A real Organization and Project in the database, outside the client's Organization.
+      const foreign = await db.organization.create({ data: { name: 'Beta', slug: 'beta' } });
+      await db.project.create({
+        data: { projectId: '2001', orgId: foreign.id, name: 'Foreign', slug: 'foreign' },
+      });
+      identity.organizations.set(foreign.id, {
+        id: foreign.id,
+        name: 'Beta',
+        slug: 'beta',
+        createdAt: new Date().toISOString(),
+      });
+      await identity.addProject({
+        projectId: '2001',
+        orgId: foreign.id,
+        name: 'Foreign',
+        slug: 'foreign',
+      });
+
+      const ownOrgRoute = `/api/organizations/${org.id}/projects/2001/deployments`;
+      const foreignOrgRoute = `/api/organizations/${foreign.id}/projects/2001/deployments`;
+      const posted = {
+        deploymentId: 'b'.repeat(40),
+        title: 'cross-org',
+        environment: 'production',
+        dateStarted: STARTED,
+      };
+
+      await request(running.getHttpServer())
+        .get(ownOrgRoute)
+        .set('authorization', `Bearer ${token}`)
+        .expect(403);
+      await request(running.getHttpServer())
+        .post(ownOrgRoute)
+        .set('authorization', `Bearer ${token}`)
+        .send(posted)
+        .expect(403);
+      await request(running.getHttpServer())
+        .get(foreignOrgRoute)
+        .set('authorization', `Bearer ${token}`)
+        .expect(403);
+      await request(running.getHttpServer())
+        .post(foreignOrgRoute)
+        .set('authorization', `Bearer ${token}`)
+        .send(posted)
+        .expect(403);
+
+      expect(await db.deploy.count()).toBe(0);
+      expect(await db.auditEntry.count()).toBe(0);
     } finally {
       await close();
     }

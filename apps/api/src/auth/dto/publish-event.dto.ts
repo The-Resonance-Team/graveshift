@@ -60,7 +60,7 @@ export class PublishEventDto {
   @Matches(/^[0-9a-f]{40}$/)
   deploymentId?: string | null;
 
-  @ApiPropertyOptional({ description: 'The Organization-scoped Environment name.' })
+  @ApiPropertyOptional({ description: 'The Environment name on the Deployment.' })
   @IsOptional()
   @IsString()
   @MaxLength(100)

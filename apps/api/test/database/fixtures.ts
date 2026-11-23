@@ -30,11 +30,6 @@ export const OWNED_MODELS = [
   { key: 'credential', table: 'credentials', count: (db: PrismaService) => db.credential.count() },
   { key: 'haunting', table: 'hauntings', count: (db: PrismaService) => db.haunting.count() },
   { key: 'workItem', table: 'work_items', count: (db: PrismaService) => db.workItem.count() },
-  {
-    key: 'environment',
-    table: 'environments',
-    count: (db: PrismaService) => db.environment.count(),
-  },
   { key: 'deploy', table: 'deploys', count: (db: PrismaService) => db.deploy.count() },
 ] as const satisfies readonly {
   key: keyof PrismaService;
