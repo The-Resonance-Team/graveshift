@@ -9,7 +9,22 @@ export const EVENTS_SUBJECT_FILTER = `${SUBJECT_PREFIX}.>`;
 /** The filter a per-Grave detection consumer uses. */
 export const DETECTION_FILTER_SUBJECT = `${SUBJECT_PREFIX}.*.detection.>`;
 
-const safeToken = /^[A-Za-z0-9_-]+$/;
+function isSafeChar(char: string): boolean {
+  const code = char.charCodeAt(0);
+  return (
+    (code >= 65 && code <= 90) ||
+    (code >= 97 && code <= 122) ||
+    (code >= 48 && code <= 57) ||
+    code === 45 ||
+    code === 95
+  );
+}
+
+function isSafeToken(value: string): boolean {
+  if (value.length === 0) return false;
+  for (const char of value) if (!isSafeChar(char)) return false;
+  return true;
+}
 
 /**
  * Map a service name to one safe NATS subject token. A service that already
@@ -17,12 +32,12 @@ const safeToken = /^[A-Za-z0-9_-]+$/;
  * // ponytail: one-token replacement, upgrade if two services collide on one token
  */
 export function safeSubjectToken(service: string): string {
-  if (safeToken.test(service)) return service;
+  if (isSafeToken(service)) return service;
   // One linear pass. A backtracking replace on untrusted text can be slow.
   const kept: string[] = [];
   let pendingUnderscore = false;
   for (const char of service) {
-    if (safeToken.test(char)) {
+    if (isSafeChar(char)) {
       kept.push(char);
       pendingUnderscore = false;
     } else if (!pendingUnderscore) {
@@ -54,7 +69,7 @@ function assertSafeSubjectPart(value: string, name: 'projectId' | 'type'): void 
     throw new Error(`Unsafe ${name} in event subject`);
   }
   const tokens = value.split('.');
-  if (tokens.some((token) => !safeToken.test(token))) {
+  if (tokens.some((token) => !isSafeToken(token))) {
     throw new Error(`Unsafe ${name} in event subject`);
   }
 }

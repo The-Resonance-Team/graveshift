@@ -25,23 +25,6 @@ export interface SentryEnvelopeLimits {
   maxEventItemBytes?: number;
 }
 
-/**
- * The HTTP body arrives as `unknown`. A value that is an array or a string has
- * different `length`, `indexOf` and subscript behaviour, so reject it here.
- * A CodeQL type-confusion guard must sit at the parser entry, not only at the
- * route, because the parser is also called from the key guard.
- */
-function assertEnvelopeBody(value: unknown): asserts value is Buffer {
-  if (
-    value === null ||
-    typeof value !== 'object' ||
-    Array.isArray(value) ||
-    !Buffer.isBuffer(value)
-  ) {
-    throw new SentryEnvelopeParseError('Envelope body must be a Buffer');
-  }
-}
-
 function jsonObject(line: Buffer): Record<string, unknown> {
   const text = line.toString('utf8');
   if (line.includes(13) || text !== text.trim()) {
@@ -75,7 +58,9 @@ function eventPayload(bytes: Buffer, maxBytes: number): unknown {
 }
 
 export function readSentryEnvelopeHeader(body: Buffer): SentryEnvelopeHeader {
-  assertEnvelopeBody(body);
+  if (typeof body !== 'object' || body === null || Array.isArray(body) || !Buffer.isBuffer(body)) {
+    throw new SentryEnvelopeParseError('Envelope body must be a Buffer');
+  }
   const end = lineEnd(body, 0);
   const header = jsonObject(body.subarray(0, end));
   return {
@@ -89,7 +74,9 @@ export function parseSentryEnvelope(
   body: Buffer,
   limits: SentryEnvelopeLimits = {},
 ): SentryEnvelope {
-  assertEnvelopeBody(body);
+  if (typeof body !== 'object' || body === null || Array.isArray(body) || !Buffer.isBuffer(body)) {
+    throw new SentryEnvelopeParseError('Envelope body must be a Buffer');
+  }
   const maxEnvelopeBytes = limits.maxEnvelopeBytes ?? MAX_ENVELOPE_BYTES;
   const maxEventItemBytes = limits.maxEventItemBytes ?? MAX_EVENT_ITEM_BYTES;
   if (body.length > maxEnvelopeBytes) throw new SentryEnvelopeTooLargeError();
