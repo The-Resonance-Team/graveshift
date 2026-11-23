@@ -144,6 +144,8 @@ describe('deployment routes (HTTP)', () => {
     { title: '' },
     { title: 'x'.repeat(201) },
     { environment: '' },
+    { environment: 'Authorization: Bearer abcdef123456' },
+    { environment: 'prod deployment' },
     { dateStarted: 'yesterday' },
     { url: 'javascript:alert(1)' },
     { releaseId: 'release-1' },

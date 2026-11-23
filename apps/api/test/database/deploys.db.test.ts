@@ -137,7 +137,7 @@ describe.skipIf(!dbTestEnabled)('v3 deployment database rules', () => {
     expect(await db.deploy.count()).toBe(2);
   });
 
-  test('writes one audit entry per Deployment with the SHA column set', async () => {
+  test('writes one audit entry per Deployment with the SHA in its payload', async () => {
     await seed();
     const deployRepo = new DeployRepo(db, audit);
     await deployRepo.append({
@@ -161,14 +161,14 @@ describe.skipIf(!dbTestEnabled)('v3 deployment database rules', () => {
     });
   });
 
-  test('redacts a client-supplied Environment in the deploy.created audit payload', async () => {
+  test('redacts Environment and title in the deploy.created audit payload', async () => {
     await seed();
     const deployRepo = new DeployRepo(db, audit);
     await deployRepo.append({
       projectId: '1001',
       environment: 'Authorization: Bearer abcdef123456',
       deploymentId: 'f'.repeat(40),
-      title: 'deploy-2',
+      title: 'Authorization: Bearer fedcba987654',
       dateStarted: new Date(),
       actor: 'test-client',
     });
@@ -176,6 +176,7 @@ describe.skipIf(!dbTestEnabled)('v3 deployment database rules', () => {
       where: { projectId: '1001', type: 'deploy.created' },
     });
     expect(JSON.stringify(entry.payload)).not.toContain('abcdef123456');
+    expect(JSON.stringify(entry.payload)).not.toContain('fedcba987654');
     const stored = await db.deploy.findFirstOrThrow({
       where: { projectId: '1001', deploymentId: 'f'.repeat(40) },
     });

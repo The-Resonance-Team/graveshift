@@ -8,7 +8,9 @@ The Release term and the Release table are removed. No Release model, column or 
 
 One Deployment belongs to one Project. A Project has many Deployments. Environment is now a name string on a Deployment, such as production or sandbox; it is not an Organization-scoped table. There is no Environment model or route. Tenant identity comes from the Project.
 
-The decision follows the Sentry research and the review of PR #125. Sentry uses Release and Environment tags on Events and carries no deploy id on an Event. Graveshift deliberately differs. Every Event, Haunting, AuditEntry and fix or agent context carries `deploymentId`. `projectId` stays on all of them for access control and audit.
+The decision follows the Sentry research and the review of PR #125. Sentry uses Release and Environment tags on Events and carries no deploy id on an Event. Graveshift deliberately differs. Deployment and Fix audit payloads carry `deploymentId`; the AuditEntry model has no such column. `projectId` stays on every row and audit entry for access control and audit.
+
+Only events ingested with a bound Deployment carry `deploymentId`. Collector events and Sentry events arrive with no SHA, so they stay unassigned and their Hauntings have no fix point. This is accepted for this version.
 
 Vercel confirms one Deployment belongs to one Project and one commit creates one Deployment per connected Project.
 

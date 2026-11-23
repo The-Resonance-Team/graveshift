@@ -203,6 +203,12 @@ Work item assignment controls the fix trigger:
 | `needs_agent_<name>` | `autoFix: true` | The assigned Agent starts automatically |
 | `needs_agent_<name>` | `autoFix: false` | The assigned Agent waits for Fix now |
 
+## Deployments
+
+A Deployment is one code version, named by a 40-hex commit SHA, that one Project places in an Environment name. The Release term is removed. `POST /api/organizations/:orgId/projects/:projectId/deployments` appends one row; a redeploy of the same SHA and Environment name returns the existing row. There is no Environment table or route. Tenant identity comes from the Project. `GET` on the same path lists the route Project's Deployments. Deployments are append-only in SQL; one `closed_at` transition is allowed.
+
+`POST /api/events` stamps a bound `(deploymentId, environment)` on the envelope. An unknown SHA stays unassigned with one `event.unassigned` audit entry. `events/poll` skips Deployment events closed for that SHA and Environment pair. The fix path patches at the deployed SHA, checks tree and blob SHAs there, and never re-reads branch HEAD. Collector and Sentry events carry no SHA, so their Hauntings have no fix point.
+
 `packages/events` owns the `Publisher` interface, `createNatsPublisher`, `createHttpPublisher` and an in-memory fake under `./testing`. Subjects have the form `graveshift.<projectId>.<lane>.<type>`. The NATS publisher uses the official NATS client packages `@nats-io/transport-node` and `@nats-io/jetstream`, and sends the envelope `id` as the `msgID` option. The NATS connection code is under `./nats`; it is not loaded when a caller imports only `Publisher`, the HTTP publisher or the fake. The HTTP publisher posts an envelope to `/api/events` with a bearer plugin key. The API publishes the envelope to JetStream after validation and redaction.
 
 Assignment selects the exact Agent. Keyword routing cannot replace an explicit assignment. The Routing agent fills that Agent's params. Missing params produce one durably saved question. A complete answer resumes the same attempt and original trigger. An incomplete answer assigns the Work item to a person.

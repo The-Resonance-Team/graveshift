@@ -12,6 +12,7 @@ import {
 
 export const DEPLOYMENT_ID_PATTERN = /^[0-9a-f]{40}$/;
 const NUMERIC_ID = /^\d{1,20}$/;
+export const ENVIRONMENT_PATTERN = /^[A-Za-z0-9._-]{1,100}$/;
 
 /** The Organization id and the Project id are bound by DeployAuthGuard. */
 export class DeploymentParamsDto {
@@ -36,8 +37,7 @@ export class DeploymentListQueryDto {
   @ApiPropertyOptional({ description: 'The Environment name on the Deployment.' })
   @IsOptional()
   @IsString()
-  @MinLength(1)
-  @MaxLength(100)
+  @Matches(ENVIRONMENT_PATTERN)
   environment?: string;
 }
 
@@ -55,8 +55,7 @@ export class CreateDeployDto {
 
   @ApiProperty({ description: 'The Environment name on the Deployment.', example: 'production' })
   @IsString()
-  @MinLength(1)
-  @MaxLength(100)
+  @Matches(ENVIRONMENT_PATTERN)
   environment!: string;
 
   @ApiProperty({ example: '2026-11-22T07:00:00.000Z' })

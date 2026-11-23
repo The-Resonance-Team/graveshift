@@ -7,7 +7,6 @@ import {
   IsOptional,
   IsString,
   Matches,
-  MaxLength,
 } from 'class-validator';
 
 export class PublishEventDto {
@@ -63,7 +62,7 @@ export class PublishEventDto {
   @ApiPropertyOptional({ description: 'The Environment name on the Deployment.' })
   @IsOptional()
   @IsString()
-  @MaxLength(100)
+  @Matches(/^[A-Za-z0-9._-]{1,100}$/)
   environment?: string | null;
 
   @ApiProperty({ type: Object, additionalProperties: true })

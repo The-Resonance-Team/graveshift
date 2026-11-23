@@ -84,8 +84,8 @@ export class DeployRepo {
         payload: {
           deploymentId: input.deploymentId,
           projectId: input.projectId,
-          title: input.title,
-          // The Environment is client-supplied, so it is redacted in the audit payload.
+          title: redact(input.title),
+          // Client-supplied text is redacted before it enters the append-only audit chain.
           environment: redact(input.environment),
         },
       });
@@ -100,7 +100,9 @@ export class DeployRepo {
         ...(filter.deploymentId === undefined ? {} : { deploymentId: filter.deploymentId }),
         ...(filter.environment === undefined ? {} : { environment: filter.environment }),
       },
-      orderBy: [{ dateStarted: 'asc' }, { createdAt: 'asc' }],
+      // Order by the columns of deploys_project_id_created_at_id_idx so a filtered
+      // list uses the index instead of a sort.
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
     });
     return rows.map(toRecord);
   }
@@ -116,7 +118,7 @@ export class DeployRepo {
       await this.audit.appendInTransaction(tx, projectId, {
         actor: 'daemon',
         type: 'deployment.closed',
-        payload: { deploymentId, projectId, environment },
+        payload: { deploymentId, projectId, environment: redact(environment) },
       });
       return true;
     });
