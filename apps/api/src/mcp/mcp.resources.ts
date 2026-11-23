@@ -2,7 +2,6 @@ import { Inject, Injectable, NotFoundException, UseGuards } from '@nestjs/common
 import { ResourceTemplate } from '@nestjs/mcp';
 
 import { McpScopeGuard } from './mcp-scope.guard';
-import { deepRedact } from './mcp.redact';
 import { writeAutopsy } from './mcp.postmortem';
 import { MCP_BACKEND, type McpBackend } from './mcp.types';
 
@@ -27,6 +26,6 @@ export class McpResources {
     }
     const view = await this.backend.getIncident(incidentId);
     if (!view) throw new NotFoundException();
-    return deepRedact(writeAutopsy(view));
+    return writeAutopsy(view);
   }
 }

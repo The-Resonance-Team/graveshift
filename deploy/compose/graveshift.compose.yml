@@ -52,9 +52,15 @@ services:
       DOCKER_PROXY_URL: http://socket-proxy-actuator:2375
       ACTUATOR_HMAC_SECRET: ${ACTUATOR_HMAC_SECRET:-}
       GRAVESHIFT_CONFIG_PATH: /config/graveshift.config.yaml
+      GRAVESHIFT_API_INTERNAL_TOKEN: ${GRAVESHIFT_API_INTERNAL_TOKEN:-}
+      GRAVESHIFT_API_URL: ${GRAVESHIFT_ACTUATOR_API_URL:-http://host.docker.internal:3000}
+      GRAVESHIFT_MODE: ${GRAVESHIFT_MODE:-propose}
+      # Durable admission store. A named volume keeps consumed tokens across restart.
+      ACTUATOR_STATE_DIR: /data/graveshift-actuator
       BUN_RUNTIME_TRANSPILER_CACHE_PATH: '0'
     volumes:
       - ../../graveshift.config.yaml:/config/graveshift.config.yaml:ro
+      - actuator-state:/data/graveshift-actuator
     networks: [core, act]
     depends_on: [socket-proxy-actuator]
     healthcheck:
@@ -68,6 +74,36 @@ services:
       interval: 10s
       timeout: 3s
       retries: 3
+
+  api:
+    # Opt-in API process. The root admin keys belong here, never on the actuator.
+    # Start with: docker compose --profile api up
+    <<: *hardened
+    profiles: [api]
+    build:
+      context: ../..
+      dockerfile: deploy/compose/bun.Dockerfile
+      args: { APP_PATH: apps/api }
+    image: graveshift/api:local
+    command: ['bun', 'src/main.ts']
+    environment:
+      GRAVESHIFT_CONFIG_PATH: /config/graveshift.config.yaml
+      DATABASE_URL: postgresql://graveshift:graveshift@postgres:5432/graveshift
+      GRAVESHIFT_NATS_URL: nats://nats:4222
+      GRAVESHIFT_NATS_STREAM: GRAVESHIFT_EVENTS
+      GRAVESHIFT_API_INTERNAL_TOKEN: ${GRAVESHIFT_API_INTERNAL_TOKEN:-}
+      GRAVESHIFT_DAEMON_INTERNAL_TOKEN: ${GRAVESHIFT_DAEMON_INTERNAL_TOKEN:-}
+      GRAVESHIFT_OAUTH_JWT_SECRET: ${GRAVESHIFT_OAUTH_JWT_SECRET:-}
+      GRAVESHIFT_ROOT_ADMIN_EMAIL: ${GRAVESHIFT_ROOT_ADMIN_EMAIL:-}
+      GRAVESHIFT_ROOT_ADMIN_PASSWORD: ${GRAVESHIFT_ROOT_ADMIN_PASSWORD:-}
+      GRAVESHIFT_ROOT_ORG_NAME: ${GRAVESHIFT_ROOT_ORG_NAME:-}
+      GRAVESHIFT_ROOT_ORG_SLUG: ${GRAVESHIFT_ROOT_ORG_SLUG:-}
+      BUN_RUNTIME_TRANSPILER_CACHE_PATH: '0'
+    volumes:
+      - ../../graveshift.config.yaml:/config/graveshift.config.yaml:ro
+    ports: ['127.0.0.1:${GRAVESHIFT_API_PORT:-3000}:3000']
+    networks: [core]
+    depends_on: [postgres, nats]
 
   postgres:
     # Local durable store. The default password is a local placeholder, not a secret.
@@ -123,6 +159,7 @@ networks:
     name: candy
 
 volumes:
+  actuator-state:
   postgres-data:
-  prometheus-data:
   nats-data:
+  prometheus-data:

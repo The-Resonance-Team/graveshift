@@ -2,6 +2,7 @@ import { Inject, Injectable, UnauthorizedException } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
 
+import { IDENTITY_REPO, type IdentityRepo } from '../identity/identity.types';
 import { CREDENTIAL_CONFIG, type AuthConfig, type Principal } from './auth.types';
 import { MANAGEMENT_SCOPE } from './scopes';
 import { verifyOAuthPrincipal, type OAuthPayload } from './oauth-principal';
@@ -12,7 +13,10 @@ export class OAuthClientCredentialsStrategy extends PassportStrategy(
   Strategy,
   'oauth-client-credentials',
 ) {
-  constructor(@Inject(CREDENTIAL_CONFIG) private readonly config: AuthConfig) {
+  constructor(
+    @Inject(CREDENTIAL_CONFIG) private readonly config: AuthConfig,
+    @Inject(IDENTITY_REPO) private readonly identity: IdentityRepo,
+  ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       secretOrKey: config.jwtSecret,
@@ -22,8 +26,8 @@ export class OAuthClientCredentialsStrategy extends PassportStrategy(
     });
   }
 
-  validate(payload: OAuthPayload): Principal {
-    const principal = verifyOAuthPrincipal(payload, this.config);
+  async validate(payload: OAuthPayload): Promise<Principal> {
+    const principal = await verifyOAuthPrincipal(payload, this.config, this.identity);
     // The credential-management surface stays gated on tokens:manage.
     if (!principal.scopes.includes(MANAGEMENT_SCOPE)) throw new UnauthorizedException();
     return principal;

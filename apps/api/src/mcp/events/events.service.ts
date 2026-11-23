@@ -1,13 +1,15 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { ProtocolError } from '@modelcontextprotocol/server';
-
-import { deepRedact } from '../mcp.redact';
+import { redact } from '@graveshift/redactor';
 import {
-  eventTypeFor,
+  CLOSED_DEPLOYMENTS,
   EVENT_TYPES,
   findEventType,
   MCP_EVENT_SOURCE,
   type EventReadResult,
+  type EventOccurrence,
+  type EventFilter,
+  type ClosedDeploymentQuery,
   type EventSource,
   type EventTypeDescriptor,
   type StoredEvent,
@@ -22,19 +24,48 @@ const NEXT_POLL_MS = 30_000;
 // Bound the work in one poll even when a long run of entries does not match.
 const SCAN_LIMIT = 10_000;
 
+/**
+ * Nonsecret identity metadata (ADR 0019). These values keep their text so an
+ * event stays the same across retries, serialization and MCP output. Every
+ * other string — including payload free text — is still redacted.
+ */
+const IDENTITY_KEYS = new Set([
+  'eventId',
+  'incidentId',
+  'traceId',
+  'fingerprint',
+  'id',
+  'projectId',
+  'deploymentId',
+  'environment',
+  'service',
+  'type',
+  'name',
+  'timestamp',
+]);
+
+function redactOccurrence<T>(value: T, key?: string): T {
+  if (typeof value === 'string') {
+    return (key !== undefined && IDENTITY_KEYS.has(key) ? value : redact(value)) as T;
+  }
+  if (Array.isArray(value)) return value.map((item) => redactOccurrence(item)) as T;
+  if (value !== null && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value).map(([entryKey, item]) => [
+        redact(entryKey),
+        redactOccurrence(item, entryKey),
+      ]),
+    ) as T;
+  }
+  return value;
+}
+
 export interface PollParams {
   name: string;
   arguments?: Record<string, unknown> | undefined;
   cursor?: string | null | undefined;
   maxAgeMs?: number | undefined;
   maxEvents?: number | undefined;
-}
-
-interface EventOccurrence {
-  eventId: string;
-  name: string;
-  timestamp: string;
-  data: Record<string, unknown>;
 }
 
 interface ScanState {
@@ -83,29 +114,18 @@ function decodeCursor(cursor: string): number {
   return seq;
 }
 
-function validateArguments(descriptor: EventTypeDescriptor, args: Record<string, unknown>): void {
-  const schema = descriptor.inputSchema as {
-    properties?: Record<string, { type?: string; enum?: string[] }>;
-  };
-  for (const [key, value] of Object.entries(args)) {
-    const rule = schema.properties?.[key];
-    if (!rule) throw new ProtocolError(INVALID_PARAMS, 'InvalidParams', { reason: 'arguments' });
-    if (rule.type === 'string' && typeof value !== 'string') {
-      throw new ProtocolError(INVALID_PARAMS, 'InvalidParams', { reason: 'arguments' });
-    }
-    if (rule.enum && !rule.enum.includes(String(value))) {
-      throw new ProtocolError(INVALID_PARAMS, 'InvalidParams', { reason: 'arguments' });
-    }
-  }
-}
-
 /** Implements the two v2 Events methods. Payloads are untrusted and get redacted. */
 @Injectable()
 export class EventPollService {
   /** Test seam: a small window exercises the recursive scan with few entries. */
   windowSize?: number;
 
-  constructor(@Inject(MCP_EVENT_SOURCE) private readonly source: EventSource) {}
+  constructor(
+    @Inject(MCP_EVENT_SOURCE) private readonly source: EventSource,
+    @Optional()
+    @Inject(CLOSED_DEPLOYMENTS)
+    private readonly closed?: ClosedDeploymentQuery,
+  ) {}
 
   list(): EventListResult {
     return {
@@ -123,16 +143,15 @@ export class EventPollService {
   async poll(
     params: PollParams,
     scopes: readonly string[],
-    projectId: string,
+    projectId?: string,
   ): Promise<EventPollResult> {
     const descriptor = findEventType(params.name);
     if (!descriptor) throw new ProtocolError(NOT_FOUND, 'NotFound', { kind: 'event' });
-    if (!projectId || !scopes.includes(descriptor.scope)) {
+    if (!scopes.includes(descriptor.scope)) {
       throw new ProtocolError(FORBIDDEN, 'Forbidden', { reason: 'scope', scope: descriptor.scope });
     }
 
-    const args = params.arguments ?? {};
-    validateArguments(descriptor, args);
+    const args = descriptor.arguments(params.arguments ?? {});
 
     const bootstrap = typeof params.cursor !== 'string';
     let afterSeq: number | null = null;
@@ -153,9 +172,19 @@ export class EventPollService {
       last: { firstSeq: 0, headSeq: 0, scannedThroughSeq: 0, events: [], truncated: false },
       scanCursor: afterSeq,
     };
+    // Closure is final and has no timeout. Once a Deployment is closed, its events are
+    // no longer pulled; the Project's watcher and all other Deployments stay alive.
+    const closedKeys =
+      this.closed === undefined || projectId === undefined
+        ? new Set<string>()
+        : new Set(
+            (await this.closed.listClosed(projectId)).map(
+              (key) => `${key.deploymentId}\u0000${key.environment}`,
+            ),
+          );
     // A wider raw window limits recursion when many entries do not match.
     const window = this.windowSize ?? Math.max(maxEvents + 1, 100);
-    await this.scan(state, descriptor, args, floor, maxEvents, window, projectId);
+    await this.scan(state, descriptor, args, floor, maxEvents, window, projectId, closedKeys);
 
     const hasMore = state.found.length > maxEvents || !state.reachedHead;
     const page = state.found.slice(0, maxEvents);
@@ -180,11 +209,12 @@ export class EventPollService {
   private async scan(
     state: ScanState,
     descriptor: EventTypeDescriptor,
-    args: Record<string, unknown>,
+    args: EventFilter,
     floor: number | undefined,
     maxEvents: number,
     window: number,
-    projectId: string,
+    projectId: string | undefined,
+    closedKeys: ReadonlySet<string>,
   ): Promise<void> {
     const read = await this.source.read(state.scanCursor, window);
     state.last = read;
@@ -193,7 +223,7 @@ export class EventPollService {
     state.scannedTotal += Math.max(progress, 0);
 
     for (const stored of read.events) {
-      if (!this.matches(stored, descriptor, args, projectId)) continue;
+      if (!this.matches(stored, descriptor, args, projectId, closedKeys)) continue;
       if (floor !== undefined && Date.parse(stored.envelope.observedAt) < floor) {
         state.truncated = true;
         continue;
@@ -210,31 +240,26 @@ export class EventPollService {
     }
     if (state.scanCursor !== null && read.scannedThroughSeq <= state.scanCursor) return;
     state.scanCursor = read.scannedThroughSeq;
-    return this.scan(state, descriptor, args, floor, maxEvents, window, projectId);
+    return this.scan(state, descriptor, args, floor, maxEvents, window, projectId, closedKeys);
   }
 
+  /** Project isolation, Deployment closure, and the descriptor's declared filters. */
   private matches(
     stored: StoredEvent,
     descriptor: EventTypeDescriptor,
-    args: Record<string, unknown>,
-    projectId: string,
+    args: EventFilter,
+    projectId: string | undefined,
+    closedKeys: ReadonlySet<string>,
   ): boolean {
-    if (stored.envelope.projectId !== projectId) return false;
-    if (eventTypeFor(stored.envelope) !== descriptor.name) return false;
-    if (typeof args.service === 'string' && args.service !== stored.envelope.service) return false;
-    if (typeof args.severity === 'string' && args.severity !== stored.envelope.severity) {
-      return false;
-    }
-    return true;
+    if (projectId !== undefined && stored.envelope.projectId !== projectId) return false;
+    const key = `${stored.envelope.deploymentId ?? ''}\u0000${stored.envelope.environment ?? ''}`;
+    if (closedKeys.has(key)) return false;
+    return descriptor.matches(stored.envelope, args);
   }
 
+  /** Stable identity and declared payload fields, then redaction of untrusted text. */
   private toOccurrence(stored: StoredEvent, descriptor: EventTypeDescriptor): EventOccurrence {
     const { envelope } = stored;
-    return deepRedact({
-      eventId: envelope.id,
-      name: descriptor.name,
-      timestamp: envelope.observedAt,
-      data: descriptor.parsePayload(descriptor.payloadFrom(envelope)),
-    });
+    return redactOccurrence(descriptor.occurrence(envelope));
   }
 }

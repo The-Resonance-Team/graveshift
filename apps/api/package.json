@@ -14,6 +14,8 @@
     "prisma:drift:local": "prisma migrate diff --from-migrations prisma/migrations --to-schema prisma --exit-code"
   },
   "dependencies": {
+    "@date-fns/tz": "1.5.0",
+    "@graveshift/actuator": "workspace:*",
     "@graveshift/agents": "workspace:*",
     "@graveshift/api-contract": "workspace:*",
     "@graveshift/config": "workspace:*",
@@ -21,9 +23,11 @@
     "@graveshift/events": "workspace:*",
     "@graveshift/fixer": "workspace:*",
     "@graveshift/gateway": "workspace:*",
+    "@graveshift/integrations": "workspace:*",
     "@graveshift/patch": "workspace:*",
     "@graveshift/policy": "workspace:*",
     "@graveshift/redactor": "workspace:*",
+    "@graveshift/work": "workspace:*",
     "@modelcontextprotocol/server": "2.4.0",
     "@nestjs/common": "12.6.0",
     "@nestjs/config": "12.1.1",
@@ -39,6 +43,7 @@
     "@prisma/client": "7.10.1",
     "class-transformer": "0.5.1",
     "class-validator": "0.15.1",
+    "date-fns": "4.4.0",
     "passport": "0.7.0",
     "passport-jwt": "4.0.1",
     "pg": "8.23.1",

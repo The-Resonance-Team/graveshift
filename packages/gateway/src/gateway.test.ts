@@ -1,14 +1,14 @@
 import { describe, expect, test } from 'bun:test';
 
 import { createGateway } from './gateway';
-import { binding, config, fakeAdapter, make, task, type Out } from './testing';
+import { acknowledgedAudit, binding, config, fakeAdapter, make, task, type Out } from './testing';
 import type { AuditEvent } from './types';
 
 describe('redaction', () => {
   test('system, prompt and untrusted content are redacted before the model', async () => {
     const fake = fakeAdapter();
     const events: AuditEvent[] = [];
-    const gw = make([binding(fake.adapter)], { onAudit: (event) => events.push(event) });
+    const gw = make([binding(fake.adapter)], { onAudit: acknowledgedAudit(events) });
     const result = await gw.run(
       task({
         system: 'Bearer abcdef123456',
@@ -51,7 +51,7 @@ describe('budget', () => {
         binding(normal.adapter, { name: 'B', dailyBudgetUsd: 100 }),
       ],
       config: { ...config, globalDailyBudgetUsd: 1 },
-      onAudit: () => {},
+      onAudit: acknowledgedAudit(),
     });
     expect((await gw.run(task({ agent: 'A' }))).status).toBe('ok');
     expect(await gw.run(task({ agent: 'B' }))).toMatchObject({
@@ -65,7 +65,7 @@ describe('budget', () => {
 describe('audit', () => {
   test('every terminal path carries agent, task, status, tokens and cost', async () => {
     const events: AuditEvent[] = [];
-    const onAudit = (event: AuditEvent) => events.push(event);
+    const onAudit = acknowledgedAudit(events);
 
     await make([binding(fakeAdapter().adapter)], { onAudit }).run(task());
 
@@ -116,7 +116,12 @@ describe('audit', () => {
         throw new Error('audit storage unavailable');
       },
     });
-    await expect(gw.run(task())).rejects.toThrow('audit storage unavailable');
+    // Durable acknowledgement (ADR 0022) fails closed with a typed unavailable
+    // result instead of releasing the model value when the audit store rejects.
+    await expect(gw.run(task())).resolves.toMatchObject({
+      status: 'unavailable',
+      reason: 'audit_unavailable',
+    });
   });
 
   test('missing controls fail before any model call', async () => {
@@ -138,7 +143,7 @@ describe('retry and validation', () => {
     const gw = createGateway({
       agents: [binding(flaky.adapter)],
       config: { ...config, maxRetries: 2 },
-      onAudit: () => {},
+      onAudit: acknowledgedAudit(),
     });
     expect(await gw.run(task())).toMatchObject({ status: 'ok', value: { answer: 'recovered' } });
     expect(flaky.calls()).toBe(3);
@@ -147,7 +152,7 @@ describe('retry and validation', () => {
     const gw2 = createGateway({
       agents: [binding(broken.adapter)],
       config: { ...config, maxRetries: 2 },
-      onAudit: () => {},
+      onAudit: acknowledgedAudit(),
     });
     expect(await gw2.run(task())).toMatchObject({ status: 'rules_only', reason: 'unavailable' });
     expect(broken.calls()).toBe(3);
@@ -160,7 +165,7 @@ describe('retry and validation', () => {
       reason: 'invalid',
     });
     expect(stubborn.calls()).toBe(2);
-    expect(stubborn.requests[1]!.prompt).toContain('<validation_error>');
+    expect(stubborn.requests[1]!.prompt).toContain('<untrusted_validation_error>');
 
     const fixed = fakeAdapter({ script: [{ nope: 1 }, { answer: 'fixed' }] });
     expect(await make([binding(fixed.adapter)]).run(task())).toMatchObject({
@@ -212,7 +217,7 @@ describe('fallback and permissions', () => {
     const events: AuditEvent[] = [];
     const fake = fakeAdapter({ script: [{ answer: 'ok', permissions: ['deploy'] }] });
     const result = await make([binding(fake.adapter)], {
-      onAudit: (event) => events.push(event),
+      onAudit: acknowledgedAudit(events),
     }).run(task());
     expect(result).toMatchObject({ status: 'rules_only', reason: 'invalid' });
     expect(JSON.stringify(result)).not.toContain('permissions');

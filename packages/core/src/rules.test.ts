@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test';
 import {
   DEFAULT_RULE_ACTIONS,
   detectRuleOverrides,
+  confirmRuleOverrides,
   evaluateEnvelope,
   mergeRules,
   type Rule,
@@ -32,6 +33,32 @@ const rule = (
 ): Rule => ({ id, action, priority, match, enabled });
 
 describe('rule engine', () => {
+  test('confirmation is pure, sorted and independent of duplicate input order', () => {
+    const systemRules = [rule('b', 'detect', 1, {}), rule('a', 'detect', 1, {})];
+    const clientRules = [
+      rule('a', 'suppress', 1, {}),
+      rule('b', 'escalate', 1, {}),
+      rule('a', 'escalate', 2, {}),
+    ];
+    const input = { systemRules, clientRules };
+    const before = structuredClone(input);
+    const pending = confirmRuleOverrides(input);
+    expect(pending).toMatchObject({ accepted: false, overrideIds: ['a', 'b'] });
+    expect(confirmRuleOverrides({ systemRules, clientRules: [...clientRules].reverse() })).toEqual(
+      pending,
+    );
+    expect(confirmRuleOverrides({ ...input, confirmOverrides: true })).toEqual({
+      ...pending,
+      accepted: true,
+    });
+    expect(confirmRuleOverrides({ systemRules, clientRules: [] })).toEqual({
+      accepted: true,
+      overrideIds: [],
+      warning: '',
+    });
+    expect(input).toEqual(before);
+  });
+
   test('RuleSchema accepts a rule and rejects an unknown action', () => {
     const valid = rule('rule-1', 'suppress', 10, { services: ['api'] });
     expect(RuleSchema.safeParse(valid).success).toBe(true);

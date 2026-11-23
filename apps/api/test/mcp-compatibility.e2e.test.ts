@@ -1,13 +1,23 @@
 import 'reflect-metadata';
 import type { Client } from '@modelcontextprotocol/client';
+import { McpModule } from '@nestjs/mcp';
 import { connectMcpClient } from '@nestjs/mcp/testing';
 import { Test, type TestingModule } from '@nestjs/testing';
+import type { AuditDraft } from '@graveshift/core';
+import { ConfigService } from '@nestjs/config';
+import { getHttpClientToken } from '@nestjs/http-client';
 import { parsePolicy } from '@graveshift/policy';
-import { afterAll, beforeAll, describe, expect, spyOn, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
 
-import { AppModule } from '../src/app.module';
+import { AuditRepo } from '../src/audit/audit.repo';
+import { DaemonMcpBackend, HttpMcpBackend } from '../src/mcp/mcp.backend';
+import { McpProjectContext } from '../src/mcp/mcp-project-context';
+import { writeAutopsy } from '../src/mcp/mcp.postmortem';
+import { McpPrompts } from '../src/mcp/mcp.prompts';
+import { McpResources } from '../src/mcp/mcp.resources';
+import { McpTools } from '../src/mcp/mcp.tools';
 import { MCP_BACKEND, MCP_ENV_MODE, MCP_POLICY } from '../src/mcp/mcp.types';
-import { FakeMcpBackend, SECRET } from './fakes/fake-mcp-backend';
+import { FakeMcpBackend, RECORDED_FIXTURE, SECRET } from './fakes/fake-mcp-backend';
 
 const REQUIRED_TOOLS = [
   'list_services',
@@ -49,14 +59,17 @@ describe('MCP server (in-memory client)', () => {
   const backend = new FakeMcpBackend();
 
   beforeAll(async () => {
-    moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-      .overrideProvider(MCP_BACKEND)
-      .useValue(backend)
-      .overrideProvider(MCP_POLICY)
-      .useValue(policy)
-      .overrideProvider(MCP_ENV_MODE)
-      .useValue(undefined)
-      .compile();
+    moduleRef = await Test.createTestingModule({
+      imports: [McpModule.forRoot({ name: 'graveshift-mcp', version: '0.1.0' })],
+      providers: [
+        McpTools,
+        McpPrompts,
+        McpResources,
+        { provide: MCP_BACKEND, useValue: backend },
+        { provide: MCP_POLICY, useValue: policy },
+        { provide: MCP_ENV_MODE, useValue: undefined },
+      ],
+    }).compile();
     client = await connectMcpClient(moduleRef);
     legacy = await connectMcpClient(moduleRef, { era: 'legacy' });
   });
@@ -125,6 +138,7 @@ describe('MCP server (in-memory client)', () => {
         executed: false,
         decision: { effect: 'allow' },
         limits: { enforced: true, counters: expect.any(Object) },
+        audit: { acknowledged: true },
       });
 
       const restart = await client.callTool({
@@ -148,11 +162,133 @@ describe('MCP server (in-memory client)', () => {
     }
   });
 
+  test('propose_fix applies real counters and audits a fail-closed decision when facts are absent', async () => {
+    backend.counters.openPrsLastHour = 3;
+    try {
+      const limited = await client.callTool({
+        name: 'propose_fix',
+        arguments: { incidentId: 'inc1', action: 'open_pr' },
+      });
+      expect(JSON.parse(toolText(limited))).toMatchObject({
+        executed: false,
+        decision: { effect: 'deny', reason: 'rate_limited' },
+      });
+      backend.contextAvailable = false;
+      const missing = await client.callTool({
+        name: 'propose_fix',
+        arguments: { incidentId: 'inc1', action: 'open_pr' },
+      });
+      expect(JSON.parse(toolText(missing))).toMatchObject({
+        executed: false,
+        decision: { effect: 'deny', reason: 'policy_context_unavailable' },
+        audit: { acknowledged: true },
+      });
+      expect(backend.decisions.at(-1)?.payload['reason']).toBe('policy_context_unavailable');
+    } finally {
+      backend.counters.openPrsLastHour = 0;
+      backend.contextAvailable = true;
+    }
+  });
+
+  test('withholds a proposal when its audit cannot be acknowledged', async () => {
+    backend.auditAvailable = false;
+    const count = backend.decisions.length;
+    try {
+      const result = await client.callTool({
+        name: 'propose_fix',
+        arguments: { incidentId: 'inc1', action: 'open_pr' },
+      });
+      expect(result.isError).toBe(true);
+      expect(backend.decisions).toHaveLength(count);
+    } finally {
+      backend.auditAvailable = true;
+    }
+  });
+
   test('answers a malformed resource URI with not found, not a server error', async () => {
     const resource = await client
       .readResource({ uri: 'graveshift://incidents/%E0%A4%A/postmortem' })
       .catch((error: unknown) => error);
     expect(resource).toBeInstanceOf(Error);
     expect(String((resource as Error).message)).toContain('not found');
+  });
+});
+
+describe('production MCP backend', () => {
+  test('reads and verifies the configured project Audit chain through its owner', async () => {
+    const list = mock<AuditRepo['list']>(async () => []);
+    const verifyChain = mock<AuditRepo['verifyChain']>(async () => ({ ok: true, length: 4 }));
+    let daemonData: unknown = [RECORDED_FIXTURE];
+    const post = mock(async (_path: string, _options: object) => ({ data: daemonData }));
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        DaemonMcpBackend,
+        { provide: AuditRepo, useValue: { list, verifyChain, append: async () => ({}) } },
+        {
+          provide: McpProjectContext,
+          useValue: { projectId: 'project-1', require: () => 'project-1' },
+        },
+        {
+          provide: ConfigService,
+          useValue: new ConfigService({
+            GRAVESHIFT_DAEMON_INTERNAL_TOKEN: 'fixture-only-token',
+          }),
+        },
+        { provide: getHttpClientToken('daemon'), useValue: { post } },
+      ],
+    }).compile();
+    try {
+      const backend = moduleRef.get(DaemonMcpBackend);
+      expect(await backend.listAudit({ afterSeq: 2, limit: 3 })).toEqual([]);
+      expect(await backend.verifyChain()).toEqual({ ok: true, length: 4 });
+      expect(list).toHaveBeenCalledWith('project-1', { afterSeq: 2, limit: 3 });
+      expect(verifyChain).toHaveBeenCalledWith('project-1');
+      expect(await backend.listIncidents()).toHaveLength(1);
+      daemonData = RECORDED_FIXTURE;
+      expect((await backend.getIncident('inc1'))?.incident.id).toBe('inc1');
+      expect(post).toHaveBeenLastCalledWith('/internal/read/incident', {
+        headers: { authorization: 'Bearer fixture-only-token' },
+        json: { projectId: 'project-1', id: 'inc1' },
+      });
+      daemonData = null;
+      expect(await backend.getIncident('missing')).toBeUndefined();
+      daemonData = [{ name: 'api', runtime: 'docker' }];
+      expect(await backend.listServices()).toEqual([{ name: 'api', runtime: 'docker' }]);
+      daemonData = ['line'];
+      expect(await backend.tailLogs('api', 1)).toEqual(['line']);
+      daemonData = 2;
+      expect(await backend.queryMetric('up')).toBe(2);
+      const context = await new FakeMcpBackend().policyContext('inc1');
+      daemonData = context;
+      expect(await backend.policyContext('inc1')).toEqual(context);
+      daemonData = { counters: {} };
+      await expect(backend.policyContext('inc1')).rejects.toThrow('Complete policy facts');
+    } finally {
+      await moduleRef.close();
+    }
+  });
+
+  test('audit append uses the authenticated Project of the caller', async () => {
+    const append = mock(async (_projectId: string, _draft: AuditDraft) => ({ key: 'ack' }));
+    const context = { projectId: '12346', require: () => '12346' };
+    const backend = new HttpMcpBackend({} as never, { append } as never, context as never);
+    const draft = {
+      actor: 'policy',
+      type: 'policy.decision',
+      payload: { effect: 'allow' },
+      key: 'mcp:test',
+    } as AuditDraft;
+    expect(await backend.auditDecision(draft)).toEqual({ key: 'mcp:test' });
+    expect(append).toHaveBeenCalledTimes(1);
+    expect(append).toHaveBeenCalledWith('12346', draft);
+  });
+
+  test('Autopsy uses complete canonical facts and preserves recorded times and references', () => {
+    const text = writeAutopsy(RECORDED_FIXTURE);
+    expect(text).toContain('Opened: 2026-01-01T00:00:00.000Z');
+    expect(text).toContain('Resolved: 2026-01-01T00:00:00.000Z');
+    expect(text).toContain('detection-1: observed [REDACTED:aws_key]');
+    expect(text).toContain('2026-01-01T00:00:00.000Z opened: Recorded fixture');
+    expect(text).not.toContain(SECRET);
   });
 });

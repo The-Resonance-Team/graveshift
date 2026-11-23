@@ -14,6 +14,9 @@ import {
   loadOneShotPolicy,
   redactPatch,
   validatePatch,
+  assertPatchBase,
+  assertPatchBlobs,
+  assertPatchMatchesBaseSha,
 } from './one-shot';
 
 const git = async (args: readonly string[], env: Record<string, string>): Promise<string> => {
@@ -58,10 +61,23 @@ try {
     policy,
   );
   const patch = validatePatch(await Bun.file('patch.json').text(), rules);
+  // The artifact on disk must be the redacted, signed payload: an altered file
+  // list must never reach the workspace.
   const expectedPatch = redactPatch(validatePatch(payload, rules));
   if (JSON.stringify(patch) !== JSON.stringify(expectedPatch)) {
     throw new Error('patch artifact does not match the signed payload');
   }
+  // Bind the artifact to the checked-out base before any workspace write.
+  const resolved = Bun.spawnSync(
+    ['git', 'rev-parse', '--verify', `${assertBaseRef(process.env.BASE_REF)}^{commit}`],
+    {
+      cwd: process.cwd(),
+      stdout: 'pipe',
+      stderr: 'pipe',
+    },
+  );
+  if (resolved.exitCode !== 0) throw new Error('base_ref does not resolve to a commit');
+  assertPatchBase(patch, resolved.stdout.toString().trim());
 
   const encoded = Buffer.from(`x-access-token:${token}`).toString('base64');
   process.stdout.write(`::add-mask::${encoded}\n`);
@@ -79,10 +95,16 @@ try {
 
   const workspace = resolve(process.cwd(), process.env.PATCH_WORKSPACE ?? '.');
   const rootReal = realpathSync(workspace);
-  const baseSha = process.env.BASE_SHA;
-  if (!baseSha || !/^[0-9a-f]{40}$/.test(baseSha))
-    throw new Error('base_sha must be a full commit SHA');
+  const baseSha = assertPatchMatchesBaseSha(patch, process.env.BASE_SHA);
   await git(['fetch', '--no-tags', 'origin', baseSha], env);
+  // Stale-blob check runs before checkout, so a changed file blocks every write.
+  await assertPatchBlobs(patch, async (path) => {
+    try {
+      return await git(['rev-parse', '--verify', `${baseSha}:${path}`], env);
+    } catch {
+      return undefined;
+    }
+  });
   const remote = await git(['ls-remote', '--heads', 'origin', `refs/heads/${slug}`], env);
   await git(['checkout', '-B', slug, baseSha], env);
 

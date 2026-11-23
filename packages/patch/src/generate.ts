@@ -3,28 +3,32 @@ import type { GatewayResult, GatewayTask } from '@graveshift/gateway';
 import { redact } from '@graveshift/redactor';
 
 import { guardPatch, PatchRejectedError } from './guard';
-import { type BaseFile, type PatchSummary, resolvePatch, type ResolveResult } from './resolve';
-import { type Patch, type PatchProposal, PatchProposalSchema, type RepoRules } from './schemas';
+import { type Patch, PatchSchema, type RepoRules, RepoRulesSchema } from './schemas';
 
 export const PATCH_TASK = 'generate_patch';
-
-// The prompt carries at most this much real source text per file and in total.
-// ponytail: fixed byte caps bound the prompt; upgrade when the gateway enforces token budgets
-const MAX_PROMPT_FILE_BYTES = 16_384;
-const MAX_PROMPT_TOTAL_BYTES = 98_304;
 
 // The system prompt is rendered from fix.promptTemplate before this call. No role
 // or persona is hard-coded in this package. UNTRUSTED_SYSTEM_NOTE still travels
 // with the rendered template so wrapped values keep their meaning to the model.
+// Everything from the diagnosis is data. The model cannot grant a permission here.
+// The canonical base identity is part of the contract: every patch names the base
+// commit and the base blob of each changed file.
+export const PATCH_SYSTEM = [
+  'Propose a code patch for a work item.',
+  UNTRUSTED_SYSTEM_NOTE,
+  'Answer with one JSON object: {"baseSha","files":[{"path","content","linesChanged","baseBlobSha"}]}.',
+  'baseSha is the 40-hex base commit SHA printed in the prompt.',
+  'content is the full file text, or null to delete the file.',
+  'linesChanged is a non-negative integer count of changed lines.',
+  'baseBlobSha is the 40-hex blob SHA printed for a path that exists at the base.',
+  'For a new path use the empty blob SHA e69de29bb2d1d6434b8b29ae775ad8c2e48c5391.',
+  'For a deletion set content and baseBlobSha to null.',
+  'Use only paths inside allowedPaths. Never change policy, deploy or workflow files.',
+].join('\n');
 
 // The gateway is injected. Tests use a fake run; no network and no key are used here.
 export interface PatchGateway {
-  run(task: GatewayTask<PatchProposal>): Promise<GatewayResult<PatchProposal>>;
-}
-
-export interface PatchBase {
-  readonly baseSha: string;
-  readonly files: readonly BaseFile[];
+  run(task: GatewayTask<Patch>): Promise<GatewayResult<Patch>>;
 }
 
 export interface GeneratePatchOptions {
@@ -35,12 +39,10 @@ export interface GeneratePatchOptions {
   rules: RepoRules;
   diagnosis: string;
   task?: string;
-  // The real base tree the model must pin its proposal to.
-  base: PatchBase;
 }
 
 export type GeneratePatchResult =
-  | { ok: true; patch: Patch; summary: PatchSummary }
+  | { ok: true; patch: Patch }
   | { ok: false; error: PatchRejectedError };
 
 const rejection = (reason: string): GeneratePatchResult => ({
@@ -48,92 +50,59 @@ const rejection = (reason: string): GeneratePatchResult => ({
   error: new PatchRejectedError([reason]),
 });
 
-// Real file text enters the prompt as untrusted data. The model must echo the
-// base SHA and the base blob SHAs back exactly, so the change is pinned.
-function sourceSection(base: PatchBase, rules: RepoRules): string {
-  const lines = [
+export async function generatePatch(options: GeneratePatchOptions): Promise<GeneratePatchResult> {
+  const { gateway, agent, system, diagnosis, task = PATCH_TASK } = options;
+  const checkedRules = RepoRulesSchema.safeParse(options.rules);
+  if (!checkedRules.success) return rejection('invalid repository rules');
+  const rules = checkedRules.data;
+  const fullSystem = `${system}\n${UNTRUSTED_SYSTEM_NOTE}`;
+  const prompt = [
     'Repository rules:',
     `maxFilesChanged=${rules.maxFilesChanged}`,
     `maxLinesChanged=${rules.maxLinesChanged}`,
     `allowedPaths=${JSON.stringify(rules.allowedPaths)}`,
     `forbiddenPaths=${JSON.stringify(rules.forbiddenPaths)}`,
     '',
-    `Base commit SHA: ${base.baseSha}`,
-    'Base files (path then base blob SHA). Echo baseSha and baseBlobSha exactly.',
-    ...base.files.map((file) => `- ${file.path} ${file.blobSha}`),
-  ];
-  let total = 0;
-  let omitted = 0;
-  for (const file of base.files) {
-    if (file.text === null) {
-      lines.push('', `${file.path}: binary file, content not shown`);
-      continue;
-    }
-    if (total >= MAX_PROMPT_TOTAL_BYTES || file.text.length > MAX_PROMPT_FILE_BYTES) {
-      omitted++;
-      continue;
-    }
-    total += file.text.length;
-    lines.push('', wrapUntrusted(`source_file_${file.path}`, file.text));
-  }
-  if (omitted > 0)
-    lines.push('', `${omitted} file(s) too large to show; use full content to change them.`);
-  return lines.join('\n');
-}
+    wrapUntrusted('diagnosis', diagnosis),
+  ].join('\n');
 
-function checked(patchBase: PatchBase, rules: RepoRules) {
-  return (candidate: unknown): string | undefined => {
-    try {
-      const parsed = PatchProposalSchema.safeParse(candidate);
-      if (!parsed.success) return `invalid proposal: ${parsed.error.message}`;
-      const resolved = resolvePatch(parsed.data, patchBase);
-      if (!resolved.ok) return resolved.reasons.join('; ');
-      guardPatch(resolved.patch, rules);
-      return undefined;
-    } catch (error) {
-      return error instanceof Error ? redact(error.message) : 'patch rejected';
-    }
-  };
-}
-
-export async function generatePatch(options: GeneratePatchOptions): Promise<GeneratePatchResult> {
-  const { gateway, agent, system, rules, diagnosis, task = PATCH_TASK, base } = options;
-  const fullSystem = `${system}\n${UNTRUSTED_SYSTEM_NOTE}`;
-  const prompt = [sourceSection(base, rules), '', wrapUntrusted('diagnosis', diagnosis)].join('\n');
-  const validate = checked(base, rules);
-
-  let result: GatewayResult<PatchProposal>;
+  let result: GatewayResult<Patch>;
   try {
     result = await gateway.run({
       agent,
       task,
       system: fullSystem,
       prompt,
-      schema: PatchProposalSchema,
-      validate,
+      schema: PatchSchema,
+      validate: (patch) => {
+        try {
+          guardPatch(patch, rules);
+          return undefined;
+        } catch (error) {
+          if (error instanceof PatchRejectedError) return error.reasons.join('; ');
+          throw error;
+        }
+      },
     });
   } catch (error) {
     const cause = error instanceof Error ? error.message : 'unknown failure';
     return rejection(`patch call failed: ${redact(cause)}`);
   }
 
-  if (result.status === 'unavailable') return rejection('no patch source available');
+  if (result.status === 'unavailable')
+    return rejection(`no patch source available: ${result.reason}`);
   if (result.status === 'invalid') return rejection(`invalid patch: ${result.reason}`);
   if (result.status !== 'ok') return rejection('no patch proposed');
 
-  // Re-validate and resolve outside the gateway: the caller must never see a
-  // value that did not pass the guard and the base check.
-  const parsed = PatchProposalSchema.safeParse(result.value);
+  const parsed = PatchSchema.safeParse(result.value);
   if (!parsed.success) return rejection('invalid patch: schema validation failed');
-  let resolved: ResolveResult;
+
+  // The guard always runs before the caller can see a successful result.
   try {
-    const outcome = resolvePatch(parsed.data, base);
-    if (!outcome.ok) return rejection(`invalid patch: ${outcome.reasons.join('; ')}`);
-    guardPatch(outcome.patch, rules);
-    resolved = outcome;
+    guardPatch(parsed.data, rules);
   } catch (error) {
     if (error instanceof PatchRejectedError) return { ok: false, error };
     return rejection('patch guard failed');
   }
-  return { ok: true, patch: resolved.patch, summary: resolved.summary };
+  return { ok: true, patch: parsed.data };
 }

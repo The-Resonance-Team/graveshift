@@ -6,7 +6,7 @@ import { validEnvelope } from '../../../test/fakes/auth-test-helpers';
 import type { EventsConfig } from './events.config';
 import { NatsEventSource } from './events.source';
 
-const config: EventsConfig = { stream: 'GRAVESHIFT_EVENTS' };
+const config: EventsConfig = { stream: 'GRAVESHIFT_EVENTS', natsUrl: 'nats://local.test:4222' };
 const encoder = new TextEncoder();
 
 interface ReaderOptions {
@@ -15,8 +15,8 @@ interface ReaderOptions {
   message?: (seq: number) => Promise<{ seq: number; data: Uint8Array } | null>;
 }
 
-function fakeReader(options: ReaderOptions): EventsReader {
-  return {
+function fakeReader(options: ReaderOptions) {
+  const reader: EventsReader = {
     streams: {
       info: () =>
         Promise.resolve({
@@ -26,6 +26,7 @@ function fakeReader(options: ReaderOptions): EventsReader {
         options.message ? options.message(query.seq) : Promise.resolve(null),
     },
   };
+  return async () => ({ reader, close: async () => {} });
 }
 
 function bytes(envelope: EventEnvelope): Uint8Array {
@@ -137,7 +138,7 @@ describe('NatsEventSource', () => {
     let resolveConnection!: (value: { reader: EventsReader; close(): Promise<void> }) => void;
     let connects = 0;
     let closes = 0;
-    const reader = fakeReader({ lastSeq: 0 });
+    const handle = await fakeReader({ lastSeq: 0 })();
     const pending = new Promise<{ reader: EventsReader; close(): Promise<void> }>((resolve) => {
       resolveConnection = resolve;
     });
@@ -151,7 +152,7 @@ describe('NatsEventSource', () => {
     );
     const first = source.read(null, 1);
     const second = source.read(null, 1);
-    resolveConnection({ reader, close: async () => void closes++ });
+    resolveConnection({ reader: handle.reader, close: async () => void closes++ });
     await Promise.all([first, second]);
     expect(connects).toBe(1);
     await source.onModuleDestroy();
@@ -160,14 +161,14 @@ describe('NatsEventSource', () => {
 
   test('clears a failed reader connection so a later poll can retry', async () => {
     let connects = 0;
-    const reader = fakeReader({ lastSeq: 0 });
+    const handle = await fakeReader({ lastSeq: 0 })();
     const source = new NatsEventSource(
       { ...config, natsUrl: 'nats://local' },
       undefined,
       async () => {
         connects++;
         if (connects === 1) throw new Error('temporary connect failure');
-        return { reader, close: async () => {} };
+        return { reader: handle.reader, close: async () => {} };
       },
     );
     await expect(source.read(null, 1)).rejects.toThrow('temporary connect failure');

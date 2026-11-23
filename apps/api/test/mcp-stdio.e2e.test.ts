@@ -6,11 +6,21 @@ import { describe, expect, test } from 'bun:test';
 
 const stdioEntry = fileURLToPath(new URL('../src/stdio.ts', import.meta.url));
 const apiDir = fileURLToPath(new URL('../', import.meta.url));
-const env = Object.fromEntries(
-  Object.entries(process.env).filter(
-    (entry): entry is [string, string] => typeof entry[1] === 'string',
-  ),
-);
+// Forward only PATH and the test-only boot vars from `test/setup.ts`. A CI
+// runner exports many host variables; forwarding all of them can break the
+// launcher, and none of them belongs in a child smoke-test process.
+const env: Record<string, string> = {};
+for (const name of [
+  'PATH',
+  'DATABASE_URL',
+  'GRAVESHIFT_API_INTERNAL_TOKEN',
+  'GRAVESHIFT_DAEMON_INTERNAL_TOKEN',
+  'GRAVESHIFT_OAUTH_JWT_SECRET',
+  'GRAVESHIFT_DAEMON_READ_TOKEN',
+] as const) {
+  const value = process.env[name];
+  if (value !== undefined) env[name] = value;
+}
 
 describe('stdio launcher (e2e)', () => {
   test('answers a 2025-06-18 initialize handshake', async () => {

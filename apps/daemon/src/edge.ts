@@ -10,22 +10,30 @@ export interface StopOptions {
 
 export interface HttpListener {
   readonly port: number;
-  stop(options?: StopOptions): void;
+  stop(options?: StopOptions): void | Promise<void>;
 }
 
 export interface StartOptions {
   readonly port: number;
   readonly hostname?: string;
   readonly fetch: FetchHandler;
+  readonly maxRequestBodySize?: number;
+  readonly idleTimeout?: number;
 }
 
 export interface HttpEdge {
   start(options: StartOptions): HttpListener;
 }
 
-export type Serve = (options: { port: number; hostname: string; fetch: FetchHandler }) => {
+export type Serve = (options: {
+  port: number;
+  hostname: string;
+  fetch: FetchHandler;
+  maxRequestBodySize?: number;
+  idleTimeout?: number;
+}) => {
   port: number | undefined;
-  stop(closeActiveConnections?: boolean): void;
+  stop(closeActiveConnections?: boolean): void | Promise<void>;
 };
 
 export class HttpEdgeStartError extends Data.TaggedError('HttpEdgeStartError')<{
@@ -43,6 +51,9 @@ export const startListener = (edge: HttpEdge, options: StartOptions) =>
 // Bun.serve is marked unstable. Keep it behind this boundary so the edge can be replaced.
 export const makeBunEdge = (serve: Serve = (options) => Bun.serve(options)): HttpEdge => ({
   start: ({ hostname = DEFAULT_HOSTNAME, ...options }) => {
+    if (!['127.0.0.1', 'localhost', '::1', '[::1]'].includes(hostname)) {
+      throw new Error('Daemon listener must bind to loopback');
+    }
     const server = serve({ ...options, hostname });
     return {
       port: server.port ?? options.port,

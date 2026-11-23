@@ -13,7 +13,7 @@ inclusion: always
 - Keep every source file under 300 lines (enforced by the lint baseline).
 - `packages/core` Zod schemas are the single source of truth; infer types with `z.infer`.
 - Errors: typed Error subclasses with codes, or Result types. Never throw strings.
-- Tests: Bun test runner. Guardrail packages (policy, redactor, actuator, `core/state`, `fixer/guard`) REQUIRE `fast-check` properties.
+- Tests: Bun test runner. Guardrail packages (policy, redactor, actuator, `core/state`, `patch/guard`) REQUIRE `fast-check` properties.
 - Send every model call through `packages/gateway`. Import the provider SDK only in that package.
 - Docker ONLY via the docker-socket-proxy URL. K8s ONLY via `@kubernetes/client-node` with the in-cluster ServiceAccount.
 - Logging: pino JSON. External content passes `packages/redactor` before logging.

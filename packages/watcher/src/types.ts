@@ -1,4 +1,4 @@
-import type { Incident } from '@graveshift/core';
+import type { EventEnvelope, Incident } from '@graveshift/core';
 
 export const RULE_IDS = [
   'log.error-burst',
@@ -8,6 +8,7 @@ export const RULE_IDS = [
   'metric.5xx-rate',
   'metric.p95-latency',
   'k8s.image-pull',
+  'http.error',
 ] as const;
 export type RuleId = (typeof RULE_IDS)[number];
 
@@ -15,6 +16,9 @@ export type Severity = 'info' | 'warning' | 'critical';
 
 export interface Detection {
   id: string;
+  projectId: string;
+  eventId: string;
+  traceId: string;
   rule: RuleId;
   service: string;
   severity: Severity;
@@ -24,6 +28,7 @@ export interface Detection {
 }
 
 export interface Silence {
+  projectId: string;
   service: string;
   from: string;
   until: string;
@@ -31,14 +36,16 @@ export interface Silence {
 
 export interface IncidentChange {
   type: 'opened' | 'updated';
+  projectId: string;
   incident: Incident;
   severity: Severity;
   detections: Detection[];
 }
 
-export type Outcome =
+export type WatcherOutcome = { envelope: EventEnvelope } & (
   | { status: 'accepted'; detection: Detection; change: IncidentChange }
-  | { status: 'duplicate' | 'suppressed'; detection: Detection };
+  | { status: 'duplicate' | 'suppressed'; detection: Detection }
+);
 
 export const WINDOWS = {
   errorBurstMs: 60_000,

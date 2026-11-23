@@ -1,16 +1,16 @@
 # Runtime Sources — Design
 
 ## Interfaces
-- `RuntimeSource` interface in `packages/core`: `listServices()`, `watchEvents(cb)`, `tailLogs(service, lines)`, `getHealth(service)`, `close()`.
-- `packages/sources-docker` and `packages/sources-k8s` implement it.
+- Collector lifecycle and read contracts live in `packages/integrations`.
+- Docker and Kubernetes own protocol adapters. The shared watch and delivery implementation owns retry, bounded pending work and stop.
 
 ## Data flow
-1. Source emits normalized `RuntimeEvent`s onto the daemon event bus.
-2. A shared contract test suite runs against both implementations.
-3. Watch loop reconnects with capped exponential backoff and an event cursor.
+1. The Collector prepares an Event envelope and publishes through NATS.
+2. It retries a failed publish with the same identity before advancing the delivery cursor.
+3. The daemon consumes the envelope and runs Wraith. Collector code evaluates no rule.
 
 ## Error handling
-- Connection loss emits a `source_disconnected` event, then retries; no unhandled rejections.
+- Connection loss emits a Collector notice. Bounded retries keep publication failure separate from observed source progress. Stop preserves replay eligibility for unacknowledged work.
 
 ## Testing
 - Contract suite shared by both sources; K8s event-mapping unit tests with fixture events.

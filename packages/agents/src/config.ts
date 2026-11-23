@@ -112,6 +112,7 @@ export const AgentConfigSchema = z
       .describe('Name of the environment variable that holds the key; never a key value'),
     allowedTools: z.array(z.string().min(1)),
     dailyBudgetUsd: z.number().min(0),
+    autoFix: z.boolean().default(false),
     escalateTo: z.string().regex(SLUG, 'escalateTo must be an agent slug').optional(),
   })
   .strict()
@@ -146,7 +147,6 @@ export const AgentsFileSchema = z
   .superRefine((file, ctx) => {
     for (const list of ['system', 'client'] as const) {
       const names = new Set<string>();
-      const slugs = new Set<string>();
       file[list].forEach((agent, index) => {
         if (names.has(agent.name)) {
           ctx.addIssue({
@@ -155,32 +155,29 @@ export const AgentsFileSchema = z
             message: `duplicate agent name: ${agent.name}`,
           });
         }
-        if (slugs.has(agent.slug)) {
-          ctx.addIssue({
-            code: 'custom',
-            path: [list, index, 'slug'],
-            message: `duplicate agent slug: ${agent.slug}`,
-          });
-        }
         names.add(agent.name);
-        slugs.add(agent.slug);
       });
     }
-    const slugs = new Set([...file.system, ...file.client].map((agent) => agent.slug));
-    for (const list of ['system', 'client'] as const) {
-      file[list].forEach((agent, index) => {
-        if (agent.escalateTo !== undefined && !slugs.has(agent.escalateTo)) {
-          ctx.addIssue({
-            code: 'custom',
-            path: [list, index, 'escalateTo'],
-            message: `escalateTo must reference an existing agent slug: ${agent.escalateTo}`,
-          });
-        }
-      });
+    const effective = replaceTemplates(file);
+    const slugs = new Set<string>();
+    for (const agent of effective) {
+      if (slugs.has(agent.slug)) {
+        ctx.addIssue({ code: 'custom', message: `duplicate effective agent slug: ${agent.slug}` });
+      }
+      slugs.add(agent.slug);
+    }
+    for (const agent of effective) {
+      if (agent.escalateTo !== undefined && !slugs.has(agent.escalateTo)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `${agent.name}: escalateTo must reference an effective agent slug: ${agent.escalateTo}`,
+        });
+      }
     }
   });
 export type AgentsFile = z.infer<typeof AgentsFileSchema>;
 
+// A client config replaces a system template with the same name. It is not a field merge.
 // A client config replaces a system template with the same name. It is not a field merge.
 export function mergeAgentTemplates(
   systemAgents: readonly AgentConfig[],
@@ -190,6 +187,14 @@ export function mergeAgentTemplates(
   for (const agent of systemAgents) byName.set(agent.name, agent);
   for (const agent of clientAgents) byName.set(agent.name, agent);
   return [...byName.values()];
+}
+
+function replaceTemplates(file: AgentsFile): AgentConfig[] {
+  return mergeAgentTemplates(file.system, file.client);
+}
+
+export function resolveAgents(input: unknown): AgentConfig[] {
+  return replaceTemplates(AgentsFileSchema.parse(input));
 }
 
 // The declared param names are the params of the agent prompt.

@@ -11,3 +11,13 @@ export class DaemonUnavailableError extends Error {
     this.cause = cause;
   }
 }
+
+/** Raised when recorded facts do not satisfy the policy context bound to a Haunting. */
+export class PolicyContextMismatchError extends Error {
+  readonly code = 'POLICY_CONTEXT_MISMATCH';
+
+  constructor() {
+    super('Policy facts do not match this Haunting');
+    this.name = 'PolicyContextMismatchError';
+  }
+}

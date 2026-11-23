@@ -1,146 +1,211 @@
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { spawn } from 'node:child_process';
+import { access } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 
-import { redact } from '@graveshift/redactor';
+import { FixerFault } from './faults';
 
-import { unsafePath } from './guard';
-import { createSpawnRunner, sandboxEnv, type CommandRunner, type SpawnOutcome } from './spawn';
-import type { BaseSnapshot, SourceFile } from './source';
-import type { Patch, PatchFile } from './types';
-
-/**
- * Check commands come from the committed config file, never from the model or
- * the repository. The owner sets them per deployment.
- */
-export interface SandboxConfig {
-  readonly commands: readonly (readonly string[])[];
+export interface SandboxRequest {
+  readonly argv: readonly string[];
+  readonly cwd: string;
+  readonly root: string;
+  readonly env: Readonly<Record<string, string>>;
   readonly timeoutMs: number;
-  /**
-   * Owner-set absolute directories appended to the sandbox `PATH` after
-   * `/usr/bin:/bin`, such as the directory that holds `bun`. There is no
-   * implicit host `PATH`: a command whose program lives outside these
-   * directories cannot start, so the checks fail and no pull request opens.
-   */
-  readonly pathDirs?: readonly string[];
+  readonly noNetwork: true;
 }
 
-/** One recorded check. Output is capped and redacted at capture. */
-export interface CheckOutcome {
-  readonly command: readonly string[];
-  readonly exitCode: number | null;
-  readonly timedOut: boolean;
+export interface CommandResult {
+  readonly exitCode: number;
   readonly stdout: string;
-  readonly stderr: string;
-  readonly stdoutTruncated: boolean;
-  readonly stderrTruncated: boolean;
+  readonly timedOut: boolean;
 }
 
-export type VerifyResult =
-  | { ok: true; checks: readonly CheckOutcome[] }
-  | { ok: false; reason: string; checks: readonly CheckOutcome[] };
+export type SandboxRunner = (request: SandboxRequest) => Promise<CommandResult>;
 
-/** The injectable workspace seam. Production uses createSandboxWorkspace. */
-export interface FixWorkspace {
-  /** Checkout base, apply the verified patch, then run every check command. */
-  verify(base: BaseSnapshot, patch: Patch, sandbox: SandboxConfig): Promise<VerifyResult>;
-}
-
-export interface SandboxWorkspaceOptions {
-  /** Injected for tests; production spawns through createSpawnRunner. */
-  runner?: CommandRunner;
-  /** Injected for tests; production uses the network-jail runner. */
-  createRunner?: () => CommandRunner;
-}
-
-/** One check: the runner outcome, with output redacted and the command recorded. */
-const checkOf = (command: readonly string[], outcome: SpawnOutcome): CheckOutcome => ({
-  command: [...command],
-  ...outcome,
-  stdout: redact(outcome.stdout),
-  stderr: redact(outcome.stderr),
-});
-
-/** The check recorded when the command could not start at all. */
-const notRunCheck = (command: readonly string[], reason: string): CheckOutcome => ({
-  command: [...command],
-  exitCode: null,
-  timedOut: false,
-  stdout: '',
-  stderr: `check runner failed: ${reason}`,
-  stdoutTruncated: false,
-  stderrTruncated: false,
-});
-
-const failureReason = (command: readonly string[], check: CheckOutcome, timeoutMs: number) =>
-  check.timedOut
-    ? `check timed out after ${timeoutMs}ms: ${command.join(' ')}`
-    : `check failed with exit ${check.exitCode}: ${command.join(' ')}`;
-
-// The sandbox never fails open: a missing jail, a failed check, a timeout or a
-// command that cannot start blocks the pull request, and every one of them is
-// recorded. The temp directory is removed after every run.
-export function createSandboxWorkspace(options: SandboxWorkspaceOptions = {}): FixWorkspace {
-  const runner = options.runner ?? (options.createRunner ?? createSpawnRunner)();
+export function sandboxEnv(root: string): Record<string, string> {
   return {
-    async verify(base, patch, sandbox) {
-      if (sandbox.commands.length === 0) {
-        return { ok: false, reason: 'no_check_commands_configured', checks: [] };
-      }
-      const dir = await mkdtemp(join(tmpdir(), 'graveshift-sandbox-'));
-      const checks: CheckOutcome[] = [];
-      try {
-        for (const file of base.files) {
-          if (unsafePath(file.path))
-            return { ok: false, reason: `unsafe base path ${file.path}`, checks };
-        }
-        for (const file of patch.files) {
-          if (unsafePath(file.path))
-            return { ok: false, reason: `unsafe patch path ${file.path}`, checks };
-        }
-        const checkout = async (file: SourceFile): Promise<void> => {
-          await mkdir(join(dir, dirname(file.path)), { recursive: true });
-          await writeFile(join(dir, file.path), file.bytes);
-        };
-        const write = async (file: PatchFile): Promise<void> => {
-          if (file.content === null) {
-            await rm(join(dir, file.path), { force: true });
-            return;
-          }
-          await mkdir(join(dir, dirname(file.path)), { recursive: true });
-          await writeFile(join(dir, file.path), file.content, 'utf8');
-        };
-        // Checkout and patch writes are independent per path, so they batch.
-        await Promise.all(base.files.map((file) => checkout(file)));
-        await Promise.all(patch.files.map((file) => write(file)));
-        // Checks run one after another: the first failure or timeout stops the run.
-        const runFrom = async (index: number): Promise<VerifyResult> => {
-          if (index >= sandbox.commands.length) return { ok: true, checks };
-          const command = sandbox.commands[index]!;
-          let outcome: SpawnOutcome;
-          try {
-            outcome = await runner({
-              argv: [...command],
-              cwd: dir,
-              env: sandboxEnv(dir, sandbox.pathDirs ?? []),
-              timeoutMs: sandbox.timeoutMs,
-            });
-          } catch (error) {
-            const reason = redact(error instanceof Error ? error.message : 'check runner failed');
-            checks.push(notRunCheck(command, reason));
-            return { ok: false, reason, checks };
-          }
-          const check = checkOf(command, outcome);
-          checks.push(check);
-          if (check.timedOut || check.exitCode !== 0) {
-            return { ok: false, reason: failureReason(command, check, sandbox.timeoutMs), checks };
-          }
-          return runFrom(index + 1);
-        };
-        return await runFrom(0);
-      } finally {
-        await rm(dir, { recursive: true, force: true }).catch(() => undefined);
-      }
-    },
+    PATH: `/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin:${dirname(process.execPath)}`,
+    HOME: join(root, 'home'),
+    TMPDIR: join(root, 'tmp'),
+    LANG: 'C.UTF-8',
+    CI: '1',
+    GIT_CONFIG_NOSYSTEM: '1',
+    GIT_CONFIG_GLOBAL: '/dev/null',
+    GIT_CONFIG_SYSTEM: '/dev/null',
+    GIT_TERMINAL_PROMPT: '0',
+    GIT_CONFIG_COUNT: '3',
+    GIT_CONFIG_KEY_0: 'core.hooksPath',
+    GIT_CONFIG_VALUE_0: '/dev/null',
+    GIT_CONFIG_KEY_1: 'core.fsmonitor',
+    GIT_CONFIG_VALUE_1: 'false',
+    GIT_CONFIG_KEY_2: 'protocol.allow',
+    GIT_CONFIG_VALUE_2: 'never',
   };
 }
+
+function execute(argv: readonly string[], request: SandboxRequest): Promise<CommandResult> {
+  return new Promise((resolve, reject) => {
+    const program = argv[0];
+    if (program === undefined) return reject(new FixerFault('CHECK_FAILED', 'empty check command'));
+    const child = spawn(program, argv.slice(1), {
+      cwd: request.cwd,
+      env: request.env,
+      detached: true,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    });
+    const chunks: Buffer[] = [];
+    let bytes = 0;
+    let timedOut = false;
+    function stop() {
+      if (child.pid !== undefined) {
+        try {
+          process.kill(-child.pid, 'SIGKILL');
+        } catch {
+          /* The process group has exited. */
+        }
+      }
+    }
+    const timer = setTimeout(() => {
+      timedOut = true;
+      stop();
+    }, request.timeoutMs);
+    child.stdout.on('data', (chunk: Buffer) => {
+      bytes += chunk.length;
+      if (bytes > 2 * 1024 * 1024) stop();
+      else chunks.push(chunk);
+    });
+    child.once('error', () => {
+      clearTimeout(timer);
+      stop();
+      reject(new FixerFault('SANDBOX_UNAVAILABLE', 'sandbox process could not start'));
+    });
+    child.once('close', (code) => {
+      clearTimeout(timer);
+      stop();
+      resolve({
+        exitCode: bytes > 2 * 1024 * 1024 ? 1 : (code ?? 1),
+        stdout: Buffer.concat(chunks).toString('utf8'),
+        timedOut,
+      });
+    });
+  });
+}
+
+function macProfile(root: string): string {
+  const tools = [
+    '/usr/bin',
+    '/bin',
+    '/usr/sbin',
+    '/sbin',
+    '/opt/homebrew/bin',
+    '/opt/homebrew/Cellar',
+    '/opt/homebrew/opt',
+    '/Library/Developer',
+    root,
+  ];
+  const reads = [
+    '/System',
+    '/usr',
+    '/bin',
+    '/sbin',
+    '/opt/homebrew/bin',
+    '/opt/homebrew/Cellar',
+    '/opt/homebrew/lib',
+    '/opt/homebrew/opt',
+    '/Library/Developer',
+    '/dev',
+    root,
+  ];
+  return [
+    '(version 1)',
+    '(allow default)',
+    '(deny network*)',
+    // Apple's application.sb and sanitizer-support.sb restrict child access with same-sandbox.
+    '(deny signal)',
+    '(allow signal (target self) (target same-sandbox))',
+    '(deny process-info*)',
+    '(allow process-info* (target self) (target same-sandbox))',
+    '(deny mach-task-name)',
+    '(allow mach-task-name (target self) (target same-sandbox))',
+    '(deny process-exec)',
+    `(allow process-exec (literal ${JSON.stringify(process.execPath)}) ${tools.map((path) => `(subpath ${JSON.stringify(path)})`).join(' ')})`,
+    '(allow process-fork)',
+    '(deny mach-lookup)',
+    '(deny appleevent-send)',
+    '(deny file-read*)',
+    '(allow file-read-metadata)',
+    `(allow file-read* (literal "/") (literal ${JSON.stringify(process.execPath)}) ${reads.map((path) => `(subpath ${JSON.stringify(path)})`).join(' ')})`,
+    '(deny file-write*)',
+    `(allow file-write* (subpath ${JSON.stringify(root)}) (literal "/dev/null"))`,
+  ].join('\n');
+}
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function isolation(request: SandboxRequest): Promise<string[]> {
+  if (process.platform === 'darwin' && (await exists('/usr/bin/sandbox-exec'))) {
+    return ['/usr/bin/sandbox-exec', '-p', macProfile(request.root)];
+  }
+  if (process.platform === 'linux') {
+    const available = await Promise.all(
+      ['/usr/bin/bwrap', '/bin/bwrap'].map(async (path) =>
+        (await exists(path)) ? path : undefined,
+      ),
+    );
+    const executable = available.find((path) => path !== undefined);
+    if (executable) {
+      const args = [
+        executable,
+        '--unshare-all',
+        '--die-with-parent',
+        '--new-session',
+        '--cap-drop',
+        'ALL',
+        '--proc',
+        '/proc',
+        '--dev',
+        '/dev',
+      ];
+      const paths = await Promise.all(
+        ['/usr', '/bin', '/sbin', '/lib', '/lib64'].map(async (path) =>
+          (await exists(path)) ? path : undefined,
+        ),
+      );
+      for (const path of paths) if (path !== undefined) args.push('--ro-bind', path, path);
+      if (!process.execPath.startsWith('/usr/') && !process.execPath.startsWith('/bin/')) {
+        args.push('--ro-bind', process.execPath, process.execPath);
+      }
+      args.push('--bind', request.root, request.root, '--chdir', request.cwd, '--');
+      return args;
+    }
+    // A network namespace alone cannot isolate host files. Require bubblewrap as well.
+    if (await exists('/usr/bin/unshare')) {
+      throw new FixerFault(
+        'SANDBOX_UNAVAILABLE',
+        'network namespaces are available but filesystem isolation needs bubblewrap',
+      );
+    }
+  }
+  throw new FixerFault('SANDBOX_UNAVAILABLE', 'network and filesystem isolation are unavailable');
+}
+
+export const runSandboxed: SandboxRunner = async (request) => {
+  const deadline = performance.now() + request.timeoutMs;
+  const prefix = await isolation(request);
+  const probe = await execute([...prefix, '/usr/bin/true'], {
+    ...request,
+    timeoutMs: Math.min(2000, request.timeoutMs),
+  });
+  if (probe.exitCode !== 0 || probe.timedOut) {
+    throw new FixerFault('SANDBOX_UNAVAILABLE', 'sandbox isolation probe failed');
+  }
+  const remaining = Math.floor(deadline - performance.now());
+  if (remaining <= 0) return { exitCode: 1, stdout: '', timedOut: true };
+  return execute([...prefix, ...request.argv], { ...request, timeoutMs: remaining });
+};

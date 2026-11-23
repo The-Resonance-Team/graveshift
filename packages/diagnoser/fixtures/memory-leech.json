@@ -56,11 +56,11 @@
     "confidence": 0.8,
     "evidence": [
       {
-        "ref": "signal:runtime.oom:worker:1795153634000",
+        "ref": "signal:1",
         "excerpt": "container gs-worker-1 oom"
       },
       {
-        "ref": "file:src/worker.ts",
+        "ref": "file:1",
         "excerpt": "retained.push(Buffer.alloc(LEAK_BYTES, 1))"
       }
     ]

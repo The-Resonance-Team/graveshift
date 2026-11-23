@@ -129,8 +129,12 @@ async function* parseEventStream(
     buffer = lines.pop() ?? '';
     for (const line of lines) {
       if (line.trim() === '') continue;
-      const parsed = DockerEventSchema.safeParse(JSON.parse(line));
-      if (parsed.success) yield parsed.data;
+      try {
+        const parsed = DockerEventSchema.safeParse(JSON.parse(line));
+        if (parsed.success) yield parsed.data;
+      } catch {
+        // One malformed frame does not stop later infrastructure observations.
+      }
     }
   }
 }

@@ -2,8 +2,8 @@ services:
   postgres:
     image: postgres:18.7
     environment:
-      POSTGRES_USER: graveshift_test
-      POSTGRES_DB: graveshift_test
+      POSTGRES_USER: gs_test
+      POSTGRES_DB: graveshift_test_${GRAVESHIFT_DB_TEST_ID:?GRAVESHIFT_DB_TEST_ID is required}
       POSTGRES_PASSWORD: local-test-only
     ports: ['127.0.0.1:${GRAVESHIFT_TEST_PG_PORT:-55438}:5432']
     tmpfs: [/var/lib/postgresql]

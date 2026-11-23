@@ -122,6 +122,19 @@ jobs:
       - name: Test
         run: bun run test
 
+  test-database:
+    needs: changes
+    if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.ci-affected == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # The gate starts its own throwaway Postgres through Docker Compose in
+    # scripts/test-database.ts. No service container and no Graveshift daemon run here.
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: ./.github/actions/setup-bun
+      - name: Database tests
+        run: bun run test:database
+
   build:
     needs: changes
     if: ${{ (github.event_name == 'push' || github.event.pull_request.draft != true) && needs.changes.outputs.ci-affected == 'true' }}
@@ -151,6 +164,7 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: ./.github/actions/setup-bun
       - name: Validate Compose files
         # Dummy values satisfy the ${VAR:?} guards. No broker or daemon starts.
         env:
@@ -161,6 +175,8 @@ jobs:
         run: |
           docker compose -f deploy/compose/graveshift.compose.yml config -q
           docker compose -f deploy/compose/demo.compose.yml config -q
+      - name: Test Compose structure
+        run: bun test ./.github/tests/compose-structure.test.ts
       - name: Validate Dockerfiles
         run: |
           docker build --check -f deploy/compose/bun.Dockerfile .
@@ -168,7 +184,20 @@ jobs:
 
   verify:
     if: ${{ always() && (github.event_name == 'push' || github.event.pull_request.draft != true) }}
-    needs: [changes, format, lint, db, typecheck, test-types, test, build, ci-structure, compose]
+    needs:
+      [
+        changes,
+        format,
+        lint,
+        db,
+        typecheck,
+        test-types,
+        test,
+        test-database,
+        build,
+        ci-structure,
+        compose,
+      ]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

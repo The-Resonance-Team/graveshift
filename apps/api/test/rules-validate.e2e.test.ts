@@ -1,7 +1,9 @@
-import type { INestApplication } from '@nestjs/common';
+import { ValidationPipe, type INestApplication } from '@nestjs/common';
+import { Test } from '@nestjs/testing';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import request from 'supertest';
-import { createApp } from '../src/app.factory';
+import { RulesController } from '../src/rules.controller';
+import { RulesService } from '../src/rules.service';
 
 const systemRule = {
   id: 'rule-1',
@@ -23,7 +25,19 @@ describe('POST /api/rules/validate (e2e)', () => {
   let app!: INestApplication;
 
   beforeEach(async () => {
-    app = await createApp();
+    const moduleRef = await Test.createTestingModule({
+      controllers: [RulesController],
+      providers: [RulesService],
+    }).compile();
+    app = moduleRef.createNestApplication();
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+        errorHttpStatusCode: 422,
+      }),
+    );
     await app.init();
   });
 
@@ -90,6 +104,21 @@ describe('POST /api/rules/validate (e2e)', () => {
         clientRules: [],
       })
       .expect(422);
+  });
+
+  test('returns the same sorted override warning as core without storing a rule', async () => {
+    const systemRules = [systemRule, { ...systemRule, id: 'rule-0' }];
+    const clientRules = [clientOverride, { ...clientOverride, id: 'rule-0' }];
+    const pending = await request(app.getHttpServer())
+      .post('/api/rules/validate')
+      .send({ systemRules, clientRules, confirmOverrides: false })
+      .expect(409);
+    expect(pending.body.overrideIds).toEqual(['rule-0', 'rule-1']);
+    const accepted = await request(app.getHttpServer())
+      .post('/api/rules/validate')
+      .send({ systemRules, clientRules, confirmOverrides: true })
+      .expect(200);
+    expect(accepted.body).toEqual({ accepted: true, ...pending.body });
   });
 
   test('rejects more than 200 rules in one layer', async () => {

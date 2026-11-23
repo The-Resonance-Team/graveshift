@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@graveshift/core": "workspace:*",
+    "@graveshift/integrations": "workspace:*",
     "@kubernetes/client-node": "^2.0.2",
     "zod": "^4.6.7"
   }

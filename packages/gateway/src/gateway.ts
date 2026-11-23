@@ -1,200 +1,165 @@
+import { UNTRUSTED_SYSTEM_NOTE, wrapUntrusted } from '@graveshift/agents/untrusted';
 import { redact } from '@graveshift/redactor';
 
-import { createDailyBudget, type DailyBudget } from './budget';
+import { createAccounting } from './accounting';
+import { acknowledge, type Decision } from './completion';
 import { GatewayConfigSchema, type GatewayConfig } from './config';
 import {
+  GatewayConfigError,
+  UnsupportedTaskError,
   type AgentBinding,
-  type AuditEvent,
+  type AuditSink,
   type FallbackReason,
   type GeneratedObject,
   type GatewayResult,
   type GatewayTask,
-  type Usage,
-  GatewayConfigError,
+  type UnavailableReason,
 } from './types';
 
 export interface GatewayOptions {
   agents: readonly AgentBinding[];
   config: GatewayConfig;
-  onAudit: (event: AuditEvent) => unknown;
+  onAudit: AuditSink;
   now?: () => Date;
 }
 
 type Attempt<T> =
-  | { kind: 'ok'; value: T }
+  | { kind: 'ok'; value: T; model: string }
   | { kind: 'invalid'; reason: string }
-  | { kind: 'failed' }
-  | { kind: 'unpriced' };
-
-const messageOf = (error: unknown): string =>
-  error instanceof Error ? error.message : 'unknown failure';
+  | { kind: 'unavailable'; reason: UnavailableReason };
 
 export function createGateway(options: GatewayOptions) {
+  // The message covers both descriptions: "audit sink is required" and
+  // "durable audit sink is required" (ADR 0022).
   if (typeof options.onAudit !== 'function')
-    throw new GatewayConfigError('an audit sink is required');
+    throw new GatewayConfigError('a durable audit sink is required');
   const config = GatewayConfigSchema.parse(options.config);
-  const names = new Set<string>();
-  for (const { agent } of options.agents) {
-    if (names.has(agent.name)) {
-      throw new GatewayConfigError(`duplicate agent name: ${agent.name}`);
-    }
-    names.add(agent.name);
-  }
-  const globalBudget = createDailyBudget(
-    config.globalDailyBudgetUsd,
-    config.priceTableUsdPer1M,
-    options.now,
-  );
-  const perAgent = new Map<string, DailyBudget>();
-  for (const { agent } of options.agents) {
-    perAgent.set(
-      agent.name,
-      createDailyBudget(agent.dailyBudgetUsd, config.priceTableUsdPer1M, options.now),
-    );
-  }
+  const accounting = createAccounting(options.agents, config, options.now);
 
-  // The result is only redacted, schema-validated data. No tool runs and no permission is granted.
   async function run<T>(task: GatewayTask<T>): Promise<GatewayResult<T>> {
     if (typeof task.validate !== 'function')
       throw new GatewayConfigError('a task validator is required');
-    const system = redact(task.system);
-    const prompt = redact(task.prompt);
-    const binding: AgentBinding | undefined = options.agents.find(
-      (entry) => entry.agent.name === task.agent,
-    );
-    const budget = perAgent.get(task.agent);
-    // ponytail: check and charge are not atomic; concurrent calls can overshoot the budget, reserve tokens when calls run in parallel
-    const total: Usage = { in: 0, out: 0 };
-    let cost = 0;
-    let model = '';
 
-    const totals = () => ({ usage: { ...total }, costUsd: cost });
-
-    const finish = async (result: GatewayResult<T>, reason?: string): Promise<GatewayResult<T>> => {
-      await options.onAudit({
-        agent: task.agent,
-        task: task.task,
-        status: result.status,
-        tokensIn: total.in,
-        tokensOut: total.out,
-        costUsd: cost,
-        ...(model.length === 0 ? {} : { model }),
-        ...(reason === undefined ? {} : { reason: redact(reason) }),
-      });
-      return result;
-    };
-
-    // A failing fallback still ends in a typed result and one audit event.
-    const fallback = (reason: FallbackReason, auditReason: string): Promise<GatewayResult<T>> => {
-      if (task.rulesOnly === undefined) return finish({ status: 'unavailable' }, auditReason);
-      let value: T;
+    const account = accounting.open(task.agent);
+    const binding = accounting.binding(task.agent);
+    const unavailable = (reason: UnavailableReason): Decision<T> => ({
+      result: { status: 'unavailable', reason, ...account.totals() },
+      reason,
+    });
+    const fallback = (reason: FallbackReason, detail: string): Decision<T> => {
+      if (task.rulesOnly === undefined)
+        return { ...unavailable(reason === 'invalid' ? 'unavailable' : reason), reason: detail };
       try {
-        value = task.rulesOnly();
+        return {
+          result: { status: 'rules_only', value: task.rulesOnly(), reason, ...account.totals() },
+          reason: detail,
+        };
       } catch {
-        return finish({ status: 'unavailable' }, `${auditReason}; rules-only fallback failed`);
-      }
-      return finish({ status: 'rules_only', value, reason }, auditReason);
-    };
-
-    const invalid = (reason: string): Promise<GatewayResult<T>> => {
-      const redacted = redact(reason);
-      if (task.rulesOnly === undefined) {
-        return finish({ status: 'invalid', reason: redacted, ...totals() }, redacted);
-      }
-      let value: T;
-      try {
-        value = task.rulesOnly();
-      } catch {
-        return finish({ status: 'unavailable' }, 'rules-only fallback failed');
-      }
-      return finish({ status: 'rules_only', value, reason: 'invalid' }, redacted);
-    };
-
-    if (binding === undefined || budget === undefined) {
-      return fallback('unavailable', 'no adapter for agent');
-    }
-    let available = false;
-    try {
-      available = await binding.adapter.available();
-    } catch {
-      available = false;
-    }
-    if (!available) return fallback('unavailable', 'provider unavailable');
-    if (globalBudget.exhausted() || budget.exhausted()) {
-      return fallback('budget', 'budget exhausted');
-    }
-
-    // Transport errors are retried from config. The raw error never reaches a log or an audit event.
-    const call = async (text: string, triesLeft: number): Promise<GeneratedObject | undefined> => {
-      try {
-        return await binding.adapter.generateObject({
-          system,
-          prompt: text,
-          schema: task.schema,
-          signal: AbortSignal.timeout(config.timeoutMs),
-        });
-      } catch {
-        return triesLeft > 0 ? call(text, triesLeft - 1) : undefined;
+        return {
+          ...unavailable('fallback_unavailable'),
+          reason: `${detail}; rules-only fallback failed`,
+        };
       }
     };
+    const invalid = (reason: string): Decision<T> =>
+      task.rulesOnly === undefined
+        ? { result: { status: 'invalid', reason: redact(reason), ...account.totals() }, reason }
+        : fallback('invalid', reason);
 
-    const generate = async (text: string): Promise<Attempt<T>> => {
-      const response = await call(text, config.maxRetries);
-      if (response === undefined) return { kind: 'failed' };
-      let charged: number;
+    async function decide(): Promise<Decision<T>> {
+      if (task.signal?.aborted) return unavailable('cancelled');
+      if (binding === undefined) return fallback('unavailable', 'no adapter for agent');
+      if (binding.adapter.capability !== 'structured_language')
+        return unavailable('unsupported_task');
+      let available: boolean;
       try {
-        charged = budget.record(response.model, response.usage);
-        globalBudget.record(response.model, response.usage);
+        available = await binding.adapter.available();
       } catch {
-        return { kind: 'unpriced' };
+        available = false;
       }
-      total.in += response.usage.in;
-      total.out += response.usage.out;
-      cost += charged;
-      model = response.model;
+      if (!available) return fallback('unavailable', 'provider unavailable');
+      if (account.exhausted()) return fallback('budget', 'budget exhausted');
+      const adapter = binding.adapter;
+      const system = `${redact(task.system)}\n${UNTRUSTED_SYSTEM_NOTE}`;
+      const prompt = redact(task.prompt);
 
-      if ('validationError' in response) {
-        return { kind: 'invalid', reason: response.validationError };
-      }
-      const parsed = task.schema.safeParse(response.object);
-      let problem: string | undefined;
-      if (parsed.success) {
+      async function call(
+        text: string,
+        remaining: number,
+      ): Promise<{ response: GeneratedObject } | { reason: UnavailableReason }> {
+        if (task.signal?.aborted) return { reason: 'cancelled' };
+        const timeout = AbortSignal.timeout(config.timeoutMs);
+        const signal =
+          task.signal === undefined ? timeout : AbortSignal.any([timeout, task.signal]);
         try {
-          problem = task.validate(parsed.data);
+          return {
+            response: await adapter.generateObject({
+              system,
+              prompt: text,
+              schema: task.schema,
+              signal,
+            }),
+          };
         } catch (error) {
-          problem = messageOf(error);
+          if (error instanceof UnsupportedTaskError) return { reason: 'unsupported_task' };
+          if (error instanceof GatewayConfigError) return { reason: 'configuration_unavailable' };
+          if (task.signal?.aborted) return { reason: 'cancelled' };
+          return remaining > 0 && !signal.aborted
+            ? call(text, remaining - 1)
+            : { reason: 'unavailable' };
         }
-        if (problem === undefined) return { kind: 'ok', value: parsed.data };
-      } else {
-        problem = parsed.error.message;
       }
-      return { kind: 'invalid', reason: problem ?? 'invalid output' };
-    };
 
-    const first = await generate(prompt);
-    if (first.kind === 'unpriced') {
-      return fallback('unavailable', 'model missing from price table');
-    }
-    let final: Attempt<T> = first;
-    if (first.kind === 'invalid') {
-      // The first attempt may have used the last of a budget. Do not spend on a second call.
-      if (globalBudget.exhausted() || budget.exhausted()) {
-        return fallback('budget', 'budget exhausted before validation retry');
+      async function generate(text: string): Promise<Attempt<T>> {
+        const called = await call(text, config.maxRetries);
+        if ('reason' in called) return { kind: 'unavailable', reason: called.reason };
+        const { response } = called;
+        if (!account.record(response))
+          return { kind: 'unavailable', reason: 'pricing_unavailable' };
+        if (task.signal?.aborted) return { kind: 'unavailable', reason: 'cancelled' };
+        if ('validationError' in response)
+          return { kind: 'invalid', reason: response.validationError };
+        try {
+          const parsed = task.schema.safeParse(response.object);
+          if (!parsed.success) return { kind: 'invalid', reason: parsed.error.message };
+          const problem = task.validate(parsed.data);
+          return problem === undefined
+            ? { kind: 'ok', value: parsed.data, model: response.model }
+            : { kind: 'invalid', reason: problem };
+        } catch {
+          return { kind: 'unavailable', reason: 'validation_unavailable' };
+        }
       }
-      final = await generate(
-        `${prompt}\n\n<validation_error>${redact(first.reason)}</validation_error>\nReturn corrected JSON only.`,
-      );
-      if (final.kind === 'unpriced') {
-        return fallback('unavailable', 'model missing from price table');
+
+      let final = await generate(prompt);
+      if (final.kind === 'invalid') {
+        if (account.exhausted())
+          return fallback('budget', 'budget exhausted before validation retry');
+        final = await generate(
+          `${prompt}\n\n${wrapUntrusted('validation_error', redact(final.reason))}\nReturn corrected JSON only.`,
+        );
       }
+      if (final.kind === 'ok') {
+        return {
+          result: {
+            status: 'ok',
+            value: final.value,
+            model: final.model,
+            ...account.totals(),
+          },
+        };
+      }
+      if (final.kind === 'invalid') return invalid(final.reason);
+      return final.reason === 'unavailable'
+        ? fallback('unavailable', 'transport failure')
+        : unavailable(final.reason);
     }
-    if (final.kind === 'ok') {
-      return finish({ status: 'ok', value: final.value, model, ...totals() });
-    }
-    if (final.kind === 'failed') return fallback('unavailable', 'transport failure');
-    return invalid(final.reason);
+
+    const decision = await decide();
+    return acknowledge(options.onAudit, task, decision, account.model());
   }
 
-  return { run, globalBudget, perAgent };
+  return { run, budgetSnapshot: () => accounting.snapshot() };
 }
+
 export type Gateway = ReturnType<typeof createGateway>;

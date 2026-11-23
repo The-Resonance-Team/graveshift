@@ -13,8 +13,6 @@ const base = {
   GRAVESHIFT_EVENT_MAX_BYTES: '2048',
   GRAVESHIFT_EVENT_RATE_LIMIT: '60',
   GRAVESHIFT_EVENT_RATE_TTL_MS: '60000',
-  GRAVESHIFT_OAUTH_CLIENTS:
-    '{"client-1":{"secret":"test-client-secret-123456","projectId":"project-1","scopes":["tokens:manage"]}}',
 };
 
 describe('boot env config', () => {
@@ -55,9 +53,10 @@ describe('boot env config', () => {
     }
   });
 
-  test('rejects malformed client registry JSON', () => {
-    const result = envSchema.safeParse({ ...base, GRAVESHIFT_OAUTH_CLIENTS: '{not json' });
+  test('the OAuth client registry is not read from the environment', () => {
+    const result = envSchema.safeParse(base);
     expect(result.success).toBe(false);
+    expect(base).not.toHaveProperty('GRAVESHIFT_OAUTH_CLIENTS');
   });
 
   test('accepts a strong secret', () => {

@@ -111,40 +111,14 @@ fix:
     Standing prompt: {{AGENT_PROMPT}}
     Model: {{MODEL}}. Provider: {{PROVIDER}}. Daily budget: {{DAILY_BUDGET_USD}} USD.
 
-    Propose a guarded patch for the diagnosis below. The prompt carries the real
-    base commit SHA, the base blob SHA of every file, and the real file text as
-    untrusted data. Take the source from there; never invent file text.
+    Propose a guarded patch for the diagnosis below.
     {{DIAGNOSIS}}
     Repository rules:
     {{RULES}}
-    Answer with one JSON object:
-    {"baseSha","files":[{"path","baseBlobSha","diff","linesChanged"}]}.
-    Prefer one unified diff per file against the base text. Use "content" with the
-    full file text, or null to delete, only when a diff cannot express the change.
-    Echo baseSha and every baseBlobSha exactly as given. For a new file set
-    baseBlobSha to e69de29bb2d1d6434b8b29ae775ad8c2e48c5391.
+    Answer with one JSON object: {"files":[{"path","content","linesChanged"}]}.
+    content is the full file text, or null to delete the file.
     linesChanged is a non-negative integer count of changed lines.
     Use only paths inside allowedPaths. Never change policy, deploy or workflow files.
-  sandbox:
-    # Check commands run in the sandbox with no secrets and no network, before
-    # any pull request. They come only from this file. Empty blocks every fix.
-    commands:
-      - ['bun', 'check']
-      - ['bun', 'test']
-    # Absolute directories added to the sandbox PATH after /usr/bin:/bin, where
-    # the runtimes above live. The host PATH is never inherited, so a command
-    # whose program is outside these directories cannot start and no pull request
-    # opens. Keep this list short and fixed; the owner sets it per deployment.
-    # Nothing here is expanded, so every entry is written out in full. On Linux a
-    # runtime installed per user — the ~/.bun/bin the official bun installer uses,
-    # i.e. the directory `$HOME/.bun/bin` points at for the user that runs the API
-    # — is invisible to a check until its absolute path appears below. Graveshift's
-    # own CI links the runner's bun into one of the directories below, so the
-    # committed defaults stay true there (.github/actions/setup-bun/action.yml).
-    pathDirs:
-      - /usr/local/bin
-      - /opt/homebrew/bin
-    timeoutMs: 120000
   gateway:
     globalDailyBudgetUsd: 10
     maxRetries: 1

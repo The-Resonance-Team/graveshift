@@ -2,7 +2,6 @@ import { Global, Module } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { CREDENTIAL_CONFIG, type AuthConfig } from './auth.types';
-import type { OAuthClientConfig } from './env.schema';
 
 export function createAuthConfig(config: ConfigService): AuthConfig {
   return {
@@ -14,7 +13,6 @@ export function createAuthConfig(config: ConfigService): AuthConfig {
     maxEventBytes: config.getOrThrow<number>('GRAVESHIFT_EVENT_MAX_BYTES'),
     eventRateLimit: config.getOrThrow<number>('GRAVESHIFT_EVENT_RATE_LIMIT'),
     eventRateTtlMs: config.getOrThrow<number>('GRAVESHIFT_EVENT_RATE_TTL_MS'),
-    oauthClients: config.getOrThrow<Record<string, OAuthClientConfig>>('GRAVESHIFT_OAUTH_CLIENTS'),
   };
 }
 

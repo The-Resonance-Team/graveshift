@@ -60,7 +60,7 @@
         "excerpt": "database \"candy_stale\" does not exist"
       },
       {
-        "ref": "signal:runtime.unhealthy:api:1",
+        "ref": "signal:1",
         "excerpt": "3 consecutive failed health checks"
       }
     ]

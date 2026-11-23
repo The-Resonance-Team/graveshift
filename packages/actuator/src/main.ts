@@ -1,9 +1,13 @@
 import { loadGraveshiftConfig } from '@graveshift/config';
 
+import { createDurableAdmission } from './admission-durable';
+import type { RequiredAdmission } from './claims';
 import { createDockerRestarter, createKubeWriter } from './backends';
 import { createActuator } from './execute';
+import { createActionHandler, MAX_ACTION_BODY_BYTES } from './handler';
+import { admissionErrorCode } from './startup-error';
 import { MIN_SECRET_LENGTH } from './sign';
-import { ActuatorError, type KubeWriter } from './types';
+import { ActuatorError, type KubeWriter, type RequiredAudit } from './types';
 
 const env = process.env;
 const log = (level: string, msg: string, extra: Record<string, unknown> = {}) =>
@@ -30,9 +34,38 @@ const kube: KubeWriter = env.KUBERNETES_SERVICE_HOST
       scale: async () => unavailable('kubernetes'),
     };
 
+// ponytail: the signed action claim has no projectId, so the actuator must not
+// append audit to an arbitrary Project chain. Acknowledge locally and report
+// 'pending' until the actuator receives a signed projectId in the claim.
+const requiredAudit: RequiredAudit = async (draft) => ({ key: draft.key });
+const policy = (await loadGraveshiftConfig()).policy;
+
+// Durable admission is mandatory. If the store cannot be opened, do not start.
+const stateDir = env.ACTUATOR_STATE_DIR ?? '/data/graveshift-actuator';
+let durableAdmission: RequiredAdmission;
+try {
+  durableAdmission = createDurableAdmission(
+    `${stateDir}/admission.db`,
+    policy,
+    () => Date.now(),
+    requiredAudit,
+  );
+} catch (error) {
+  // Log only the error code. The store path is deployment-local, not log data.
+  log('fatal', 'Durable admission store is unavailable; refusing to start', {
+    code: admissionErrorCode(error),
+  });
+  process.exit(1);
+}
 const actuator = createActuator({
   secret,
-  policy: (await loadGraveshiftConfig()).policy,
+  requiredAudit,
+  durableAdmission,
+  durableAudit: false,
+  ...(env.GRAVESHIFT_MODE === undefined ? {} : { envMode: env.GRAVESHIFT_MODE }),
+  // Boot config is the single source of truth (base convention); the durable audit
+  // controls from our architecture remain wired alongside it.
+  policy,
   namespace: env.TARGET_NAMESPACE ?? 'candy-shop',
   docker: env.DOCKER_PROXY_URL
     ? createDockerRestarter(env.DOCKER_PROXY_URL)
@@ -40,28 +73,9 @@ const actuator = createActuator({
   kube,
 });
 
-const MAX_BODY = 16 * 1024;
-
 const server = Bun.serve({
   port: Number(env.PORT ?? 2603),
-  async fetch(req) {
-    const { pathname } = new URL(req.url);
-    if (req.method === 'GET' && pathname === '/healthz') return Response.json({ status: 'ok' });
-    if (req.method !== 'POST' || pathname !== '/actions')
-      return Response.json({ error: 'not found' }, { status: 404 });
-    const text = await req.text();
-    if (text.length > MAX_BODY) return Response.json({ error: 'too large' }, { status: 413 });
-    let body: unknown;
-    try {
-      body = JSON.parse(text);
-    } catch {
-      body = null;
-    }
-    const result = await actuator.execute(body);
-    // ponytail: audit events go to stdout, upgrade by posting them to the daemon's audit chain once that endpoint exists
-    log(result.status === 'executed' ? 'info' : 'warn', 'actuation', { audit: result.audit });
-    const status = result.status === 'executed' ? 200 : result.status === 'denied' ? 403 : 502;
-    return Response.json({ status: result.status, reason: result.reason }, { status });
-  },
+  maxRequestBodySize: MAX_ACTION_BODY_BYTES,
+  fetch: createActionHandler(actuator),
 });
 log('info', 'actuator listening', { port: server.port });

@@ -1,7 +1,11 @@
 import type { Diagnosis, Incident } from '@graveshift/core';
 
-import type { CheckRun, GitHubClient, PullRequestState } from './client';
-import type { RepoPolicy } from './types';
+import type { GitHubClient } from './client';
+import { publicationText, type OpenDraftPrInput, writeDraft } from './open-pr';
+import type { PrRef, RepoPolicy } from './types';
+
+export const TEST_BASE_SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+export const TEST_BLOB_SHA = 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb';
 
 export const repo: RepoPolicy = {
   repo: 'xiro/haunted-candy-shop',
@@ -43,33 +47,19 @@ export interface Call {
   args: unknown[];
 }
 
-/** The one argument of one recorded call, or a failure that names the missing call. */
-export function callArg(calls: Call[], method: string, index: number): unknown {
-  const found = calls.find((call) => call.method === method);
-  if (found === undefined) throw new Error(`no ${method} call was made`);
-  return found.args[index];
-}
-
-export function fakeClient(over: { pr?: PullRequestState[]; checks?: CheckRun[][] } = {}) {
+export function fakeClient() {
   const calls: Call[] = [];
-  let pollPr = 0;
-  let pollChecks = 0;
   const record =
     <A extends unknown[], R>(method: string, result: (...args: A) => R) =>
-    async (...args: A): Promise<Awaited<R>> => {
+    async (...args: A): Promise<R> => {
       calls.push({ method, args });
-      return result(...args) as Awaited<R>;
+      return result(...args);
     };
   const client: GitHubClient = {
-    getBaseSha: record('getBaseSha', () => 'base-sha'),
     getCommitTree: record('getCommitTree', () => 'base-tree'),
-    listTree: record('listTree', () => [
-      { path: 'src/app.ts', blobSha: 'blob-base-src-app' },
-      { path: 'README.md', blobSha: 'blob-base-readme' },
-    ]),
-    getBlobBytes: record('getBlobBytes', (_repo: string, blobSha: string) =>
-      Buffer.from(`bytes-of-${blobSha}`, 'utf8'),
-    ),
+    getTree: record('getTree', () => []),
+    readBlob: record('readBlob', () => ''),
+    getExistingDraft: record('getExistingDraft', () => undefined),
     createBlob: record('createBlob', (_repo: string, content: string) => `blob-${content.length}`),
     createTree: record('createTree', () => 'tree-sha'),
     createCommit: record('createCommit', () => 'commit-sha'),
@@ -79,21 +69,22 @@ export function fakeClient(over: { pr?: PullRequestState[]; checks?: CheckRun[][
       url: 'https://github.com/xiro/haunted-candy-shop/pull/42',
     })),
     addLabels: record('addLabels', () => undefined),
-    listCheckRuns: record(
-      'listCheckRuns',
-      () => over.checks?.[Math.min(pollChecks++, over.checks.length - 1)] ?? [],
-    ),
-    getPullRequest: record(
-      'getPullRequest',
-      () =>
-        over.pr?.[Math.min(pollPr++, over.pr.length - 1)] ?? {
-          state: 'open' as const,
-          merged: false,
-          headSha: 'commit-sha',
-        },
-    ),
   };
   return { client, calls };
 }
 
-export const file = (path: string, linesChanged = 1) => ({ path, content: 'x', linesChanged });
+/** Drives the production text and write steps with a base pinned by the test. */
+export async function publishPinned(input: OpenDraftPrInput): Promise<PrRef> {
+  return writeDraft(input, publicationText(input), TEST_BASE_SHA, 'base-tree');
+}
+
+export const file = (
+  path: string,
+  linesChanged = 1,
+  baseBlobSha: string | null = TEST_BLOB_SHA,
+) => ({
+  path,
+  content: 'x',
+  linesChanged,
+  baseBlobSha,
+});

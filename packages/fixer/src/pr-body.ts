@@ -1,91 +1,87 @@
-import { redact } from '@graveshift/redactor';
+import type { Diagnosis, Incident } from '@graveshift/core';
 
-import type { Incident } from '@graveshift/core';
+import { outboundLine, outboundText } from './outbound';
+import type { VerifiedPatch } from './verify';
 
-import type { CheckOutcome } from './sandbox';
-import { SANDBOX_OUTPUT_CAP } from './spawn';
-import type { PullDiffSummary } from './types';
-
-/**
- * A pull request carries identifiers, check results and diff stats. The work
- * item title, the root cause and a Fix now note stay on the work item and in
- * the API result: reviewer-facing prose belongs there, not in the published
- * description, and the fewer copies of request text there are, the smaller the
- * surface that has to stay redacted.
- */
 export interface PrBodyInput {
   incident: Incident;
+  diagnosis: Diagnosis;
   category: string;
-  confidence: number;
   dashboardUrl: string;
   files: string[];
-  checks: readonly CheckOutcome[];
-  diff: PullDiffSummary;
+  verification?: Pick<VerifiedPatch, 'changes' | 'checks'>;
 }
 
-const checkLine = (check: CheckOutcome): string => {
-  const command = redact(check.command.join(' '));
-  if (check.timedOut) return `- \`${command}\`: timed out`;
-  if (check.exitCode === null) return `- \`${command}\`: did not run`;
-  if (check.exitCode === 0) return `- \`${command}\`: passed`;
-  return `- \`${command}\`: exit ${check.exitCode}`;
-};
-
-const checkOutput = (check: CheckOutcome): string[] => {
-  const lines: string[] = [];
-  const stdout = check.stdout.trim();
-  const stderr = check.stderr.trim();
-  if (stdout !== '') {
-    lines.push('', '```', redact(stdout.slice(-2_000)), '```');
-    if (check.stdoutTruncated) lines.push(`(stdout capped at ${SANDBOX_OUTPUT_CAP} bytes)`);
+function dashboardLink(base: string, id: string): string[] {
+  try {
+    const decoded = decodeURIComponent(base);
+    const url = new URL(base);
+    if (
+      !['http:', 'https:'].includes(url.protocol) ||
+      url.username !== '' ||
+      url.password !== '' ||
+      /[\p{Cc}\s]/u.test(decoded) ||
+      outboundText(decoded) !== decoded ||
+      outboundLine(id) !== id
+    ) {
+      return [];
+    }
+    url.pathname = `${url.pathname.replace(/\/$/, '')}/incidents/${encodeURIComponent(id)}`;
+    url.search = '';
+    url.hash = '';
+    return [`[Open the incident in the dashboard](<${url.href}>)`, ''];
+  } catch {
+    return [];
   }
-  if (stderr !== '') {
-    lines.push('', '```', redact(stderr.slice(-2_000)), '```');
-    if (check.stderrTruncated) lines.push(`(stderr capped at ${SANDBOX_OUTPUT_CAP} bytes)`);
-  }
-  return lines;
-};
+}
 
 export function renderPrBody({
   incident,
+  diagnosis,
   category,
-  confidence,
   dashboardUrl,
   files,
-  checks,
-  diff,
+  verification,
 }: PrBodyInput): string {
-  // the link is built from our own values, so it is appended after redaction (the entropy detector would mangle it)
-  const redacted = redact(
+  const evidence = diagnosis.evidence
+    .map((e) => `- \`${outboundLine(e.ref)}\`: ${outboundText(e.excerpt)}`)
+    .join('\n');
+  const redacted = outboundText(
     [
-      `## Exorcism for incident \`${incident.id}\``,
+      `## Exorcism for incident \`${outboundLine(incident.id)}\``,
       '',
-      `**Service:** ${incident.service}  `,
-      `**Category:** ${category}  `,
-      `**Confidence:** ${Math.round(confidence * 100)}%`,
+      `**Service:** ${outboundLine(incident.service)}  `,
+      `**Category:** ${outboundLine(category)}  `,
+      `**Confidence:** ${Math.round(diagnosis.confidence * 100)}%`,
+      '',
+      '### Root cause',
+      diagnosis.rootCause,
+      '',
+      '### Evidence',
+      evidence,
       '',
       '### Changed files',
-      files.map((f) => `- \`${f}\``).join('\n'),
-      '',
-      `### Diff stats (${diff.filesChanged} files, +${diff.additions}/-${diff.deletions})`,
-      '',
-      '### Checks',
-      ...(checks.length === 0 ? ['- none configured'] : checks.flatMap(checkLine)),
-      ...checks.flatMap(checkOutput),
+      files.map((f) => `- \`${outboundLine(f)}\``).join('\n'),
+      ...(verification === undefined
+        ? []
+        : [
+            '',
+            '### Verification',
+            ...verification.checks.map(
+              (check) =>
+                `- Passed: \`${outboundLine(check.command.join(' '))}\` (${check.durationMs} ms)`,
+            ),
+            ...verification.changes.map(
+              (change) =>
+                `- \`${outboundLine(change.path)}\`: +${change.added} / -${change.deleted}`,
+            ),
+          ]),
     ].join('\n'),
   );
-  // No dashboard URL means no link: an empty base would produce a broken relative link.
-  const link =
-    dashboardUrl === ''
-      ? []
-      : [
-          `[Open the incident in the dashboard](${dashboardUrl}/incidents/${encodeURIComponent(incident.id)})`,
-          '',
-        ];
   return [
     redacted,
     '',
-    ...link,
+    ...dashboardLink(dashboardUrl, incident.id),
     '> Opened as a draft by Graveshift. It is never merged automatically: review, run CI, then merge it yourself.',
   ].join('\n');
 }

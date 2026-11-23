@@ -1,7 +1,6 @@
 import { GraveshiftError } from '@graveshift/core';
 
-import { lineDiff } from './diff';
-import type { Patch, RepoRules } from './schemas';
+import { SHA40_PATTERN, type Patch, type RepoRules } from './schemas';
 
 export class PatchRejectedError extends GraveshiftError<'PATCH_REJECTED'> {
   readonly reasons: string[];
@@ -36,8 +35,11 @@ const contentLines = (content: string | null): number =>
 // case-insensitively so .ENV cannot slip through. allowedPaths stay case-sensitive.
 // The real line count of content is an upper bound on changed lines, so the
 // model cannot lower the counted size by under-reporting linesChanged.
+// Base identity is checked here as well so direct publication and one-shot
+// intake reject a patch that carries no usable base before any other effect.
 export function guardPatch(patch: Patch, rules: RepoRules): void {
   const reasons: string[] = [];
+  if (!SHA40_PATTERN.test(patch.baseSha)) reasons.push('baseSha must be a 40-hex git SHA');
   if (patch.files.length === 0) reasons.push('empty patch');
   if (patch.files.length > rules.maxFilesChanged) {
     reasons.push(`${patch.files.length} files exceeds maxFilesChanged ${rules.maxFilesChanged}`);
@@ -55,6 +57,10 @@ export function guardPatch(patch: Patch, rules: RepoRules): void {
   for (const file of patch.files) {
     if (!Number.isInteger(file.linesChanged) || file.linesChanged < 0)
       reasons.push(`${file.path}: invalid line count`);
+    if (file.content === null && file.baseBlobSha !== null)
+      reasons.push(`${file.path}: baseBlobSha must be null for a deletion`);
+    if (file.content !== null && !SHA40_PATTERN.test(file.baseBlobSha ?? ''))
+      reasons.push(`${file.path}: baseBlobSha must be a 40-hex git SHA`);
     if (file.content !== null && contentLines(file.content) > rules.maxLinesChanged) {
       reasons.push(`${file.path}: content exceeds maxLinesChanged ${rules.maxLinesChanged}`);
     }
@@ -73,9 +79,17 @@ export function guardPatch(patch: Patch, rules: RepoRules): void {
   if (reasons.length > 0) throw new PatchRejectedError(reasons);
 }
 
-// One line-count implementation lives in './diff'. It is exact for files inside
-// the LCS limit and an upper bound above it, so a model can never under-report.
+// ponytail: counts the span between common prefix and suffix, an upper bound on the real diff, upgrade if the cap blocks small fixes
 export function diffStats(before: string | null, after: string | null): number {
-  const changed = lineDiff(before ?? '', after ?? '');
-  return changed.additions + changed.deletions;
+  const a = before === null ? [] : before.split('\n');
+  const b = after === null ? [] : after.split('\n');
+  let start = 0;
+  while (start < a.length && start < b.length && a[start] === b[start]) start++;
+  let endA = a.length;
+  let endB = b.length;
+  while (endA > start && endB > start && a[endA - 1] === b[endB - 1]) {
+    endA--;
+    endB--;
+  }
+  return endA - start + (endB - start);
 }

@@ -2,20 +2,29 @@ import { z } from 'zod';
 
 const id = z.string().min(1);
 const timestamp = z.iso.datetime();
-const subjectToken = /^[A-Za-z0-9_-]+$/;
+export const SUBJECT_TOKEN_PATTERN = /^[A-Za-z0-9_-]+$/;
 // A type may span several NATS tokens, but every token must be non-empty.
-const subjectType = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/;
+export const SUBJECT_TYPE_PATTERN = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/;
+/** One Environment name shape shared by every wire layer. */
+export const ENVIRONMENT_PATTERN = /^[A-Za-z0-9._-]{1,100}$/;
+export const EVENT_SEVERITIES = ['info', 'warning', 'critical'] as const;
 
 export const EventEnvelopeSchema = z.object({
   id,
-  projectId: z.string().regex(subjectToken),
+  projectId: z.string().regex(SUBJECT_TOKEN_PATTERN),
   source: id,
   service: id,
-  type: z.string().regex(subjectType),
-  severity: z.enum(['info', 'warning', 'critical']),
+  type: z.string().regex(SUBJECT_TYPE_PATTERN),
+  severity: z.enum(EVENT_SEVERITIES),
   observedAt: timestamp,
   traceId: id,
   fingerprint: id,
+  // A Deployment binding is stamped by the API. A client cannot choose another Project's SHA.
+  deploymentId: z
+    .string()
+    .regex(/^[0-9a-f]{40}$/)
+    .nullish(),
+  environment: z.string().regex(ENVIRONMENT_PATTERN).nullish(),
   payload: z.record(z.string(), z.unknown()),
 });
 export type EventEnvelope = z.infer<typeof EventEnvelopeSchema>;
@@ -32,7 +41,7 @@ export const SignalSchema = z.object({
   id,
   service: id,
   kind: z.enum(SIGNAL_KINDS),
-  severity: z.enum(['info', 'warning', 'critical']),
+  severity: z.enum(EVENT_SEVERITIES),
   source: z.enum(['docker', 'k8s']),
   fingerprint: id,
   message: z.string(),
@@ -167,3 +176,14 @@ export const IncidentViewsSchema = z.array(IncidentViewSchema);
 export const AuditEntriesSchema = z.array(AuditEntrySchema);
 export const LogLinesSchema = z.array(z.string());
 export const MetricValueSchema = z.object({ value: z.number().nullable() }).strict();
+
+// The actuator's idempotent audit draft shape. Kept alongside the daemon wire shapes.
+export const AuditDraftSchema = AuditEntrySchema.pick({
+  actor: true,
+  type: true,
+  incidentId: true,
+  payload: true,
+})
+  .extend({ key: id.max(200) })
+  .strict();
+export type AuditDraft = z.infer<typeof AuditDraftSchema>;

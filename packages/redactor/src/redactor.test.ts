@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import fc from 'fast-check';
 
-import { redact } from './index';
+import { hasSensitiveText, redact } from './index';
 
 const pattern = (re: RegExp) => fc.stringMatching(re);
 const bits = (s: string) =>
@@ -59,6 +59,26 @@ const sep = fc.constantFrom(' ', '\n', '\t', '"', ',', '(');
 const noise = () => fc.stringMatching(/^[~!]{0,20}$/);
 
 describe('redactor', () => {
+  for (const { type, secret, wrap } of CASES.filter((entry) => entry.type !== 'entropy')) {
+    test(`property: recognizes ${type} without exposing detector details`, () => {
+      fc.assert(
+        fc.property(secret, (value) => {
+          expect(hasSensitiveText(wrap(value))).toBe(true);
+          expect(hasSensitiveText(wrap(value))).toBe(true);
+        }),
+        { numRuns: 300 },
+      );
+    });
+  }
+
+  test('recognizes ordinary metadata without applying entropy redaction', () => {
+    const id = '9b67e2a4-8c15-4f09-a2d6-3e851b740c9f';
+    expect(redact(id)).toBe('[REDACTED:entropy]');
+    expect(hasSensitiveText(id)).toBe(false);
+    expect(hasSensitiveText('checkout.http.request')).toBe(false);
+    expect(hasSensitiveText('Bearer [REDACTED:bearer]')).toBe(false);
+  });
+
   for (const { type, secret, wrap } of CASES) {
     test(`property: injected ${type} never appears in output and is typed`, () => {
       fc.assert(

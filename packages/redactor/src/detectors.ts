@@ -44,6 +44,11 @@ export const DETECTORS: readonly Detector[] = [
   },
   { type: 'aws_key', pattern: /\b(?:AKIA|ASIA)[0-9A-Z]{16}\b/g, replacement: '[REDACTED:aws_key]' },
   {
+    type: 'model_key',
+    pattern: /\bsk-(?:proj-|svcacct-|ant-api\d+-)?[A-Za-z0-9_-]{20,}/g,
+    replacement: '[REDACTED:model_key]',
+  },
+  {
     type: 'github_token',
     pattern: /\b(?:gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,})/g,
     replacement: '[REDACTED:github_token]',

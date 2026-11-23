@@ -17,7 +17,7 @@ on:
         required: true
         type: string
       patch_payload:
-        description: Guarded patch payload supplied by the platform.
+        description: Guarded patch with baseSha and per-file baseBlobSha from the platform.
         required: true
         type: string
       policy_decision:

@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import type { AuthInfo } from '@modelcontextprotocol/server';
 
-import { findEventType } from './events/events.types';
+import { canCallMcpMethod } from './mcp.permissions';
 
 export const MCP_READ_SCOPE_ORDER = [
   'incidents:read',
@@ -33,6 +33,14 @@ export const PRIMITIVE_SCOPES: Record<string, string> = {
   propose_fix: 'fix:propose',
 };
 
+const PROTOCOL_METHODS = new Set(['initialize', 'ping', 'server/discover']);
+const DISCOVERY_METHODS = new Set([
+  'tools/list',
+  'prompts/list',
+  'resources/list',
+  'resources/templates/list',
+]);
+
 interface McpCall {
   method?: string;
   params?: { name?: string; uri?: string };
@@ -42,8 +50,6 @@ interface McpHttpRequest {
   authInfo?: AuthInfo & { projectId?: string };
   body?: McpCall | McpCall[];
 }
-
-const PROTOCOL_METHODS = new Set(['initialize', 'ping', 'notifications/initialized']);
 
 /** Checks every MCP request method at the HTTP layer, so a refusal is a real 403. */
 @Injectable()
@@ -60,43 +66,16 @@ export class McpHttpScopeGuard implements CanActivate {
     for (const call of calls) {
       const method = call.method ?? '';
       if (method.startsWith('notifications/') || PROTOCOL_METHODS.has(method)) continue;
-      if (method === 'events/list') {
-        if (!auth.projectId) throw new ForbiddenException();
+      if (DISCOVERY_METHODS.has(method)) {
+        if (!MCP_READ_SCOPE_ORDER.some((scope) => scopes.includes(scope))) {
+          throw new ForbiddenException();
+        }
         continue;
       }
-      const required = this.requiredScope(method, call, scopes);
-      if (!required || !scopes.includes(required)) throw new ForbiddenException();
+      // The Events list scope is bound to the authenticated project.
+      if (method === 'events/list' && !auth.projectId) throw new ForbiddenException();
+      if (!canCallMcpMethod(call, scopes)) throw new ForbiddenException();
     }
     return true;
-  }
-
-  private requiredScope(method: string, call: McpCall, scopes: string[]): string | undefined {
-    if (
-      method === 'tools/list' ||
-      method === 'prompts/list' ||
-      method === 'resources/list' ||
-      method === 'resources/templates/list'
-    ) {
-      return this.broadestReadScope(scopes);
-    }
-    if (method === 'tools/call' || method === 'prompts/get') {
-      const name = call.params?.name;
-      return name ? PRIMITIVE_SCOPES[name] : undefined;
-    }
-    if (method === 'events/poll') {
-      const name = call.params?.name;
-      return name ? findEventType(name)?.scope : undefined;
-    }
-    if (method === 'resources/read') {
-      const uri = call.params?.uri ?? '';
-      return uri.startsWith('graveshift://incidents/') && uri.endsWith('/postmortem')
-        ? 'incidents:read'
-        : undefined;
-    }
-    return undefined;
-  }
-
-  private broadestReadScope(scopes: readonly string[]): string | undefined {
-    return MCP_READ_SCOPE_ORDER.find((scope) => scopes.includes(scope));
   }
 }

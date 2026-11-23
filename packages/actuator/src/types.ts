@@ -1,11 +1,11 @@
-import { GraveshiftError } from '@graveshift/core';
+import * as core from '@graveshift/core';
 import { z } from 'zod';
 
 const id = z.string().min(1);
 const timestamp = z.iso.datetime();
 
 export const ActionSchema = z
-  .object({
+  .strictObject({
     id,
     incidentId: id,
     service: z.string().regex(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/),
@@ -23,7 +23,7 @@ export const ActionSchema = z
   });
 export type Action = z.infer<typeof ActionSchema>;
 
-export const ApprovalClaimsSchema = z.object({
+export const ApprovalClaimsSchema = z.strictObject({
   tokenId: id,
   actionId: id,
   incidentId: id,
@@ -33,13 +33,13 @@ export const ApprovalClaimsSchema = z.object({
 });
 export type ApprovalClaims = z.infer<typeof ApprovalClaimsSchema>;
 
-export const ContextSchema = z.object({
+export const ContextSchema = z.strictObject({
   category: z.string().optional(),
   signals: z.array(z.string()),
   confidence: z.number().min(0).max(1),
 });
 
-export const UnsignedRequestSchema = z.object({
+export const UnsignedRequestSchema = z.strictObject({
   action: ActionSchema,
   approval: ApprovalClaimsSchema,
   context: ContextSchema,
@@ -53,11 +53,34 @@ export type ActionRequest = z.infer<typeof ActionRequestSchema>;
 
 export const TOKEN_TTL_MS = 15 * 60 * 1000;
 
+export const RuntimeOutcomeSchema = z.discriminatedUnion('status', [
+  z.strictObject({ status: z.literal('executed'), reason: z.literal('executed') }),
+  z.strictObject({ status: z.literal('failed'), reason: z.literal('execution_failed') }),
+  z.strictObject({
+    status: z.literal('denied'),
+    reason: z.enum([
+      'ttl_too_long',
+      'not_yet_valid',
+      'expired',
+      'approval_mismatch',
+      'not_an_approver',
+      'circuit_open',
+    ]),
+  }),
+]);
+export type RuntimeOutcome = z.infer<typeof RuntimeOutcomeSchema>;
+
 export interface ActuationResult {
   status: 'executed' | 'denied' | 'failed';
   reason: string;
-  audit: { actor: 'actuator'; type: string; incidentId?: string; payload: Record<string, unknown> };
+  audit: core.AuditDraft;
+  auditStatus: 'acknowledged' | 'pending';
+  knownResult?: RuntimeOutcome;
 }
+
+export type AuditAck = Pick<core.AuditDraft, 'key'>;
+export type RequiredAudit = (draft: core.AuditDraft) => Promise<AuditAck>;
+export type HttpFetch = (url: URL, init?: RequestInit) => Promise<Response>;
 
 export interface DockerRestarter {
   restart(service: string): Promise<void>;
@@ -68,4 +91,4 @@ export interface KubeWriter {
   scale(namespace: string, name: string, replicas: number): Promise<void>;
 }
 
-export class ActuatorError extends GraveshiftError<'ACTUATOR_CONFIG' | 'ACTUATOR_BACKEND'> {}
+export class ActuatorError extends core.GraveshiftError<'ACTUATOR_CONFIG' | 'ACTUATOR_BACKEND'> {}

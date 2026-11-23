@@ -1,35 +1,46 @@
-import { type WorkItem } from '@graveshift/core';
 import type { GraveshiftConfig } from '@graveshift/config';
+import { WORK_COMMANDS } from '@graveshift/work';
 import { Module } from '@nestjs/common';
 
+import { AuditModule } from '../audit/audit.module';
+import { BOOT_CONFIG, type RootBootConfig } from '../config/boot.config';
 import { GRAVESHIFT_CONFIG } from '../config/config.provider';
-import { createFixDeps } from '../fix/fix.deps';
-import { FixService } from '../fix/fix.service';
-import { FIX_DEPS } from '../fix/fix.types';
-import { DEMO_WORK_ITEMS } from './work-item.fixtures';
-import { createWorkItemPolicy, WORK_ITEM_POLICY } from './work-item.policy';
-import { WORK_ITEM_SEED, WorkItemStore } from './work-item.store';
-import { WorkItemsController } from './work-items.controller';
+import { AuditedWorkCommands, WORK_COMMANDS_INNER } from '../fix/audited-work.commands';
+import { DaemonWorkClient } from '../fix/daemon-work.client';
+import { HauntingsModule } from '../hauntings/hauntings.module';
+import { InternalWorkController } from './controllers/internal-work.controller';
+import { WorkIngressController } from './controllers/work-ingress.controller';
+import { WorkItemsController } from './controllers/work-items.controller';
+import {
+  createWorkItemPolicy,
+  gateAutoFix,
+  WORK_AGENTS,
+  WORK_ITEM_POLICY,
+} from './work-item.policy';
+import { WorkItemRepo } from './work-item.repo';
+import { WorkIngressService } from './work-ingress.service';
 
 @Module({
-  controllers: [WorkItemsController],
+  imports: [AuditModule, HauntingsModule],
+  controllers: [WorkItemsController, WorkIngressController, InternalWorkController],
   providers: [
-    WorkItemStore,
-    FixService,
+    WorkItemRepo,
+    WorkIngressService,
+    DaemonWorkClient,
+    AuditedWorkCommands,
+    // The audited boundary is the only command surface a controller may use: it denies a Fix
+    // command with no authenticated audit scope before the daemon is called and writes the one
+    // outcome entry per attempt. Tests replace only the inner transport.
+    { provide: WORK_COMMANDS, useExisting: AuditedWorkCommands },
+    { provide: WORK_COMMANDS_INNER, useExisting: DaemonWorkClient },
     {
-      provide: FIX_DEPS,
-      // The factory reads the open-PR counter from the same store the routes use.
-      useFactory: (config: GraveshiftConfig, store: WorkItemStore) =>
-        createFixDeps(config, { store }),
-      inject: [GRAVESHIFT_CONFIG, WorkItemStore],
-    },
-    {
-      provide: WORK_ITEM_SEED,
-      // No demo data in production. An explicit flag is the only way to seed the store.
-      useFactory: (): readonly WorkItem[] =>
-        process.env.GRAVESHIFT_WORK_ITEM_DEMO === 'true' ? DEMO_WORK_ITEMS : [],
+      provide: WORK_AGENTS,
+      inject: [BOOT_CONFIG, GRAVESHIFT_CONFIG],
+      useFactory: (config: RootBootConfig, full: GraveshiftConfig) =>
+        gateAutoFix(config.agents, full.fix.enabled),
     },
     { provide: WORK_ITEM_POLICY, useFactory: createWorkItemPolicy, inject: [GRAVESHIFT_CONFIG] },
   ],
+  exports: [WorkItemRepo, WORK_COMMANDS],
 })
 export class WorkItemsModule {}

@@ -1,4 +1,11 @@
-import { RULE_ACTIONS, type RuleAction, type WorkItemSeverity } from '@graveshift/core';
+import {
+  EVENT_SEVERITIES,
+  RULE_ACTIONS,
+  SUBJECT_TOKEN_PATTERN,
+  SUBJECT_TYPE_PATTERN,
+  type EventEnvelope,
+  type RuleAction,
+} from '@graveshift/core';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
@@ -16,17 +23,13 @@ import {
   ValidateNested,
 } from 'class-validator';
 
-const SEVERITIES = ['info', 'warning', 'critical'] as const;
-const TOKEN_PATTERN = /^[A-Za-z0-9_-]+$/;
-const SUBJECT_TYPE_PATTERN = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/;
-
 // The match filters mirror RuleMatchSchema in packages/core. Every filter is optional.
 export class RuleMatchDto {
-  @ApiPropertyOptional({ type: String, isArray: true, enum: SEVERITIES })
+  @ApiPropertyOptional({ type: String, isArray: true, enum: EVENT_SEVERITIES })
   @ValidateIf((_, value) => value !== undefined)
   @IsArray()
-  @IsIn(SEVERITIES, { each: true })
-  severities?: WorkItemSeverity[];
+  @IsIn(EVENT_SEVERITIES, { each: true })
+  severities?: EventEnvelope['severity'][];
 
   @ApiPropertyOptional({ type: String, isArray: true, minLength: 1 })
   @ValidateIf((_, value) => value !== undefined)
@@ -41,10 +44,10 @@ export class RuleMatchDto {
   @Matches(SUBJECT_TYPE_PATTERN, { each: true })
   types?: string[];
 
-  @ApiPropertyOptional({ type: String, pattern: TOKEN_PATTERN.source })
+  @ApiPropertyOptional({ type: String, pattern: SUBJECT_TOKEN_PATTERN.source })
   @ValidateIf((_, value) => value !== undefined)
   @IsString()
-  @Matches(TOKEN_PATTERN)
+  @Matches(SUBJECT_TOKEN_PATTERN)
   projectId?: string;
 }
 

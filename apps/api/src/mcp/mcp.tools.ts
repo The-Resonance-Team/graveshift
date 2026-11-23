@@ -1,8 +1,27 @@
-import { Inject, Injectable, NotFoundException, UseGuards } from '@nestjs/common';
+import {
+  Inject,
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+  UseGuards,
+} from '@nestjs/common';
 import { Tool } from '@nestjs/mcp';
-import { decide, toAuditEvent, type Policy, type PolicyAction } from '@graveshift/policy';
+import type { AuditDraft } from '@graveshift/core';
+import {
+  SharedPolicyContextSchema,
+  type SharedPolicyContext,
+} from '@graveshift/core/policy-context';
+import {
+  decide,
+  resolveMode,
+  toAuditEvent,
+  type Policy,
+  type PolicyAction,
+  type PolicyDecision,
+} from '@graveshift/policy';
 import { z } from 'zod';
 
+import { PolicyContextMismatchError } from './mcp.errors';
 import { McpScopeGuard } from './mcp-scope.guard';
 import { deepRedact } from './mcp.redact';
 import { PromqlSchema } from './mcp.promql';
@@ -14,6 +33,26 @@ const need = <T>(value: T | undefined, message: string): T => {
   if (value === undefined) throw new NotFoundException(message);
   return value;
 };
+
+/** The incident facts both daemon read shapes expose. */
+interface IncidentFacts {
+  incident: { service: string; diagnosis?: { confidence?: number } | undefined };
+  category?: string | undefined;
+  detections: Array<{ rule: string }>;
+}
+
+function verifyContext(view: IncidentFacts, input: unknown): SharedPolicyContext {
+  const context = SharedPolicyContextSchema.parse(input);
+  if (
+    context.service !== view.incident.service ||
+    context.confidence !== view.incident.diagnosis?.confidence ||
+    context.category !== view.category ||
+    view.detections.some((entry) => !context.signals.includes(entry.rule)) ||
+    context.signals.some((rule) => !view.detections.some((entry) => entry.rule === rule))
+  )
+    throw new PolicyContextMismatchError();
+  return context;
+}
 
 /** Tool logic lives here. The decorators only name the primitive and describe its schema. */
 @Injectable()
@@ -95,27 +134,70 @@ export class McpTools {
     replicas?: number | undefined;
   }): Promise<unknown> {
     const view = need(await this.backend.getIncident(args.incidentId), 'incident not found');
-    // A daemon failure or malformed counters reject the tool call. Zero counters are never assumed.
-    const snapshot = await this.backend.getCounters();
-    const counters = snapshot.counters;
-    const enforced = snapshot.source === 'wired';
     const action: PolicyAction = {
       name: args.action,
       ...(args.replicas === undefined ? {} : { params: { replicas: args.replicas } }),
     };
-    const ctx = {
-      service: view.incident.service,
-      ...(view.category === undefined ? {} : { category: view.category }),
-      signals: (view.detections ?? []).map((x) => x.rule),
-      confidence: view.incident.diagnosis?.confidence ?? 0,
-      ...(this.envMode === undefined ? {} : { envMode: this.envMode }),
-      counters,
+
+    // A daemon failure or malformed counters reject the tool call. Zero counters are never assumed.
+    const snapshot = await this.backend.getCounters();
+    const counters = snapshot.counters;
+    const enforced = snapshot.source === 'wired';
+
+    let context: SharedPolicyContext | undefined;
+    try {
+      context = verifyContext(view, await this.backend.policyContext(args.incidentId));
+      context = {
+        ...context,
+        counters,
+        ...(this.envMode === undefined ? {} : { envMode: this.envMode }),
+      };
+    } catch {
+      context = undefined;
+    }
+
+    const resolved = resolveMode(this.policy.mode, this.envMode);
+    const denied: PolicyDecision = {
+      effect: 'deny',
+      reason: 'policy_context_unavailable',
+      matchedRule: null,
+      mode: resolved.mode,
+      reasons: ['policy_context_unavailable'],
+      warnings: resolved.warning ? [resolved.warning] : [],
     };
-    const decision = decide(this.policy, ctx, action);
-    // ponytail: the decision is not written to the audit log (daemon has no append endpoint), upgrade when it does
+    const decision = context ? decide(this.policy, context, action) : denied;
+    const facts = context
+      ? toAuditEvent(decision, context, action)
+      : {
+          actor: 'policy',
+          type: 'policy.decision',
+          payload: {
+            effect: 'deny',
+            reason: denied.reason,
+            action: action.name,
+            service: view.incident.service,
+          },
+        };
+    const draft: AuditDraft = {
+      ...facts,
+      payload: {
+        ...facts.payload,
+        ...(context === undefined ? {} : { context }),
+        ...(args.replicas === undefined ? {} : { replicas: args.replicas }),
+      },
+      key: `mcp:proposal:${crypto.randomUUID()}`,
+      incidentId: args.incidentId,
+    };
+    try {
+      const ack = await this.backend.auditDecision(draft);
+      if (ack.key !== draft.key) throw new Error('Audit acknowledgement does not match');
+    } catch {
+      throw new ServiceUnavailableException('Policy audit was not acknowledged');
+    }
+
     return deepRedact({
       decision,
-      audit: toAuditEvent(decision, ctx, action),
+      audit: { ...draft, acknowledged: true },
       executed: false,
       limits: {
         enforced,

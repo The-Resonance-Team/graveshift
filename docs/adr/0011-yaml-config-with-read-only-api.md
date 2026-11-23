@@ -12,6 +12,6 @@ That schema covered the host, the port, the event backbone settings, the file pa
 ADR 0009 already removed the v1 daemon.
 This decision, ADR 0012 and ADR 0013 superseded the remaining part of ADR 0003 that kept the v1 daemon for reference. The owner removed the v1 config path with the v1 daemon. Agents and policy kept their own loaders. The owner kept no third config format.
 
-Recheck trigger: The owner reviews this decision when write authorization and an audit path for config edits exist. The owner also reviews this decision when multi-tenancy arrives in v3.
+Recheck trigger: The owner reviews this decision when write authorization and an audit path for config edits exist. At the time the owner also expected a review when multi-tenancy arrived in v3. [ADR 0023](0023-organization-is-the-tenant-root.md) now sets the current scope model. This decision stays as history.
 
 Trade-off: Config changes needed a restart. Boot validation and version control stayed simple. The config file stayed the only place that held config.

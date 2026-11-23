@@ -11,6 +11,7 @@ const credential: VerifiedCredential = {
   kind: 'plugin',
   service: 'api',
   projectId: '12345',
+  expiresAt: null,
 };
 
 describe('mapSentryEvent', () => {

@@ -4,10 +4,18 @@ import {
   type LanguageModel,
   type LanguageModelUsage,
   NoObjectGeneratedError,
+  NoSuchModelError,
+  UnsupportedFunctionalityError,
 } from 'ai';
 
 import { PROVIDER_FACTORIES, type ProviderFactory } from './providers';
-import { GatewayConfigError, type ModelAdapter, type ModelRequest, type Usage } from './types';
+import {
+  GatewayConfigError,
+  UnsupportedTaskError,
+  type ModelAdapter,
+  type ModelRequest,
+  type Usage,
+} from './types';
 
 export interface AdapterOptions {
   env?: Record<string, string | undefined>;
@@ -27,40 +35,73 @@ export function resolveApiKey(
   return trimmed.length > 0 && !PLACEHOLDER.test(trimmed) ? trimmed : undefined;
 }
 
-// Most official providers are callable; newer ones expose languageModel(model).
-function languageModelFor(provider: unknown, model: string): LanguageModel {
-  if (typeof provider === 'function') {
-    return (provider as (id: string) => LanguageModel)(model);
-  }
-  const candidate = provider as Record<string, unknown>;
-  const selector = ['languageModel', 'chatModel'].find(
-    (key) => typeof candidate[key] === 'function',
+type SdkLanguageModel = Exclude<LanguageModel, string>;
+
+function isLanguageModel(value: unknown): value is SdkLanguageModel {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    'specificationVersion' in value &&
+    ['v2', 'v3', 'v4'].includes(String(value.specificationVersion)) &&
+    'modelId' in value &&
+    typeof value.modelId === 'string' &&
+    'provider' in value &&
+    typeof value.provider === 'string' &&
+    'supportedUrls' in value &&
+    'doGenerate' in value &&
+    typeof value.doGenerate === 'function' &&
+    'doStream' in value &&
+    typeof value.doStream === 'function'
   );
-  if (selector !== undefined) {
-    return (candidate[selector] as (id: string) => LanguageModel)(model);
-  }
-  throw new GatewayConfigError('provider does not expose a language model');
 }
 
-const tokenUsage = (usage: LanguageModelUsage | undefined): Usage => ({
-  in: usage?.inputTokens ?? 0,
-  out: usage?.outputTokens ?? 0,
-});
+// A callable provider can produce images or speech. Select and inspect its language model instead.
+function languageModelFor(provider: unknown, id: string): SdkLanguageModel | undefined {
+  if ((typeof provider !== 'object' || provider === null) && typeof provider !== 'function')
+    return undefined;
+  if (!('languageModel' in provider) || typeof provider.languageModel !== 'function')
+    return undefined;
+  try {
+    const model: unknown = provider.languageModel(id);
+    return isLanguageModel(model) ? model : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function tokenUsage(
+  usage: LanguageModelUsage | undefined,
+  provider: ProviderPackage,
+): Partial<Usage> {
+  const raw = usage?.raw;
+  // The compatible SDK converter defaults omitted fields to zero; raw presence preserves uncertainty.
+  const compatible = provider === '@ai-sdk/openai-compatible' && raw !== undefined;
+  const input =
+    compatible && typeof raw.prompt_tokens !== 'number' ? undefined : usage?.inputTokens;
+  const output =
+    compatible && typeof raw.completion_tokens !== 'number' ? undefined : usage?.outputTokens;
+  return {
+    ...(input === undefined ? {} : { in: input }),
+    ...(output === undefined ? {} : { out: output }),
+  };
+}
 
 function adapterFor(
   provider: ProviderPackage,
   model: string,
-  resolveModel: () => LanguageModel,
+  languageModel: SdkLanguageModel | undefined,
 ): ModelAdapter {
   return {
     provider,
     model,
+    capability: languageModel === undefined ? 'unsupported' : 'structured_language',
     // The key was checked when the adapter was built; availability needs no I/O.
-    available: () => true,
+    available: () => languageModel !== undefined,
     async generateObject(request: ModelRequest) {
+      if (languageModel === undefined) throw new UnsupportedTaskError();
       try {
         const result = await generateObject({
-          model: resolveModel(),
+          model: languageModel,
           schema: request.schema,
           system: request.system,
           prompt: request.prompt,
@@ -68,11 +109,14 @@ function adapterFor(
           maxRetries: 0,
           abortSignal: request.signal,
         });
-        return { object: result.object, model, usage: tokenUsage(result.usage) };
+        return { object: result.object, model, usage: tokenUsage(result.usage, provider) };
       } catch (error) {
+        if (NoSuchModelError.isInstance(error) || UnsupportedFunctionalityError.isInstance(error)) {
+          throw new UnsupportedTaskError();
+        }
         if (!NoObjectGeneratedError.isInstance(error)) throw error;
         // Return billed usage so the gateway can charge for this response before a validation retry.
-        return { validationError: error.message, model, usage: tokenUsage(error.usage) };
+        return { validationError: error.message, model, usage: tokenUsage(error.usage, provider) };
       }
     },
   };
@@ -86,13 +130,12 @@ export function createAdapter(agent: AgentConfig, options: AdapterOptions = {}):
       `apiKeyEnv ${agent.apiKeyEnv} is unset or holds a placeholder value`,
     );
   }
-  const factory = PROVIDER_FACTORIES[agent.provider] as ProviderFactory;
+  const factory: ProviderFactory = PROVIDER_FACTORIES[agent.provider];
   const instance = factory({
     apiKey,
     baseURL: agent.baseUrl,
-    ...(agent.provider === '@ai-sdk/openai-compatible' ? { name: 'openai-compatible' } : {}),
+    name: 'openai-compatible',
     ...(options.fetch ? { fetch: options.fetch } : {}),
   });
-  // Model selection is lazy: some factories validate the model id at call time.
-  return adapterFor(agent.provider, agent.model, () => languageModelFor(instance, agent.model));
+  return adapterFor(agent.provider, agent.model, languageModelFor(instance, agent.model));
 }

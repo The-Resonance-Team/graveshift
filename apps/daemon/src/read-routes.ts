@@ -1,5 +1,4 @@
-import { timingSafeEqual } from 'node:crypto';
-
+import { bearerMatches } from './private-http';
 import type { DaemonReadState } from './read-state';
 
 export const READ_BASE = '/read';
@@ -11,14 +10,6 @@ const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { headers: JSON_HEADERS, status });
 
 const error = (status: number, code: string): Response => json({ error: code }, status);
-
-const authorized = (request: Request, token: string): boolean => {
-  const header = request.headers.get('authorization');
-  if (header === null || !header.startsWith('Bearer ')) return false;
-  const provided = Buffer.from(header.slice(7));
-  const expected = Buffer.from(token);
-  return provided.length === expected.length && timingSafeEqual(provided, expected);
-};
 
 const param = (url: URL, name: string): string | undefined =>
   url.searchParams.get(name) ?? undefined;
@@ -35,7 +26,7 @@ export const handleReadRequest =
   (state: DaemonReadState, token: string) =>
   (request: Request): Response => {
     const url = new URL(request.url);
-    if (!authorized(request, token)) return error(401, 'unauthorized');
+    if (!bearerMatches(request, token)) return error(401, 'unauthorized');
     if (request.method !== 'GET') {
       return new Response(null, { headers: { ...TEXT_HEADERS, allow: 'GET' }, status: 405 });
     }

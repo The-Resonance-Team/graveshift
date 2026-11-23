@@ -1,4 +1,4 @@
-import type { EventEnvelope } from '@graveshift/core';
+import { prepareEnvelope, type EventEnvelope } from '@graveshift/core';
 
 import type { Publisher } from './index';
 
@@ -12,7 +12,7 @@ export function createInMemoryPublisher(): InMemoryPublisher {
   return {
     envelopes,
     async publish(envelope) {
-      envelopes.push(envelope);
+      envelopes.push(prepareEnvelope(envelope));
     },
   };
 }

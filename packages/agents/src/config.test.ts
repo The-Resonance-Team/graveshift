@@ -6,7 +6,7 @@ import {
   AgentsFileSchema,
   declaredParams,
   fillAgentPrompt,
-  mergeAgentTemplates,
+  resolveAgents,
   paramDefaults,
   PROVIDER_PACKAGES,
   type AgentConfig,
@@ -26,6 +26,7 @@ const sreBot: AgentConfig = {
   apiKeyEnv: 'GOOGLE_GENERATIVE_AI_API_KEY',
   allowedTools: ['query_metric', 'tail_logs'],
   dailyBudgetUsd: 2.5,
+  autoFix: false,
   escalateTo: 'devops-bot',
 };
 
@@ -42,6 +43,7 @@ const devopsBot: AgentConfig = {
   apiKeyEnv: 'ANTHROPIC_API_KEY',
   allowedTools: ['propose_fix'],
   dailyBudgetUsd: 5,
+  autoFix: false,
   escalateTo: 'sre-bot',
 };
 
@@ -129,7 +131,7 @@ describe('agent lists', () => {
       model: 'client-model',
       apiKeyEnv: 'GRAVESHIFT_CLIENT_API_KEY',
     };
-    const merged = mergeAgentTemplates([sreBot, devopsBot], [override]);
+    const merged = resolveAgents({ system: [sreBot, devopsBot], client: [override] });
     expect(merged).toHaveLength(2);
     expect(merged[0]?.model).toBe('client-model');
     expect(merged[0]?.apiKeyEnv).toBe('GRAVESHIFT_CLIENT_API_KEY');
@@ -138,7 +140,7 @@ describe('agent lists', () => {
 
   test('keeps new client agents and system order', () => {
     const extra: AgentConfig = { ...sreBot, name: 'Extra Bot', slug: 'extra-bot', role: 'extra' };
-    const merged = mergeAgentTemplates([sreBot, devopsBot], [extra]);
+    const merged = resolveAgents({ system: [sreBot, devopsBot], client: [extra] });
     expect(merged.map((agent) => agent.name)).toEqual(['SRE Bot', 'DevOps Bot', 'Extra Bot']);
   });
 
@@ -163,6 +165,36 @@ describe('agent lists', () => {
     ).toThrow();
     expect(AgentsFileSchema.parse({ system: [sreBot, devopsBot] }).system).toHaveLength(2);
   });
+
+  test('validates escalation after whole Agent replacement', () => {
+    const changed = { ...devopsBot, slug: 'new-devops' };
+    expect(() => resolveAgents({ system: [sreBot, devopsBot], client: [changed] })).toThrow(
+      'effective agent slug',
+    );
+    const replaced = { ...sreBot, escalateTo: 'new-devops', autoFix: true };
+    const resolved = resolveAgents({ system: [sreBot, devopsBot], client: [changed, replaced] });
+    expect(resolved[0]).toEqual(replaced);
+    expect(resolved.map(({ name }) => name)).toEqual(['SRE Bot', 'DevOps Bot']);
+  });
+
+  test('rejects slug collisions across surviving system and client Agents', () => {
+    const collision = { ...devopsBot, name: 'Extra Bot', slug: sreBot.slug };
+    expect(() => resolveAgents({ system: [sreBot, devopsBot], client: [collision] })).toThrow(
+      'duplicate effective agent slug',
+    );
+  });
+
+  test('removed templates do not supply or require escalation targets', () => {
+    const discarded = { ...sreBot, escalateTo: 'missing-bot' };
+    expect(resolveAgents({ system: [discarded, devopsBot], client: [sreBot] })[0]).toEqual(sreBot);
+  });
+
+  test('auto-fix defaults to false and a client replacement must enable it', () => {
+    const { autoFix: _autoFix, ...raw } = sreBot;
+    expect(AgentConfigSchema.parse(raw).autoFix).toBe(false);
+    const enabled = { ...sreBot, autoFix: true };
+    expect(resolveAgents({ system: [enabled, devopsBot], client: [raw] })[0]?.autoFix).toBe(false);
+  });
 });
 
 describe('prompt params', () => {
@@ -181,9 +213,10 @@ describe('committed config file', () => {
   test('reads Agent blocks with no secret value from YAML', async () => {
     const path = fileURLToPath(new URL('../../../graveshift.config.yaml', import.meta.url));
     const raw: unknown = Bun.YAML.parse(await Bun.file(path).text());
-    const block = (raw as { agents: unknown }).agents;
+    // One boot config file: Agents live under the `agents` key.
+    const block = raw !== null && typeof raw === 'object' && 'agents' in raw ? raw.agents : raw;
     const file = AgentsFileSchema.parse(block);
-    const agents = mergeAgentTemplates(file.system, file.client);
+    const agents = resolveAgents(block);
 
     expect(agents.map((agent) => agent.name)).toEqual(['Exorcist', 'SRE Agent', 'DevOps Agent']);
     expect(agents[0]?.role).toBe('exorcist');

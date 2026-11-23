@@ -3,7 +3,15 @@ import { z } from 'zod';
 
 import type { GatewayConfig } from './config';
 import { createGateway, type GatewayOptions } from './gateway';
-import type { AgentBinding, GatewayTask, ModelAdapter, ModelRequest, Usage } from './types';
+import type {
+  AgentBinding,
+  AuditEvent,
+  AuditSink,
+  GatewayTask,
+  ModelAdapter,
+  ModelRequest,
+  Usage,
+} from './types';
 
 export const Out = z.object({ answer: z.string() }).strict();
 export type Out = z.infer<typeof Out>;
@@ -55,6 +63,7 @@ export function fakeAdapter(over: FakeOptions = {}) {
   const adapter: ModelAdapter = {
     provider: '@ai-sdk/google',
     model,
+    capability: 'structured_language',
     available: () => available,
     async generateObject(request) {
       requests.push(request);
@@ -74,9 +83,16 @@ export const config: GatewayConfig = {
 };
 
 export const binding = (adapter: ModelAdapter, over: Partial<AgentConfig> = {}): AgentBinding => ({
-  agent: agent(over),
+  agent: agent({ model: adapter.model, ...over }),
   adapter,
 });
 
+export const acknowledgedAudit =
+  (events: AuditEvent[] = []): AuditSink =>
+  async (event) => {
+    events.push(event);
+    return { callId: event.callId };
+  };
+
 export const make = (agents: AgentBinding[], over: Partial<GatewayOptions> = {}) =>
-  createGateway({ agents, config, onAudit: () => {}, ...over });
+  createGateway({ agents, config, onAudit: acknowledgedAudit(), ...over });

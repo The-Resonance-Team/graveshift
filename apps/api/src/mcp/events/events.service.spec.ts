@@ -164,6 +164,94 @@ describe('EventPollService', () => {
     expect(errorCode(error)).toBe(-32602);
   });
 
+  test('filters events by deploymentId and Environment', async () => {
+    const { source, service } = setup();
+    const sha = 'a'.repeat(40);
+    source.push(
+      validEnvelope({ id: 'bound', type: 'signal.oom', deploymentId: sha, environment: 'prod' }),
+    );
+    source.push(
+      validEnvelope({
+        id: 'other',
+        type: 'signal.oom',
+        deploymentId: 'b'.repeat(40),
+        environment: 'prod',
+      }),
+    );
+    const bySha = await poll(service, {
+      name: 'incident.changed',
+      cursor: START,
+      arguments: { deploymentId: sha },
+    });
+    expect(bySha.events.map((event) => event.eventId)).toEqual(['bound']);
+    const byEnvironment = await poll(service, {
+      name: 'incident.changed',
+      cursor: START,
+      arguments: { environment: 'prod' },
+    });
+    expect(byEnvironment.events).toHaveLength(2);
+    const invalid = await poll(service, {
+      name: 'incident.changed',
+      cursor: START,
+      arguments: { deploymentId: 'not-a-sha' },
+    }).catch((reason: unknown) => reason);
+    expect(errorCode(invalid)).toBe(-32602);
+  });
+
+  test('rejects an MCP Environment filter outside the shared pattern', async () => {
+    const { service } = setup();
+    const invalid = await Promise.all(
+      ['bad name', 'prod/us', 'a'.repeat(101)].map((environment) =>
+        poll(service, {
+          name: 'incident.changed',
+          cursor: START,
+          arguments: { environment },
+        })
+          .then(() => undefined)
+          .catch((reason: unknown) => reason),
+      ),
+    );
+    expect(invalid.map(errorCode)).toEqual([-32602, -32602, -32602]);
+  });
+
+  test('skips a closed Deployment only in its Environment', async () => {
+    const source = new InMemoryEventSource();
+    const sha = 'a'.repeat(40);
+    const closed = [{ deploymentId: sha, environment: 'staging' }];
+    const service = new EventPollService(source, { listClosed: async () => closed });
+    source.push(
+      validEnvelope({
+        id: 'closed-event',
+        type: 'signal.oom',
+        deploymentId: sha,
+        environment: 'staging',
+      }),
+    );
+    source.push(
+      validEnvelope({
+        id: 'same-sha-open-event',
+        type: 'signal.oom',
+        deploymentId: sha,
+        environment: 'production',
+      }),
+    );
+    source.push(
+      validEnvelope({
+        id: 'open-event',
+        type: 'signal.oom',
+        deploymentId: 'b'.repeat(40),
+      }),
+    );
+    source.push(validEnvelope({ id: 'unassigned', type: 'signal.oom' }));
+    const result = await poll(service, { name: 'incident.changed', cursor: START });
+    expect(result.events.map((event) => event.eventId).sort()).toEqual([
+      'open-event',
+      'same-sha-open-event',
+      'unassigned',
+    ]);
+    expect(result.hasMore).toBe(false);
+  });
+
   test('a static catalog declares one scope per event type', () => {
     const scopesByType = EVENT_TYPES.map((type) => type.scope);
     expect(new Set(scopesByType).size).toBe(6);

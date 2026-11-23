@@ -3,14 +3,6 @@ import { z } from 'zod';
 // Empty KEY= entries must reach the schema default, not an empty string.
 const emptyToUndefined = (value: unknown) => (value === '' ? undefined : value);
 
-const oauthClientSchema = z.object({
-  secret: z.string().min(16),
-  projectId: z.string().regex(/^[A-Za-z0-9_-]+$/),
-  scopes: z.array(z.string()),
-});
-
-export const oauthClientsDefault: Record<string, z.infer<typeof oauthClientSchema>> = {};
-
 // This schema validates boot config only. Request bodies use class-validator DTOs.
 export const envSchema = z
   .object({
@@ -38,15 +30,6 @@ export const envSchema = z
       emptyToUndefined,
       z.string().default('graveshift-credentials'),
     ),
-    GRAVESHIFT_OAUTH_CLIENTS: z.preprocess((value) => {
-      const text = emptyToUndefined(value);
-      if (typeof text !== 'string') return text;
-      try {
-        return JSON.parse(text) as unknown;
-      } catch {
-        return text;
-      }
-    }, z.record(z.string(), oauthClientSchema).default(oauthClientsDefault)),
     GRAVESHIFT_CREDENTIAL_TTL_SECONDS: z.coerce.number().int().min(60).default(86_400),
     GRAVESHIFT_CREDENTIAL_MAX_TTL_SECONDS: z.coerce.number().int().min(60).default(2_592_000),
     GRAVESHIFT_EVENT_MAX_BYTES: z.coerce.number().int().min(1024).max(102_400).default(65_536),
@@ -58,4 +41,3 @@ export const envSchema = z
   .loose();
 
 export type Env = z.infer<typeof envSchema>;
-export type OAuthClientConfig = z.infer<typeof oauthClientSchema>;

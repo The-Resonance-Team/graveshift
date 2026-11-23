@@ -2,10 +2,16 @@
 // used: the check reads SQL text only, so it can run in CI without a DB service.
 const AUDIT_BLOCK =
   /-- BEGIN unmanaged append-only audit enforcement[\s\S]*?-- END unmanaged append-only audit enforcement\./;
+// Data rewrites change rows, not schema. The drift check compares schema objects
+// only, so the identity migration's one-transaction rewrite is excluded here.
+const IDENTITY_REWRITE_BLOCK =
+  /-- BEGIN unmanaged identity data rewrite[\s\S]*?-- END unmanaged identity data rewrite\./;
+const V3_DEPLOY_BLOCK =
+  /-- BEGIN unmanaged v3 deploy enforcement[\s\S]*?-- END unmanaged v3 deploy enforcement\./;
 const AUDIT_FUNCTION =
   /CREATE FUNCTION\s+([A-Za-z0-9_]+)\s*\(\s*\)\s+RETURNS\s+trigger[\s\S]*?AS\s+\$\$([\s\S]*?)\$\$/;
 const TRIGGER =
-  /CREATE TRIGGER\s+([A-Za-z0-9_]+)\s+BEFORE\s+([A-Z]+)\s+ON\s+"([^"]+)"[^;]*?FOR EACH ROW\s+EXECUTE (?:FUNCTION|PROCEDURE)\s+([A-Za-z0-9_]+)\s*\(\s*\)\s*;/g;
+  /CREATE TRIGGER\s+([A-Za-z0-9_]+)\s+BEFORE\s+([A-Z]+)\s+ON\s+"([^"]+)"[^;]*?FOR EACH ROW(?:\s+WHEN\s*\([^;]*?\))?\s+EXECUTE (?:FUNCTION|PROCEDURE)\s+([A-Za-z0-9_]+)\s*\(\s*\)\s*;/g;
 const APPEND_ONLY_BODY = /RAISE EXCEPTION\s+'[^']*append-only[^']*'/i;
 const FUNCTION_NAME = 'prevent_audit_entry_mutation';
 const CREDENTIALS_TABLE = /CREATE\s+TABLE\s+"credentials"\s*\(/;
@@ -15,11 +21,12 @@ const EXPECTED_TRIGGERS = [
   { name: 'audit_entries_no_delete', event: 'DELETE', table: 'audit_entries' },
 ] as const;
 
-/** Strips the unmanaged block before generated SQL is compared with migration SQL. */
-const stripAuditBlock = (sql: string): string => sql.replace(AUDIT_BLOCK, '');
+/** Strips unmanaged blocks before generated SQL is compared with migration SQL. */
+const stripUnmanagedBlocks = (sql: string): string =>
+  sql.replace(AUDIT_BLOCK, '').replace(IDENTITY_REWRITE_BLOCK, '').replace(V3_DEPLOY_BLOCK, '');
 
 export const normalize = (sql: string): string =>
-  stripAuditBlock(sql)
+  stripUnmanagedBlocks(sql)
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(
@@ -132,5 +139,71 @@ export function migrationOwnershipViolations(sql: string): string[] {
     violations.push('index credentials_hash_idx must be on "credentials"("hash")');
   }
 
+  return violations;
+}
+
+const V3_TRIGGERS = [
+  { name: 'deploys_no_update', event: 'UPDATE', table: 'deploys' },
+  { name: 'deploys_no_delete', event: 'DELETE', table: 'deploys' },
+  { name: 'projects_org_link_guard', event: 'UPDATE', table: 'projects' },
+] as const;
+
+const V3_RESTRICT_CONSTRAINTS = ['deploys_project_id_fkey'] as const;
+
+const REMOVED_V3_OBJECTS = [
+  'CREATE TABLE "releases"',
+  'CREATE TABLE "project_releases"',
+  'CREATE TABLE "deploy_projects"',
+  'CREATE TRIGGER releases_org_immutable',
+  'CREATE TRIGGER project_releases_org_consistency',
+  'CREATE TRIGGER project_releases_project_immutable',
+  'CREATE TRIGGER deploy_projects_no_update',
+  'CREATE TRIGGER deploy_projects_no_delete',
+  'CREATE TRIGGER deploy_projects_org_consistency',
+] as const;
+
+/** Checks that the v3 deploy enforcement block sits on its intended tables. */
+export function v3DeployViolations(sql: string): string[] {
+  const block = V3_DEPLOY_BLOCK.exec(sql)?.[0];
+  if (block === undefined) return ['v3 deploy enforcement block is missing from the migration'];
+  const violations: string[] = [];
+  for (const object of REMOVED_V3_OBJECTS) {
+    if (sql.includes(object)) violations.push(`removed v3 object is still present: ${object}`);
+  }
+  const triggers = new Map<string, { event: string; table: string }>();
+  for (const match of block.matchAll(TRIGGER)) {
+    const [, name, event, table] = match;
+    if (name === undefined || event === undefined || table === undefined) continue;
+    triggers.set(name, { event, table });
+  }
+  for (const expected of V3_TRIGGERS) {
+    const actual = triggers.get(expected.name);
+    if (actual === undefined) {
+      violations.push(`v3 trigger ${expected.name} is missing`);
+      continue;
+    }
+    triggers.delete(expected.name);
+    if (actual.event !== expected.event || actual.table !== expected.table) {
+      violations.push(
+        `v3 trigger ${expected.name} targets ${actual.event} on "${actual.table}"; expected ${expected.event} on "${expected.table}"`,
+      );
+    }
+  }
+  for (const extra of triggers.keys()) violations.push(`unexpected v3 trigger ${extra}`);
+  for (const constraint of V3_RESTRICT_CONSTRAINTS) {
+    const update = constraint === 'deploys_project_id_fkey' ? 'RESTRICT' : 'CASCADE';
+    const pattern = new RegExp(
+      `ADD CONSTRAINT "${constraint}"[^;]*ON DELETE RESTRICT ON UPDATE ${update};`,
+    );
+    if (!pattern.test(sql))
+      violations.push(`foreign key ${constraint} must use ON DELETE RESTRICT ON UPDATE ${update}`);
+  }
+  if (
+    !/ADD CONSTRAINT "deploys_url_http_check"\s+CHECK \("url" IS NULL OR "url" ~\* '\^https\?:\/\/'\)/.test(
+      sql,
+    )
+  ) {
+    violations.push('deploys url CHECK constraint is missing');
+  }
   return violations;
 }

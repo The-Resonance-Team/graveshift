@@ -1,15 +1,18 @@
 export { createAdapter, resolveApiKey } from './adapters';
 export type { AdapterOptions } from './adapters';
-export { createDailyBudget } from './budget';
-export type { DailyBudget } from './budget';
+export type { BudgetSnapshot } from './budget';
+export type { GatewayBudgets } from './accounting';
 export { GatewayConfigSchema, PriceSchema } from './config';
 export type { GatewayConfig } from './config';
 export { createGateway } from './gateway';
 export type { Gateway, GatewayOptions } from './gateway';
-export { GatewayConfigError } from './types';
+export { AuditAcknowledgementError, GatewayConfigError, UnsupportedTaskError } from './types';
 export type {
   AgentBinding,
   AuditEvent,
+  AuditAck,
+  AuditSink,
+  CallTotals,
   FallbackReason,
   GeneratedObject,
   GatewayResult,
@@ -18,4 +21,5 @@ export type {
   ModelAdapter,
   ModelRequest,
   Usage,
+  UnavailableReason,
 } from './types';

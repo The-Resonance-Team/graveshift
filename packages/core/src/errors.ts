@@ -20,3 +20,7 @@ export class TransitionError extends GraveshiftError<TransitionErrorCode> {}
 export type TriageErrorCode = 'INVALID_ASSIGNEE' | 'TERMINAL_STATUS' | 'UNKNOWN_AGENT';
 
 export class TriageError extends GraveshiftError<TriageErrorCode> {}
+
+export type EnvelopeErrorCode = 'INVALID_ENVELOPE' | 'SENSITIVE_METADATA' | 'INVALID_JSON_PAYLOAD';
+
+export class EnvelopeError extends GraveshiftError<EnvelopeErrorCode> {}

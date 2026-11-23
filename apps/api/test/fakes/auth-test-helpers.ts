@@ -6,6 +6,9 @@ import { createInMemoryPublisher, type InMemoryPublisher } from '@graveshift/eve
 
 import { configureApp } from '../../src/app.factory';
 import { AppModule } from '../../src/app.module';
+import { AuditRepo, type AuditAppendInput } from '../../src/audit/repo/audit.repo';
+import { DeployRepo } from '../../src/deploys/deploy.repo';
+import { FakeDeployRepo } from '../../src/deploys/testing/deploy-repo.fakes';
 import {
   CREDENTIAL_CONFIG,
   CREDENTIAL_REPO,
@@ -14,16 +17,44 @@ import {
   type AuthConfig,
   type CredentialVerifier,
 } from '../../src/auth/auth.types';
-import { TEST_CONFIG } from './auth-test-config';
+import { BOOT_CONFIG } from '../../src/config/boot.config';
+import { DEFAULT_DAEMON_GRANT, IDENTITY_REPO } from '../../src/identity/identity.types';
+import { FakeIdentityRepo } from '../../src/identity/testing/fake-identity.repo';
+import { TEST_CONFIG, testBootConfig, testOAuthClients } from './auth-test-config';
 import { FakeCredentialRepo } from './fake-credential-repo';
 
 export { TEST_CONFIG };
+
+/** Records audit appends without touching PostgreSQL. No network call is made. */
+export class FakeAuditRepo {
+  readonly appended: AuditAppendInput[] = [];
+
+  append(input: AuditAppendInput): Promise<{ seq: number }> {
+    this.appended.push(input);
+    return Promise.resolve({ seq: this.appended.length });
+  }
+}
 
 export interface AuthTestApp {
   app: INestApplication;
   jwt: JwtService;
   repo: FakeCredentialRepo;
+  identity: FakeIdentityRepo;
   publisher: InMemoryPublisher;
+  audit: FakeAuditRepo;
+  deploys: FakeDeployRepo;
+}
+
+/** Seeds the in-memory OAuth client registry and the stored deployment grant. */
+export function testIdentityRepo(): FakeIdentityRepo {
+  const identity = new FakeIdentityRepo();
+  for (const client of testOAuthClients()) void identity.clients.set(client.clientId, client);
+  void identity.grants.set(DEFAULT_DAEMON_GRANT, {
+    id: 'test-grant',
+    name: DEFAULT_DAEMON_GRANT,
+    projectIds: ['12345', '12346'],
+  });
+  return identity;
 }
 
 export async function buildAuthApp(
@@ -32,13 +63,25 @@ export async function buildAuthApp(
   sentryVerifier?: CredentialVerifier,
 ): Promise<AuthTestApp> {
   const repo = new FakeCredentialRepo();
+  const identity = testIdentityRepo();
+  const audit = new FakeAuditRepo();
+  const deploys = new FakeDeployRepo();
   const publisher = publisherOverride ?? createInMemoryPublisher();
   const config = { ...TEST_CONFIG, ...overrides };
+  const boot = { ...(await testBootConfig()), auth: config };
   const builder = Test.createTestingModule({ imports: [AppModule] })
+    .overrideProvider(BOOT_CONFIG)
+    .useValue(boot)
     .overrideProvider(CREDENTIAL_CONFIG)
     .useValue(config)
     .overrideProvider(CREDENTIAL_REPO)
     .useValue(repo)
+    .overrideProvider(IDENTITY_REPO)
+    .useValue(identity)
+    .overrideProvider(AuditRepo)
+    .useValue(audit)
+    .overrideProvider(DeployRepo)
+    .useValue(deploys)
     .overrideProvider(EVENT_PUBLISHER)
     .useValue(publisher);
   if (sentryVerifier) {
@@ -48,7 +91,7 @@ export async function buildAuthApp(
   const app = moduleRef.createNestApplication();
   configureApp(app);
   await app.init();
-  return { app, jwt: moduleRef.get(JwtService), repo, publisher };
+  return { app, jwt: moduleRef.get(JwtService), repo, identity, publisher, audit, deploys };
 }
 
 export function accessToken(

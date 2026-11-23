@@ -1,3 +1,47 @@
+// Simple scopes for the v3 identity model. Current scope strings stay accepted as
+// aliases, so clients from PR #113 and PR #120 keep the same effective grants.
+export const SIMPLE_SCOPES = [
+  'org:read',
+  'project:read',
+  'project:write',
+  'event:read',
+  'org:ci',
+] as const;
+
+export const SCOPE_ALIASES: Record<string, string> = {
+  'org:read': 'org:read',
+  'project:read': 'project:read',
+  'project:write': 'project:write',
+  'event:read': 'event:read',
+  'org:ci': 'org:ci',
+  'incidents:read': 'project:read',
+  'diagnoses:read': 'project:read',
+  'audit:read': 'org:read',
+  'logs:read': 'event:read',
+  'metrics:read': 'project:read',
+  'fix:propose': 'project:write',
+  'fix:trigger': 'fix:trigger',
+  'events:publish': 'event:read',
+  'config:export': 'config:export',
+  'tokens:manage': 'tokens:manage',
+};
+
+/**
+ * Normalizes each alias to its canonical scope. Expansion is one-directional:
+ * an alias admits its canonical scope, but a canonical scope does not admit its
+ * aliases. A holder of `audit:read` gains `org:read`, while a holder of
+ * `org:read` does not gain `audit:read`; a holder of `logs:read` does not gain
+ * `events:publish`.
+ */
+export function expandScopes(scopes: readonly string[]): string[] {
+  const result = new Set<string>(scopes);
+  for (const scope of scopes) {
+    const canonical = SCOPE_ALIASES[scope];
+    if (canonical !== undefined) result.add(canonical);
+  }
+  return [...result];
+}
+
 // One scope catalog serves MCP tokens, plugin API keys and the one HTTP config endpoint.
 export const MCP_READ_SCOPES = [
   'incidents:read',
@@ -22,12 +66,32 @@ export const ALL_SCOPES = [...MCP_READ_SCOPES, ...PLUGIN_SCOPES, ...HTTP_CONFIG_
 // this list, not ALL_SCOPES: the HTTP-only config scopes are never issued as credentials.
 export const CREDENTIAL_ISSUABLE_SCOPES = [...MCP_READ_SCOPES, ...PLUGIN_SCOPES] as const;
 
+// Scopes a console-created OAuth client may hold. config:export and
+// tokens:manage stay out: they are boot-only grants for the one config route
+// and for management tokens, never granted by a public organization route.
+export const CLIENT_ISSUABLE_SCOPES = [...SIMPLE_SCOPES, ...CREDENTIAL_ISSUABLE_SCOPES] as const;
+
+export function isClientIssuableScope(scope: string): boolean {
+  return (CLIENT_ISSUABLE_SCOPES as readonly string[]).includes(scope);
+}
+
 // A client cannot grant these scopes, even when its own access token has them.
 export const FORBIDDEN_SCOPES = ['admin', 'tokens:manage'] as const;
 
 export const MANAGEMENT_SCOPE = 'tokens:manage';
 export const EVENTS_PUBLISH_SCOPE = 'events:publish';
 export const CONFIG_EXPORT_SCOPE = 'config:export';
+
+// HTTP-only scope for the work-item Fix mutations (triage, Fix now, answer). It follows the
+// config:export rule: it is in no credential kind (MCP_READ_SCOPES, PLUGIN_SCOPES,
+// CREDENTIAL_ISSUABLE_SCOPES) and not in CLIENT_ISSUABLE_SCOPES, so CredentialService.issue
+// rejects it for every credential kind and a console-created client can never hold it. Only
+// an operator-registered OAuth client carries it, and only the Fix routes demand it.
+export const FIX_TRIGGER_SCOPE = 'fix:trigger';
+
+// The read scope required by the Work-item GET routes. The OAuth guard admits the
+// management surface with tokens:manage; the route guard narrows reads to this scope.
+export const INCIDENTS_READ_SCOPE = 'incidents:read';
 
 export type CredentialKind = 'mcp' | 'plugin';
 

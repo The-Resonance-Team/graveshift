@@ -1,8 +1,8 @@
-import type { RuntimeEvent } from '@graveshift/core';
+import type { EventEnvelope } from '@graveshift/core';
 
 import { type Detection, type RuleId, type Severity, WINDOWS } from './types';
 
-export const RULE_SEVERITY: Record<RuleId, Severity> = {
+const RULE_SEVERITY: Record<RuleId, Severity> = {
   'log.error-burst': 'warning',
   'runtime.restart-loop': 'critical',
   'runtime.oom': 'critical',
@@ -10,14 +10,10 @@ export const RULE_SEVERITY: Record<RuleId, Severity> = {
   'metric.5xx-rate': 'critical',
   'metric.p95-latency': 'warning',
   'k8s.image-pull': 'critical',
+  'http.error': 'critical',
 };
 
-export const fingerprint = (service: string, rule: RuleId): string => `${service}:${rule}`;
-
-export const isErrorLine = (line: string): boolean =>
-  /\b(error|fatal|panic|exception)\b/i.test(line);
-
-interface ServiceState {
+interface GraveState {
   errors: number[];
   restarts: number[];
   failedChecks: number;
@@ -25,120 +21,118 @@ interface ServiceState {
 }
 
 const inWindow = (times: number[], at: number, windowMs: number): number[] =>
-  times.filter((t) => t > at - windowMs && t <= at);
+  times.filter((time) => time > at - windowMs && time <= at);
 
-// ponytail: assumes event time is non-decreasing per service, upgrade if sources replay out of order
+const sampleValue = (value: unknown): value is number | null =>
+  value === null || (typeof value === 'number' && Number.isFinite(value));
+
+/** Private temporal rules consume observation envelopes, never crew output events. */
+// ponytail: temporal samples use ordered observation time per Grave, upgrade if out of order ingestion is required.
 export function createRules() {
-  const states = new Map<string, ServiceState>();
-  const stateOf = (service: string): ServiceState => {
-    let state = states.get(service);
+  const states = new Map<string, GraveState>();
+  const observed = new Set<string>();
+  const stateOf = (envelope: EventEnvelope): GraveState => {
+    const key = JSON.stringify([envelope.projectId, envelope.service]);
+    let state = states.get(key);
     if (!state) {
       state = { errors: [], restarts: [], failedChecks: 0, above5xxSince: undefined };
-      states.set(service, state);
+      states.set(key, state);
     }
     return state;
   };
 
-  const detect = (rule: RuleId, service: string, at: number, message: string): Detection => ({
-    id: `${rule}:${service}:${at}`,
-    rule,
-    service,
-    severity: RULE_SEVERITY[rule],
-    fingerprint: fingerprint(service, rule),
-    message,
-    observedAt: new Date(at).toISOString(),
-  });
-
-  const failedCheck = (service: string, at: number): Detection[] => {
-    const state = stateOf(service);
-    state.failedChecks += 1;
-    return state.failedChecks >= WINDOWS.failedChecks
-      ? [
-          detect(
-            'runtime.unhealthy',
-            service,
-            at,
-            `${state.failedChecks} consecutive failed health checks`,
-          ),
-        ]
-      : [];
-  };
-
-  return {
-    runtimeEvent(event: RuntimeEvent): Detection[] {
-      if (event.kind !== 'signal') return [];
-      const { service, kind, message, observedAt } = event.signal;
-      const at = Date.parse(observedAt);
-      const state = stateOf(service);
-      switch (kind) {
-        case 'oom':
-          return [detect('runtime.oom', service, at, message)];
-        case 'image_pull_backoff':
-          return [detect('k8s.image-pull', service, at, message)];
-        case 'crash_loop':
-          return [detect('runtime.restart-loop', service, at, message)];
-        case 'restart': {
-          state.restarts = [...inWindow(state.restarts, at, WINDOWS.restartLoopMs), at];
-          return state.restarts.length >= WINDOWS.restartLoopCount
-            ? [
-                detect(
-                  'runtime.restart-loop',
-                  service,
-                  at,
-                  `${state.restarts.length} restarts in 5 min`,
-                ),
-              ]
-            : [];
-        }
-        case 'unhealthy':
-          return failedCheck(service, at);
-      }
-    },
-
-    healthCheck(service: string, ok: boolean, at: number): Detection[] {
-      if (ok) {
-        stateOf(service).failedChecks = 0;
-        return [];
-      }
-      return failedCheck(service, at);
-    },
-
-    logLine(service: string, line: string, at: number): Detection[] {
-      if (!isErrorLine(line)) return [];
-      const state = stateOf(service);
-      state.errors = [...inWindow(state.errors, at, WINDOWS.errorBurstMs), at];
-      return state.errors.length >= WINDOWS.errorBurstCount
-        ? [detect('log.error-burst', service, at, `${state.errors.length} error lines in 60 s`)]
+  return (envelope: EventEnvelope): Detection[] => {
+    const { type, service, observedAt, payload } = envelope;
+    if (
+      ![
+        'runtime.oom',
+        'runtime.crash_loop',
+        'runtime.restart',
+        'runtime.image_pull_backoff',
+        'runtime.unhealthy',
+        'health.check',
+        'log.line',
+        'metric.sample',
+        'http.error',
+      ].includes(type)
+    )
+      return [];
+    const identity = JSON.stringify([envelope.projectId, envelope.id]);
+    if (observed.has(identity)) return [];
+    // ponytail: replay identity is bounded to 10000 observations, upgrade if replay exceeds this horizon.
+    if (observed.size >= 10_000) observed.delete(observed.values().next().value!);
+    observed.add(identity);
+    const at = Date.parse(observedAt);
+    const state = stateOf(envelope);
+    const detect = (rule: RuleId, message: string): Detection => ({
+      id: `${envelope.id}:${rule}`,
+      projectId: envelope.projectId,
+      eventId: envelope.id,
+      traceId: envelope.traceId,
+      rule,
+      service,
+      severity: RULE_SEVERITY[rule],
+      fingerprint: `${service}:${rule}`,
+      message,
+      observedAt,
+    });
+    const message = typeof payload.message === 'string' ? payload.message : type;
+    const failedCheck = () => {
+      state.failedChecks += 1;
+      return state.failedChecks >= WINDOWS.failedChecks
+        ? [detect('runtime.unhealthy', `${state.failedChecks} consecutive failed health checks`)]
         : [];
-    },
-
-    metrics(
-      service: string,
-      sample: { errorRate5xx: number | null; p95LatencySeconds: number | null },
-      at: number,
-    ): Detection[] {
-      const state = stateOf(service);
-      const found: Detection[] = [];
-      const { errorRate5xx: rate, p95LatencySeconds: p95 } = sample;
-      if (rate !== null && rate > WINDOWS.rate5xxThreshold) {
-        state.above5xxSince ??= at;
-        if (at - state.above5xxSince >= WINDOWS.rate5xxForMs) {
-          found.push(
-            detect(
-              'metric.5xx-rate',
-              service,
-              at,
-              `5xx rate ${(rate * 100).toFixed(1)}% for 1 min`,
-            ),
-          );
+    };
+    switch (type) {
+      case 'runtime.oom':
+        return [detect('runtime.oom', message)];
+      case 'runtime.image_pull_backoff':
+        return [detect('k8s.image-pull', message)];
+      case 'runtime.crash_loop':
+        return [detect('runtime.restart-loop', message)];
+      case 'runtime.restart':
+        state.restarts = [...inWindow(state.restarts, at, WINDOWS.restartLoopMs), at];
+        return state.restarts.length >= WINDOWS.restartLoopCount
+          ? [detect('runtime.restart-loop', `${state.restarts.length} restarts in 5 min`)]
+          : [];
+      case 'runtime.unhealthy':
+        return failedCheck();
+      case 'health.check':
+        if (typeof payload.ok !== 'boolean') return [];
+        if (!payload.ok) return failedCheck();
+        state.failedChecks = 0;
+        return [];
+      case 'log.line':
+        if (
+          typeof payload.line !== 'string' ||
+          !/\b(error|fatal|panic|exception)\b/i.test(payload.line)
+        )
+          return [];
+        state.errors = [...inWindow(state.errors, at, WINDOWS.errorBurstMs), at];
+        return state.errors.length >= WINDOWS.errorBurstCount
+          ? [detect('log.error-burst', `${state.errors.length} error lines in 60 s`)]
+          : [];
+      case 'http.error':
+        return envelope.severity === 'info' ? [] : [detect('http.error', message)];
+      case 'metric.sample': {
+        const { errorRate5xx: rate, p95LatencySeconds: p95 } = payload;
+        if (!sampleValue(rate) || !sampleValue(p95)) return [];
+        const found: Detection[] = [];
+        if (rate !== null && rate > WINDOWS.rate5xxThreshold) {
+          state.above5xxSince ??= at;
+          if (at - state.above5xxSince >= WINDOWS.rate5xxForMs) {
+            found.push(detect('metric.5xx-rate', `5xx rate ${(rate * 100).toFixed(1)}% for 1 min`));
+          }
+        } else {
+          state.above5xxSince = undefined;
         }
-      } else {
-        state.above5xxSince = undefined;
+        if (p95 !== null && p95 > WINDOWS.p95ThresholdSeconds) {
+          found.push(detect('metric.p95-latency', `p95 latency ${p95.toFixed(2)} s`));
+        }
+        return found;
       }
-      if (p95 !== null && p95 > WINDOWS.p95ThresholdSeconds) {
-        found.push(detect('metric.p95-latency', service, at, `p95 latency ${p95.toFixed(2)} s`));
-      }
-      return found;
-    },
+      default:
+        return [];
+    }
   };
 }

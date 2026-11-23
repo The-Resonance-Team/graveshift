@@ -1,0 +1,21 @@
+{
+  "name": "@graveshift/work",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "bun check --no-script",
+    "typecheck": "bun check --no-script",
+    "format": "bun fmt",
+    "format:check": "bun fmt --check",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@graveshift/agents": "workspace:*",
+    "@graveshift/core": "workspace:*",
+    "zod": "^4.6.7"
+  }
+}

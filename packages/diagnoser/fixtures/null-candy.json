@@ -60,7 +60,7 @@
         "excerpt": "TypeError: null is not an object"
       },
       {
-        "ref": "file:src/app.ts",
+        "ref": "file:1",
         "excerpt": "candy.price!.toFixed(2)"
       }
     ]

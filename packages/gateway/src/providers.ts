@@ -55,6 +55,7 @@ import type { ProviderPackage } from '@graveshift/agents';
 export interface ProviderFactoryOptions {
   apiKey: string;
   baseURL: string;
+  name: string;
   fetch?: typeof fetch;
 }
 
@@ -96,7 +97,13 @@ export const PROVIDER_FACTORIES = {
   '@ai-sdk/minimax': createMiniMax,
   '@ai-sdk/mistral': createMistral,
   '@ai-sdk/moonshotai': createMoonshotAI,
-  '@ai-sdk/open-responses': createOpenResponses,
+  '@ai-sdk/open-responses': ({ apiKey, baseURL, fetch }: ProviderFactoryOptions) =>
+    createOpenResponses({
+      apiKey,
+      name: 'open-responses',
+      url: baseURL,
+      ...(fetch === undefined ? {} : { fetch }),
+    }),
   '@ai-sdk/openai': createOpenAI,
   '@ai-sdk/openai-compatible': createOpenAICompatible,
   '@ai-sdk/parallel': createParallel,
@@ -113,4 +120,4 @@ export const PROVIDER_FACTORIES = {
   '@ai-sdk/voyage': createVoyage,
   '@ai-sdk/xai': createXai,
   '@ai-sdk/zai': createZai,
-} satisfies Record<ProviderPackage, unknown>;
+} satisfies Record<ProviderPackage, ProviderFactory>;

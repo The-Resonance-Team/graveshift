@@ -24,7 +24,9 @@ export class PluginApiKeyGuard implements CanActivate {
     if (!value) throw new UnauthorizedException('Bearer API key required');
 
     // Bad, expired, revoked and wrong-kind keys stay 401. A missing scope is 403.
-    const principal = await this.credentials.verify(value, 'plugin');
+    const principal =
+      request.credentialPrincipal ?? (await this.credentials.verify(value, 'plugin'));
+    if (principal.kind !== 'plugin') throw new UnauthorizedException();
     if (!principal.scopes.includes(EVENTS_PUBLISH_SCOPE)) throw new ForbiddenException();
     request.pluginPrincipal = principal;
     return true;

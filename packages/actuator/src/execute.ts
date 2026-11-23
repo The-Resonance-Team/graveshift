@@ -1,151 +1,204 @@
-import { decide, type Policy } from '@graveshift/policy';
+import * as core from '@graveshift/core';
+import * as policyEngine from '@graveshift/policy';
 
-import {
-  allowedServices,
-  type Breaker,
-  createBreaker,
-  createTokenStore,
-  type TokenStore,
-} from './guards';
+import { actionAudit } from './audit';
+import * as claims from './claims';
+import * as guards from './guards';
 import { MIN_SECRET_LENGTH, verifyHmac } from './sign';
-import {
-  type Action,
-  type ActionRequest,
-  ActionRequestSchema,
-  type ActuationResult,
-  ActuatorError,
-  type DockerRestarter,
-  type KubeWriter,
-  TOKEN_TTL_MS,
-} from './types';
+import * as types from './types';
 
 export interface ActuatorOptions {
   secret: string;
-  policy: Policy;
-  docker: DockerRestarter;
-  kube: KubeWriter;
+  policy: policyEngine.Policy;
+  docker: types.DockerRestarter;
+  kube: types.KubeWriter;
   namespace: string;
+  requiredAudit: types.RequiredAudit;
+  durableAdmission: claims.RequiredAdmission;
+  /** False when the audit sink acknowledges but does not persist a record. */
+  durableAudit?: boolean;
+  envMode?: string;
   now?: () => number;
-  tokens?: TokenStore;
-  breaker?: Breaker;
+  maxTrackedActions?: number;
+  breaker?: guards.Breaker;
 }
 
-const policyActionName = (action: Action): string =>
-  action.kind === 'scale'
-    ? 'scale'
-    : action.runtime === 'docker'
-      ? 'restart_service'
-      : 'rollout_restart';
+interface Admission {
+  service: string;
+  at: number;
+  expiresAt: number;
+  state: 'reserved' | 'executing' | 'complete';
+}
 
 export function createActuator(options: ActuatorOptions) {
-  const { secret, policy, docker, kube, namespace } = options;
+  const { secret, docker, kube, namespace, requiredAudit, durableAdmission, envMode } = options;
+  const durableAudit = options.durableAudit ?? true;
   if (secret.length < MIN_SECRET_LENGTH)
-    throw new ActuatorError('ACTUATOR_CONFIG', 'HMAC secret is too short');
-  const now = options.now ?? Date.now;
-  const tokens = options.tokens ?? createTokenStore(now);
-  const breaker = options.breaker ?? createBreaker({ page: () => {} });
-  const allowed = allowedServices(policy);
-  const recent = new Map<string, number[]>();
-
-  const result = (
-    status: ActuationResult['status'],
-    reason: string,
-    request?: ActionRequest,
-  ): ActuationResult => ({
-    status,
-    reason,
-    audit: {
-      actor: 'actuator',
-      type: `actuator.${status}`,
-      ...(request ? { incidentId: request.action.incidentId } : {}),
-      payload: {
-        reason,
-        ...(request
-          ? {
-              actionId: request.action.id,
-              service: request.action.service,
-              kind: request.action.kind,
-              tokenId: request.approval.tokenId,
-              approvedBy: request.approval.approvedBy,
-            }
-          : {}),
-      },
-    },
-  });
-  const deny = (reason: string, request?: ActionRequest) => result('denied', reason, request);
-
-  // returns a denial reason, or undefined when the request may run
-  function check(request: ActionRequest): string | undefined {
-    const { action, approval, context } = request;
-    const at = now();
-    const issued = Date.parse(approval.issuedAt);
-    const expires = Date.parse(approval.expiresAt);
-    if (expires - issued > TOKEN_TTL_MS || expires <= issued) return 'ttl_too_long';
-    if (at < issued) return 'not_yet_valid';
-    if (at >= expires) return 'expired';
-    if (approval.actionId !== action.id || approval.incidentId !== action.incidentId)
-      return 'approval_mismatch';
-    if (!policy.approvers.discordUserIds.includes(approval.approvedBy)) return 'not_an_approver';
-    if (breaker.isOpen(action.service)) return 'circuit_open';
-    if (!allowed.has(action.service)) return 'target_not_allowlisted';
-
-    const times = (recent.get(action.service) ?? []).filter((t) => t > at - 10 * 60_000);
-    const decision = decide(
-      policy,
-      {
-        service: action.service,
-        ...(context.category ? { category: context.category } : {}),
-        signals: context.signals,
-        confidence: context.confidence,
-        counters: {
-          openPrsLastHour: 0,
-          actionsLast10Min: times.length,
-          diagnosisLoops: 0,
-          llmSpentTodayUsd: 0,
-        },
-      },
-      {
-        name: policyActionName(action),
-        ...(action.replicas === undefined ? {} : { params: { replicas: action.replicas } }),
-      },
+    throw new types.ActuatorError('ACTUATOR_CONFIG', 'HMAC secret is too short');
+  if (typeof requiredAudit !== 'function')
+    throw new types.ActuatorError('ACTUATOR_CONFIG', 'Required audit sink is missing');
+  if (
+    typeof durableAdmission?.claim !== 'function' ||
+    typeof durableAdmission.complete !== 'function'
+  )
+    throw new types.ActuatorError('ACTUATOR_CONFIG', 'Durable runtime admission is required');
+  const maxTracked = options.maxTrackedActions ?? 10_000;
+  if (!Number.isSafeInteger(maxTracked) || maxTracked < 1)
+    throw new types.ActuatorError(
+      'ACTUATOR_CONFIG',
+      'Admission capacity must be a positive integer',
     );
-    if (decision.effect !== 'require_approval') return `policy_${decision.reason}`;
-    const rule = policy.rules.find((r) => r.id === decision.matchedRule);
-    if (action.kind === 'scale' && !rule?.params?.replicas) return 'unbounded_scale';
-    return undefined;
+  const policy = structuredClone(options.policy);
+  const now = options.now ?? Date.now;
+  const breaker = options.breaker ?? guards.createBreaker({ page: () => {} });
+  const admissions = new Map<string, Admission>();
+
+  async function acknowledge(draft: core.AuditDraft): Promise<boolean> {
+    try {
+      const ack = await requiredAudit(structuredClone(draft));
+      return durableAudit && ack?.key === draft.key;
+    } catch {
+      return false;
+    }
   }
 
-  async function run(action: Action): Promise<void> {
+  async function terminal(
+    status: types.ActuationResult['status'],
+    reason: string,
+    request?: types.ActionRequest,
+    keyBase?: string,
+  ): Promise<types.ActuationResult> {
+    const audit = actionAudit(status, reason, request, keyBase);
+    const acknowledged = await acknowledge(audit);
+    return { status, reason, audit, auditStatus: acknowledged ? 'acknowledged' : 'pending' };
+  }
+
+  function approvalReason(request: types.ActionRequest, at: number) {
+    return (
+      claims.approvalReason(request, policy, at) ??
+      (breaker.isOpen(request.action.service) ? 'circuit_open' : undefined)
+    );
+  }
+
+  function reserve(request: types.ActionRequest): string | Admission {
+    const { action, approval } = request;
+    const at = now();
+    let actionsLast10Min = 0;
+    for (const [tokenId, entry] of admissions) {
+      const active = entry.state !== 'complete' || entry.at > at - core.BREAKER_WINDOW_MS;
+      if (!active && entry.expiresAt <= at) admissions.delete(tokenId);
+      if (active && entry.service === action.service) actionsLast10Min++;
+    }
+    const invalid = approvalReason(request, at);
+    if (invalid) return invalid;
+    if (admissions.has(approval.tokenId)) return 'replay';
+    const denied = claims.runtimeDecision(policy, request, actionsLast10Min, envMode);
+    if (denied) return denied;
+    if (admissions.size >= maxTracked) return 'admission_capacity';
+    const entry: Admission = {
+      service: action.service,
+      at,
+      expiresAt: Date.parse(approval.expiresAt),
+      state: 'reserved',
+    };
+    admissions.set(approval.tokenId, entry);
+    return entry;
+  }
+
+  async function run(action: types.Action): Promise<void> {
     if (action.runtime === 'docker') return docker.restart(action.service);
     if (action.kind === 'scale') return kube.scale(namespace, action.service, action.replicas ?? 0);
     return kube.rolloutRestart(namespace, action.service);
   }
 
+  async function complete(
+    request: types.ActionRequest,
+    entry: Admission,
+    result: types.RuntimeOutcome,
+  ): Promise<types.ActuationResult> {
+    entry.state = 'complete';
+    const completion: claims.RuntimeCompletion = {
+      tokenId: request.approval.tokenId,
+      actionId: request.action.id,
+      requestHash: claims.requestHash(request),
+      result,
+    };
+    const audit = claims.completionAudit(
+      completion,
+      request.action.service,
+      request.action.incidentId,
+    );
+    try {
+      const ack = await durableAdmission.complete(structuredClone(completion));
+      if (
+        ack.kind === 'completed' ||
+        (ack.kind === 'known' &&
+          ack.result.status === result.status &&
+          ack.result.reason === result.reason)
+      ) {
+        return { ...result, audit, auditStatus: durableAudit ? 'acknowledged' : 'pending' };
+      }
+    } catch {
+      // The known runtime result is retained. An unfinished durable claim blocks another effect.
+    }
+    return { ...result, audit, auditStatus: 'pending' };
+  }
+
   return {
     breaker,
-    async execute(raw: unknown): Promise<ActuationResult> {
-      const parsed = ActionRequestSchema.safeParse(raw);
-      if (!parsed.success) return deny('malformed_request');
+    async execute(raw: unknown): Promise<types.ActuationResult> {
+      const parsed = types.ActionRequestSchema.safeParse(raw);
+      if (!parsed.success) return terminal('denied', 'malformed_request');
       const request = parsed.data;
-      if (!verifyHmac(request, secret)) return deny('bad_signature', request);
-      const reason = check(request);
-      if (reason) return deny(reason, request);
-      // consume last so a denied request never burns its token, and before running so a failure cannot be retried with it
-      if (!tokens.consume(request.approval.tokenId, Date.parse(request.approval.expiresAt)))
-        return deny('replay', request);
+      if (!verifyHmac(request, secret)) return terminal('denied', 'bad_signature');
+      const admission = reserve(request);
+      if (typeof admission === 'string') return terminal('denied', admission, request);
+      const input = claims.runtimeClaim(request);
+      let claimed: claims.ClaimResult;
+      try {
+        claimed = await durableAdmission.claim(structuredClone(input));
+      } catch {
+        admissions.delete(request.approval.tokenId);
+        return {
+          status: 'failed',
+          reason: 'admission_unavailable',
+          audit: claims.claimAudit(input),
+          auditStatus: 'pending',
+        };
+      }
+      if (claimed.kind !== 'claimed') {
+        admissions.delete(request.approval.tokenId);
+        const reason =
+          claimed.kind === 'known'
+            ? 'already_completed'
+            : claimed.kind === 'uncertain'
+              ? 'execution_uncertain'
+              : claimed.reason;
+        const result = await terminal('denied', reason, request);
+        return claimed.kind === 'known' ? { ...result, knownResult: claimed.result } : result;
+      }
+      const invalid = approvalReason(request, now());
+      if (invalid) {
+        return complete(request, admission, { status: 'denied', reason: invalid });
+      }
+      admission.at = now();
+      admission.state = 'executing';
+      breaker.recordAction(request.action.service, admission.at);
+      let status: 'executed' | 'failed' = 'executed';
       try {
         await run(request.action);
-      } catch (error) {
-        return result(
-          'failed',
-          error instanceof Error ? error.message : 'execution failed',
-          request,
-        );
+      } catch {
+        status = 'failed';
       }
-      const at = now();
-      recent.set(request.action.service, [...(recent.get(request.action.service) ?? []), at]);
-      breaker.recordAction(request.action.service, at);
-      return result('executed', 'executed', request);
+      return complete(
+        request,
+        admission,
+        status === 'executed'
+          ? { status, reason: 'executed' }
+          : { status, reason: 'execution_failed' },
+      );
     },
   };
 }
+
+export type Actuator = ReturnType<typeof createActuator>;

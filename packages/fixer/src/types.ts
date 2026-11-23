@@ -1,24 +1,17 @@
-import type { PrRef } from '@graveshift/core';
-import type { Policy } from '@graveshift/policy';
+import type { RepoRules } from '@graveshift/patch/schemas';
 
-export type RepoPolicy = Policy['github']['repos'][number];
-
-export interface PatchFile {
-  path: string;
-  content: string | null;
-  linesChanged: number;
+export interface RepoPolicy extends RepoRules {
+  repo: string;
+  services: string[];
+  baseBranch: string;
+  branchPrefix: string;
+  draft: true;
 }
 
-export interface Patch {
-  files: PatchFile[];
-}
-
-// The canonical PrRef lives in @graveshift/core with its schema.
-export type { PrRef };
-
-/** Real diff size of a verified patch, shown in the pull request body. */
-export interface PullDiffSummary {
-  readonly filesChanged: number;
-  readonly additions: number;
-  readonly deletions: number;
+export interface PrRef {
+  repo: string;
+  number: number;
+  url: string;
+  branch: string;
+  headSha: string;
 }

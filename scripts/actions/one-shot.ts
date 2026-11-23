@@ -2,7 +2,13 @@ import { lstatSync, mkdirSync, realpathSync } from 'node:fs';
 import { dirname, sep } from 'node:path';
 
 import { loadGraveshiftConfig } from '@graveshift/config';
-import { type Patch, guardPatch, PatchSchema, type RepoRules } from '@graveshift/patch';
+import {
+  EMPTY_BLOB_SHA,
+  type Patch,
+  guardPatch,
+  PatchSchema,
+  type RepoRules,
+} from '@graveshift/patch';
 import { type Policy, type PolicyContext, type PolicyDecision, decide } from '@graveshift/policy';
 import { redact } from '@graveshift/redactor';
 
@@ -186,11 +192,62 @@ export function validatePatch(raw: string, rules: RepoRules): Patch {
 }
 
 export function redactPatch(patch: Patch): Patch {
-  return PatchSchema.parse({
-    files: patch.files.map((file) => ({
-      ...file,
-      content: file.content === null ? null : redact(file.content),
-    })),
+  // Redaction keeps the whole-tree base and every per-file base blob: dropping
+  // them would make the signed artifact unverifiable and bypass the base guard.
+  const files = patch.files.map((file) => ({
+    ...file,
+    content: file.content === null ? null : redact(file.content),
+  }));
+  const parsed = PatchSchema.safeParse({ baseSha: patch.baseSha, files });
+  if (!parsed.success) throw new Error('redacted patch failed schema validation');
+  return parsed.data;
+}
+
+export class OneShotBaseError extends Error {
+  readonly code = 'PATCH_BASE_STALE';
+
+  constructor() {
+    super('patch base does not match the checked out commit');
+    this.name = 'OneShotBaseError';
+  }
+}
+
+// The patch is bound to one base commit. A changed base must stop the job before any write.
+export function assertPatchBase(patch: Patch, baseSha: string): void {
+  if (!/^[a-f0-9]{40}$/.test(baseSha) || patch.baseSha !== baseSha) throw new OneShotBaseError();
+}
+
+// The signed BASE_SHA is the commit the job writes on. The patch must name that same commit.
+export function assertPatchMatchesBaseSha(patch: Patch, baseSha: string | undefined): string {
+  if (!baseSha || !/^[0-9a-f]{40}$/.test(baseSha))
+    throw new Error('base_sha must be a full commit SHA');
+  if (patch.baseSha !== baseSha) throw new OneShotBaseError();
+  return baseSha;
+}
+
+export class OneShotBlobError extends Error {
+  readonly code = 'PATCH_BLOB_STALE';
+
+  constructor(path: string) {
+    super(`${path}: file changed since the patch was made`);
+    this.name = 'OneShotBlobError';
+  }
+}
+
+// Each edited file must still have the blob the patch was made from. A missing file
+// counts as the empty blob, which is the base value for a new file. Deletions are
+// skipped here: the patch guard requires their baseBlobSha to be null, so there is
+// no blob to compare. The patch.baseSha equality check still binds each deletion
+// to one commit before any write.
+export async function assertPatchBlobs(
+  patch: Patch,
+  blobAt: (path: string) => Promise<string | undefined>,
+): Promise<void> {
+  const edited = patch.files.filter((file) => file.content !== null);
+  const actual = await Promise.all(edited.map((file) => blobAt(file.path)));
+  edited.forEach((file, index) => {
+    if ((actual[index] ?? EMPTY_BLOB_SHA) !== file.baseBlobSha)
+      throw new OneShotBlobError(file.path);
   });
 }
 

@@ -1,4 +1,4 @@
-import type { ContextBundle, DiagnoseInput, LlmDiagnosis } from './types';
+import type { ContextBundle, LlmDiagnosis } from './types';
 
 const matchLog = (bundle: ContextBundle, pattern: RegExp): [string, string] | undefined =>
   [...bundle.refs].find(([ref, text]) => ref.startsWith('log:') && pattern.test(text));
@@ -6,14 +6,12 @@ const matchLog = (bundle: ContextBundle, pattern: RegExp): [string, string] | un
 const excerpt = (text: string): string => text.slice(0, 200);
 
 // Deterministic: same input, same diagnosis. Rules are ordered, first match wins.
-export function rulesOnlyDiagnosis(
-  { detections, incident }: DiagnoseInput,
-  bundle: ContextBundle,
-): LlmDiagnosis {
-  const signal = (rule: string) => detections.find((d) => d.rule === rule);
+export function rulesOnlyDiagnosis(bundle: ContextBundle): LlmDiagnosis {
+  const signal = (rule: string) =>
+    bundle.evidence.find((entry) => entry.kind === 'signal' && entry.rule === rule);
   const fromSignal = (rule: string) => {
     const d = signal(rule);
-    return d ? { ref: `signal:${d.id}`, excerpt: excerpt(d.message) } : undefined;
+    return d ? { ref: d.ref, excerpt: excerpt(d.text) } : undefined;
   };
   const fromLog = (pattern: RegExp) => {
     const hit = matchLog(bundle, pattern);
@@ -69,15 +67,12 @@ export function rulesOnlyDiagnosis(
     };
   }
 
-  const first = detections[0];
+  const first = bundle.evidence.find(({ kind }) => kind === 'signal') ?? bundle.evidence[0];
+  if (first === undefined) throw new Error('prepared evidence is missing its incident');
   return {
     category: 'unknown',
     rootCause: 'No rule matched the available evidence.',
     confidence: 0.2,
-    evidence: [
-      first
-        ? { ref: `signal:${first.id}`, excerpt: excerpt(first.message) }
-        : { ref: `incident:${incident.id}`, excerpt: `incident on service ${incident.service}` },
-    ],
+    evidence: [{ ref: first.ref, excerpt: excerpt(first.text) }],
   };
 }

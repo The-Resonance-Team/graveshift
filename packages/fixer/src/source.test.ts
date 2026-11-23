@@ -1,129 +1,78 @@
 import { describe, expect, test } from 'bun:test';
 
-import { createGitHubSourceProvider, SourceError } from './source';
-import { fakeClient } from './test-helpers';
+import { prepareSource } from './source';
+import { sourceClient } from './source.test-helpers';
+import { repo, TEST_BASE_SHA } from './test-helpers';
 
-const text = (s: string): Uint8Array => new TextEncoder().encode(s);
-
-function sourceClient(over: {
-  tree?: Array<{ path: string; blobSha: string }>;
-  blobs?: Record<string, Uint8Array>;
-}) {
-  const fake = fakeClient();
-  const tree = over.tree ?? [
-    { path: 'README.md', blobSha: 'blob-readme' },
-    { path: 'src/api.ts', blobSha: 'blob-api' },
-  ];
-  const blobs: Record<string, Uint8Array> = {
-    'blob-readme': text('# shop\n'),
-    'blob-api': text('export const price = null;\n'),
-    ...over.blobs,
-  };
-  const client = {
-    ...fake.client,
-    listTree: async () => {
-      fake.calls.push({ method: 'listTree', args: [] });
-      return tree;
-    },
-    getBlobBytes: async (_repo: string, blobSha: string) => {
-      fake.calls.push({ method: 'getBlobBytes', args: [blobSha] });
-      const bytes = blobs[blobSha];
-      if (bytes === undefined) throw new Error(`missing blob ${blobSha}`);
-      return bytes;
-    },
-  };
-  return { provider: createGitHubSourceProvider(client), calls: fake.calls };
-}
-
-describe('createGitHubSourceProvider', () => {
-  test('reads the base ref, tree and every file at the base SHA', async () => {
-    const { provider } = sourceClient({});
-    const snapshot = await provider.readBase('xiro/haunted-candy-shop', 'main');
-    expect(snapshot.baseSha).toBe('base-sha');
-    expect(snapshot.treeSha).toBe('base-tree');
-    expect(snapshot.files.map((f) => f.path)).toEqual(['README.md', 'src/api.ts']);
-    const api = snapshot.files[1]!;
-    expect(api.blobSha).toBe('blob-api');
-    expect(api.text).toBe('export const price = null;\n');
-    expect(new TextDecoder().decode(api.bytes)).toBe('export const price = null;\n');
-  });
-
-  test('binary blobs keep exact bytes and carry no text', async () => {
-    const bytes = Uint8Array.from([0x89, 0x50, 0x4e, 0x47, 0, 1, 2]);
-    const { provider } = sourceClient({
-      tree: [{ path: 'assets/x.png', blobSha: 'blob-png' }],
-      blobs: { 'blob-png': bytes },
+describe('bounded repository source', () => {
+  test('reads exact allowed file text and identities without redacting source', async () => {
+    const secret = 'DB_PASSWORD=real-file-value\n';
+    const { client, calls } = sourceClient({
+      'src/app.ts': secret,
+      'src/.env': 'never read me',
+      'docs/private.md': 'outside allowed paths',
     });
-    const snapshot = await provider.readBase('r', 'main');
-    expect(snapshot.files[0]?.text).toBeNull();
-    expect([...(snapshot.files[0]?.bytes ?? [])]).toEqual([...bytes]);
-  });
-
-  test('every read failure throws so the fix fails closed', async () => {
-    const broken = fakeClient();
-    const provider = createGitHubSourceProvider({
-      ...broken.client,
-      getBlobBytes: async () => {
-        throw new Error('502');
+    const snapshot = await prepareSource(repo, client, TEST_BASE_SHA);
+    expect(snapshot).toMatchObject({
+      repo: repo.repo,
+      baseBranch: 'main',
+      baseSha: TEST_BASE_SHA,
+      treeSha: 'tree-sha',
+    });
+    expect(snapshot.files).toEqual([
+      {
+        path: 'src/app.ts',
+        content: secret,
+        mode: '100644',
+        blobSha: expect.stringMatching(/^[a-f0-9]{40}$/),
       },
+    ]);
+    expect(calls.filter((call) => call.method === 'readBlob')).toHaveLength(1);
+  });
+
+  test('rejects excessive file counts before reading blobs', async () => {
+    const { client, calls } = sourceClient({ 'src/one.ts': 'one', 'src/two.ts': 'two' });
+    await expect(
+      prepareSource(repo, client, TEST_BASE_SHA, { maxFiles: 1, maxBytes: 100 }),
+    ).rejects.toMatchObject({ code: 'SOURCE_UNAVAILABLE' });
+    expect(calls.filter((call) => call.method === 'readBlob')).toHaveLength(0);
+  });
+
+  test('bounds declared and actual bytes without reading further files', async () => {
+    const { client, calls, entries } = sourceClient({ 'src/one.ts': '1234', 'src/two.ts': '5678' });
+    for (const entry of entries) delete entry.size;
+    await expect(
+      prepareSource(repo, client, TEST_BASE_SHA, { maxFiles: 2, maxBytes: 3 }),
+    ).rejects.toMatchObject({
+      code: 'SOURCE_UNAVAILABLE',
     });
-    await expect(provider.readBase('r', 'main')).rejects.toThrow('502');
+    expect(calls.filter((call) => call.method === 'readBlob')).toHaveLength(1);
   });
 
-  test('unsafe, duplicate or oversized tree entries fail closed', async () => {
-    await expect(
-      sourceClient({
-        tree: [{ path: '../escape', blobSha: 'x' }],
-        blobs: { x: text('x') },
-      }).provider.readBase('r', 'main'),
-    ).rejects.toBeInstanceOf(SourceError);
-    await expect(
-      sourceClient({
-        tree: [
-          { path: 'a', blobSha: 'x' },
-          { path: 'a', blobSha: 'x' },
-        ],
-        blobs: { x: text('x') },
-      }).provider.readBase('r', 'main'),
-    ).rejects.toBeInstanceOf(SourceError);
-    await expect(
-      sourceClient({
-        tree: [{ path: 'big.bin', blobSha: 'big' }],
-        blobs: { big: new Uint8Array(1_048_577) },
-      }).provider.readBase('r', 'main'),
-    ).rejects.toBeInstanceOf(SourceError);
+  test.each(['120000', '160000'])('refuses source mode %s before a blob read', async (mode) => {
+    const { client, calls, entries } = sourceClient();
+    const entry = entries[0];
+    if (!entry) throw new Error('missing source');
+    entry.mode = mode;
+    await expect(prepareSource(repo, client, TEST_BASE_SHA)).rejects.toMatchObject({
+      code: 'SOURCE_UNAVAILABLE',
+    });
+    expect(calls.filter((call) => call.method === 'readBlob')).toHaveLength(0);
   });
 
-  test('the whole base read is bounded by a total byte cap', async () => {
-    const files = Array.from({ length: 33 }, (_, i) => ({
-      path: `big/${i}.bin`,
-      blobSha: `big-${i}`,
-    }));
-    const blobs: Record<string, Uint8Array> = {};
-    for (const file of files) blobs[file.blobSha] = new Uint8Array(1_048_576);
-    await expect(
-      sourceClient({ tree: files, blobs }).provider.readBase('r', 'main'),
-    ).rejects.toThrow(/total cap/);
+  test('refuses an underreported or corrupt blob identity', async () => {
+    const { client } = sourceClient();
+    client.readBlob = async () => 'changed after its hash was recorded';
+    await expect(prepareSource(repo, client, TEST_BASE_SHA)).rejects.toMatchObject({
+      code: 'SOURCE_UNAVAILABLE',
+    });
   });
 
-  test('every blob is read once and accumulated in one pass', async () => {
-    const files = Array.from({ length: 40 }, (_, i) => ({
-      path: `f/${i}.txt`,
-      blobSha: `b-${i}`,
-    }));
-    const blobs: Record<string, Uint8Array> = {};
-    for (const file of files) blobs[file.blobSha] = text(`${file.path}\n`);
-    const { provider, calls } = sourceClient({ tree: files, blobs });
-    const snapshot = await provider.readBase('r', 'main');
-    expect(snapshot.files.map((f) => f.path)).toEqual(files.map((f) => f.path));
-    const reads = calls.filter((call) => call.method === 'getBlobBytes');
-    expect(reads).toHaveLength(files.length);
-    expect(new Set(reads.map((call) => JSON.stringify(call.args))).size).toBe(reads.length);
-  });
-
-  test('currentBaseSha reads the live ref for the stale-base re-check', async () => {
-    const { provider, calls } = sourceClient({});
-    expect(await provider.currentBaseSha('r', 'main')).toBe('base-sha');
-    expect(calls.at(-1)?.method).toBe('getBaseSha');
+  test('refuses a base SHA that is not the deployed commit SHA', async () => {
+    const { client, calls } = sourceClient();
+    await expect(prepareSource(repo, client, 'not-a-sha')).rejects.toMatchObject({
+      code: 'STALE_BASE',
+    });
+    expect(calls).toEqual([]);
   });
 });

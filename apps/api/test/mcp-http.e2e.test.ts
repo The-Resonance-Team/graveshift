@@ -8,10 +8,14 @@ import request from 'supertest';
 import { configureApp } from '../src/app.factory';
 import { AppModule } from '../src/app.module';
 import { CREDENTIAL_CONFIG, CREDENTIAL_REPO } from '../src/auth/auth.types';
+import { IDENTITY_REPO } from '../src/identity/identity.types';
+import { InMemoryEventSource } from '../src/mcp/events/events.source';
+import { CLOSED_DEPLOYMENTS, MCP_EVENT_SOURCE } from '../src/mcp/events/events.types';
 import { MCP_BACKEND, MCP_POLICY } from '../src/mcp/mcp.types';
+import { McpTokenVerifierService } from '../src/mcp/mcp-token.verifier';
 import { TEST_CONFIG } from './fakes/auth-test-config';
 import { FakeCredentialRepo } from './fakes/fake-credential-repo';
-import { accessToken } from './fakes/auth-test-helpers';
+import { accessToken, testIdentityRepo, validEnvelope } from './fakes/auth-test-helpers';
 import { FakeMcpBackend } from './fakes/fake-mcp-backend';
 
 const rpc = { jsonrpc: '2.0', id: 1, method: 'tools/list' };
@@ -38,8 +42,12 @@ describe('POST /mcp bearer auth (e2e)', () => {
   let mcpToken!: string;
   let metricsToken!: string;
   let pluginKey!: string;
+  let eventSource!: InMemoryEventSource;
+  let managementToken!: string;
+  let verifier!: McpTokenVerifierService;
 
   beforeAll(async () => {
+    eventSource = new InMemoryEventSource();
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(MCP_BACKEND)
       .useValue(new FakeMcpBackend())
@@ -49,13 +57,21 @@ describe('POST /mcp bearer auth (e2e)', () => {
       .useValue(TEST_CONFIG)
       .overrideProvider(CREDENTIAL_REPO)
       .useValue(new FakeCredentialRepo())
+      .overrideProvider(IDENTITY_REPO)
+      .useValue(testIdentityRepo())
+      .overrideProvider(MCP_EVENT_SOURCE)
+      .useValue(eventSource)
+      .overrideProvider(CLOSED_DEPLOYMENTS)
+      .useValue({ listClosed: async () => [] })
       .compile();
     app = moduleRef.createNestApplication();
     jwtService = moduleRef.get(JwtService);
+    verifier = moduleRef.get(McpTokenVerifierService);
     configureApp(app);
     await app.init();
 
     const token = accessToken(jwtService, ['tokens:manage', 'incidents:read', 'events:publish']);
+    managementToken = token;
     const create = async (kind: 'mcp' | 'plugin', scopes: string[]) => {
       const response = await request(app.getHttpServer())
         .post('/api/credentials')
@@ -92,6 +108,25 @@ describe('POST /mcp bearer auth (e2e)', () => {
 
   test('accepts an MCP token from the shared issuer', async () => {
     await post(mcpToken).expect(200);
+  });
+
+  test('reports stored Credential expiry and rejects its use after revocation', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/api/credentials')
+      .set('authorization', `Bearer ${managementToken}`)
+      .send({ kind: 'mcp', name: 'short-lived', scopes: ['incidents:read'], ttlSeconds: 60 })
+      .expect(201);
+    const metadata = await verifier.verifyAccessToken(response.body.value);
+    expect(metadata.expiresAt).toBe(Math.floor(Date.parse(response.body.expiresAt) / 1000));
+    expect(metadata.expiresAt! - Date.now() / 1000).toBeLessThanOrEqual(60);
+    await request(app.getHttpServer())
+      .delete(`/api/credentials/${response.body.id}`)
+      .set('authorization', `Bearer ${managementToken}`)
+      .expect(204);
+    await post(response.body.value).expect(401);
+    await expect(verifier.verifyAccessToken(response.body.value)).rejects.toMatchObject({
+      status: 401,
+    });
   });
 
   test('refuses a short token', async () => {
@@ -155,6 +190,62 @@ describe('POST /mcp bearer auth (e2e)', () => {
     await call(proposeToken, 'tools/call', {
       name: 'propose_fix',
       arguments: { incidentId: 'inc-1', action: 'open_pr' },
+    }).expect(200);
+  });
+
+  const eventsCall = (token: string, method: string, params: object = {}) =>
+    call(token, method, {
+      ...params,
+      _meta: {
+        'io.modelcontextprotocol/protocolVersion': '2026-07-28',
+        'io.modelcontextprotocol/clientCapabilities': {},
+      },
+    })
+      .set('mcp-protocol-version', '2026-07-28')
+      .set('mcp-method', method);
+
+  test('allows the authenticated modern discovery exchange', async () => {
+    const response = await eventsCall(mcpToken, 'server/discover').expect(200);
+    expect(response.text).toMatch(/"name"\s*:\s*"graveshift-mcp"/);
+  });
+
+  test('discovers Events through the authenticated modern HTTP endpoint', async () => {
+    const response = await eventsCall(mcpToken, 'events/list').expect(200);
+    expect(response.text).toMatch(/"name"\s*:\s*"incident.changed"/);
+    expect(response.text).toMatch(/"delivery"\s*:\s*\["poll"\]/);
+  });
+
+  test('polls an Event through HTTP with the scope its Event type declares', async () => {
+    const initial = await eventsCall(mcpToken, 'events/poll', {
+      name: 'incident.changed',
+      cursor: null,
+    }).expect(200);
+    const cursor = initial.text.match(/"cursor"\s*:\s*"([^"]+)"/)?.[1];
+    expect(cursor).toBeDefined();
+    eventSource.push(validEnvelope({ id: 'evt-http-1', type: 'signal.oom' }));
+    const response = await eventsCall(mcpToken, 'events/poll', {
+      name: 'incident.changed',
+      cursor,
+    }).expect(200);
+    expect(response.text).toMatch(/"eventId"\s*:\s*"evt-http-1"/);
+    expect(response.text).toMatch(/"service"\s*:\s*"api"/);
+  });
+
+  test('refuses HTTP Events polling outside the declared scope', async () => {
+    await eventsCall(metricsToken, 'events/poll', {
+      name: 'incident.changed',
+      cursor: null,
+    }).expect(403);
+  });
+
+  test('denies v3 Events push methods but allows in-scope polling', async () => {
+    const denied = ['events/stream', 'events/subscribe', 'events/unsubscribe'].map((method) =>
+      eventsCall(mcpToken, method).expect(403),
+    );
+    await Promise.all(denied);
+    await eventsCall(mcpToken, 'events/poll', {
+      name: 'incident.changed',
+      cursor: null,
     }).expect(200);
   });
 

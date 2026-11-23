@@ -1,7 +1,11 @@
+import { randomBytes } from 'node:crypto';
 import { resolve } from 'node:path';
 
 const root = resolve(import.meta.dir, '..');
 const port = process.env.GRAVESHIFT_TEST_PG_PORT ?? '55438';
+// The guard accepts only this named local throwaway database. One run id per
+// invocation keeps parallel runs isolated and enables the opt-in DB tests.
+const runId = randomBytes(16).toString('hex');
 if (!/^\d{4,5}$/.test(port) || Number(port) > 65535) throw new Error('Invalid test database port');
 const compose = [
   'docker',
@@ -14,7 +18,11 @@ const compose = [
 const env = {
   ...process.env,
   GRAVESHIFT_TEST_PG_PORT: port,
-  DATABASE_URL: `postgresql://graveshift_test:local-test-only@127.0.0.1:${port}/graveshift_test`,
+  GRAVESHIFT_DB_TEST: '1',
+  GRAVESHIFT_DB_TEST_ID: runId,
+  // The isolated container is a local throwaway, not a CI database.
+  CI: '',
+  DATABASE_URL: `postgresql://gs_test:local-test-only@127.0.0.1:${port}/graveshift_test_${runId}`,
 };
 async function run(command: string[], cwd: string = root) {
   const child = Bun.spawn(command, { cwd, env, stdout: 'inherit', stderr: 'inherit' });
@@ -35,6 +43,12 @@ try {
     '--tsconfig-override',
     'apps/api/tsconfig.json',
     './apps/api/test/database',
+    './apps/api/src/actions',
+    './apps/api/src/audit',
+    './apps/api/src/hauntings',
+    './apps/api/src/auth/repo',
+    './apps/api/src/work-items',
+    './apps/daemon/src/platform.database.test.ts',
   ]);
 } finally {
   await run([...compose, 'down', '--volumes', '--remove-orphans']);

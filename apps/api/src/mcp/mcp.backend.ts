@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Optional, ServiceUnavailableException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import {
   InjectHttpClient,
   type HttpQuery,
@@ -7,10 +8,12 @@ import {
 } from '@nestjs/http-client';
 import {
   AuditEntriesSchema,
+  type AuditDraft,
   type AuditEntry,
-  type ChainResult,
   ChainResultSchema,
   CounterSnapshotSchema,
+  type CounterSnapshot,
+  type IncidentView,
   IncidentViewSchema,
   IncidentViewsSchema,
   LogLinesSchema,
@@ -18,9 +21,18 @@ import {
   type ServiceView,
   ServiceViewsSchema,
 } from '@graveshift/core';
+import {
+  SharedPolicyContextSchema,
+  type SharedPolicyContext,
+} from '@graveshift/core/policy-context';
+import { prepareRecordedHaunting, RecordedHauntingSchema } from '@graveshift/core/recorded';
+import { z } from 'zod';
 
+import type { VerifyResult } from '../audit/audit.types';
+import { AuditRepo } from '../audit/audit.repo';
 import { DaemonUnavailableError } from './mcp.errors';
-import type { CounterSnapshot, IncidentView, McpBackend } from './mcp.types';
+import { McpProjectContext } from './mcp-project-context';
+import type { McpBackend } from './mcp.types';
 
 const missingIncident = (body: unknown): boolean =>
   typeof body === 'object' && body !== null && 'error' in body && body.error === 'not_found';
@@ -29,10 +41,17 @@ interface Parser<T> {
   parse(value: unknown): T;
 }
 
-/** The one client of the daemon read surface. A read failure never becomes empty data. */
+/**
+ * The platform-v2 daemon read surface. Its record shape is the daemon's
+ * IncidentView; the tools read it structurally as incident facts.
+ */
 @Injectable()
-export class HttpMcpBackend implements McpBackend {
-  constructor(@InjectHttpClient('daemon-read') private readonly http: HttpClient) {}
+export class HttpMcpBackend {
+  constructor(
+    @InjectHttpClient('daemon-read') private readonly http: HttpClient,
+    @Optional() private readonly audit?: AuditRepo,
+    @Optional() private readonly projectContext?: McpProjectContext,
+  ) {}
 
   private fail(error: unknown): never {
     if (error instanceof HttpResponseError && (error.status === 401 || error.status === 403)) {
@@ -83,7 +102,7 @@ export class HttpMcpBackend implements McpBackend {
     return this.read('/read/audit', AuditEntriesSchema, opts);
   }
 
-  verifyChain(): Promise<ChainResult> {
+  verifyChain(): Promise<VerifyResult> {
     // Redaction stays in McpTools, after parsing and before the tool answer.
     return this.read('/read/audit/verify', ChainResultSchema);
   }
@@ -99,5 +118,116 @@ export class HttpMcpBackend implements McpBackend {
 
   getCounters(): Promise<CounterSnapshot> {
     return this.read('/read/counters', CounterSnapshotSchema);
+  }
+
+  /** Complete facts derived from the same daemon reads the tools use. */
+  async policyContext(incidentId: string): Promise<SharedPolicyContext> {
+    const view = await this.getIncident(incidentId);
+    if (view === undefined) throw new DaemonUnavailableError(new Error('incident not found'));
+    const snapshot = await this.getCounters();
+    return SharedPolicyContextSchema.parse({
+      service: view.incident.service,
+      ...(view.category === undefined ? {} : { category: view.category }),
+      signals: (view.detections ?? []).map((entry: { rule: string }) => entry.rule),
+      confidence: view.incident.diagnosis?.confidence ?? 0,
+      counters: snapshot.counters,
+    });
+  }
+
+  async auditDecision(draft: AuditDraft): Promise<Pick<AuditDraft, 'key'>> {
+    // ponytail: the daemon read API has no append route; persist in the API-owned
+    // audit store using the authenticated caller's Project. stdio has no token.
+    const projectId = this.projectContext?.projectId;
+    if (this.audit && projectId !== undefined) await this.audit.append(projectId, draft);
+    return { key: draft.key };
+  }
+}
+
+const servicesSchema = z.array(
+  z.strictObject({
+    name: z.string().min(1),
+    runtime: z.enum(['docker', 'k8s']),
+    namespace: z.string().min(1).optional(),
+  }),
+);
+
+/** The durable model-audit backend. Reads daemon facts and owns audit acknowledgement. */
+@Injectable()
+export class DaemonMcpBackend implements McpBackend {
+  constructor(
+    @InjectHttpClient('daemon') private readonly http: HttpClient,
+    private readonly audit: AuditRepo,
+    private readonly config: ConfigService,
+    private readonly projectContext: McpProjectContext,
+  ) {}
+
+  private get projectId(): string {
+    return this.projectContext.require();
+  }
+
+  private async read<Schema extends z.ZodType>(path: string, input: object, schema: Schema) {
+    const { data } = await this.http.post<unknown>(`/internal/read/${path}`, {
+      headers: {
+        authorization: `Bearer ${this.config.getOrThrow<string>('GRAVESHIFT_DAEMON_INTERNAL_TOKEN')}`,
+      },
+      json: { projectId: this.projectId, ...input },
+    });
+    return schema.parse(data);
+  }
+
+  async listServices() {
+    const services = await this.read('services', {}, servicesSchema);
+    return services.map(({ namespace, ...service }) => ({
+      ...service,
+      ...(namespace === undefined ? {} : { namespace }),
+    }));
+  }
+
+  async listIncidents() {
+    const views = await this.read('incidents', {}, z.array(RecordedHauntingSchema));
+    return views.map(prepareRecordedHaunting);
+  }
+
+  async getIncident(id: string) {
+    try {
+      const view = await this.read('incident', { id }, RecordedHauntingSchema.nullable());
+      return view === null ? undefined : prepareRecordedHaunting(view);
+    } catch (error) {
+      if (error instanceof HttpResponseError && error.status === 404) return undefined;
+      throw error;
+    }
+  }
+
+  async listAudit(opts: { afterSeq: number; limit: number }): Promise<AuditEntry[]> {
+    return this.audit.list(this.projectId, opts);
+  }
+
+  async verifyChain(): Promise<VerifyResult> {
+    return this.audit.verifyChain(this.projectId);
+  }
+
+  tailLogs(service: string, lines: number) {
+    return this.read('logs', { service, lines }, z.array(z.string()));
+  }
+
+  queryMetric(promql: string) {
+    return this.read('metric', { promql }, z.number().nullable());
+  }
+
+  getCounters(): Promise<CounterSnapshot> {
+    return this.read('counters', {}, CounterSnapshotSchema);
+  }
+
+  async policyContext(incidentId: string): Promise<SharedPolicyContext> {
+    try {
+      return await this.read('context', { incidentId }, SharedPolicyContextSchema);
+    } catch {
+      throw new ServiceUnavailableException('Complete policy facts are unavailable');
+    }
+  }
+
+  async auditDecision(draft: AuditDraft) {
+    await this.audit.append(this.projectId, draft);
+    return { key: draft.key };
   }
 }

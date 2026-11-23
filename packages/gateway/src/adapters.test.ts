@@ -1,12 +1,18 @@
 import { describe, expect, test } from 'bun:test';
-import { type AgentConfig, AgentConfigSchema, PROVIDER_PACKAGES } from '@graveshift/agents';
+import {
+  type AgentConfig,
+  AgentConfigSchema,
+  PROVIDER_PACKAGES,
+  type ProviderPackage,
+} from '@graveshift/agents';
 import { z } from 'zod';
 
 import { createAdapter, resolveApiKey } from './adapters';
 import type { GatewayConfig } from './config';
 import { PROVIDER_FACTORIES } from './providers';
 import { createGateway } from './gateway';
-import { type AuditEvent, GatewayConfigError } from './types';
+import { acknowledgedAudit } from './testing';
+import { type AuditEvent, GatewayConfigError, UnsupportedTaskError } from './types';
 import fixture from '../fixtures/openai-compatible.json';
 
 const agent = (over: Partial<AgentConfig> = {}): AgentConfig =>
@@ -73,7 +79,7 @@ const config: GatewayConfig = {
 };
 
 describe('official provider adapters', () => {
-  test('builds one thin adapter for every supported package, with no model call', async () => {
+  test('keeps every official provider in the catalog and inspects its model without network access', async () => {
     expect(Object.keys(PROVIDER_FACTORIES).sort()).toEqual([...PROVIDER_PACKAGES].sort());
     const adapters = PROVIDER_PACKAGES.map((provider) => ({
       provider,
@@ -83,9 +89,47 @@ describe('official provider adapters', () => {
       expect(adapter.provider).toBe(provider);
       expect(adapter.model).toBe('test-model');
     }
-    expect(await Promise.all(adapters.map(({ adapter }) => adapter.available()))).toEqual(
-      PROVIDER_PACKAGES.map(() => true),
-    );
+    const available = await Promise.all(adapters.map(({ adapter }) => adapter.available()));
+    expect(available.some(Boolean)).toBe(true);
+    expect(available.every(Boolean)).toBe(false);
+  });
+
+  test.each<ProviderPackage>([
+    '@ai-sdk/replicate',
+    '@ai-sdk/assemblyai',
+    '@ai-sdk/cartesia',
+    '@ai-sdk/elevenlabs',
+    '@ai-sdk/parallel',
+    '@ai-sdk/voyage',
+  ])('%s cannot run a structured language task or spend on transport retries', async (provider) => {
+    const selected = agent({ provider });
+    const seen: Seen[] = [];
+    const adapter = createAdapter(selected, { env, fetch: replay(fixture, seen) });
+    expect(adapter.capability).toBe('unsupported');
+    expect(await adapter.available()).toBe(false);
+    const events: AuditEvent[] = [];
+    const gateway = createGateway({
+      agents: [{ agent: selected, adapter }],
+      config: { ...config, maxRetries: 3, priceTableUsdPer1M: { 'test-model': { in: 1, out: 2 } } },
+      onAudit: acknowledgedAudit(events),
+    });
+    expect(
+      await gateway.run({
+        agent: selected.name,
+        task: 'diagnose',
+        system: 'sys',
+        prompt: 'prompt',
+        schema: Out,
+        validate: () => undefined,
+      }),
+    ).toMatchObject({
+      status: 'unavailable',
+      reason: 'unsupported_task',
+      usage: { in: 0, out: 0 },
+    });
+    await expect(adapter.generateObject(request)).rejects.toBeInstanceOf(UnsupportedTaskError);
+    expect(seen).toHaveLength(0);
+    expect(events).toHaveLength(1);
   });
 
   test('rejects an unset, empty or placeholder key', () => {
@@ -129,6 +173,39 @@ describe('real generateObject wrapper with a fake fetch (no network)', () => {
     expect(seen).toHaveLength(1);
   });
 
+  test('an invalid billed response retains SDK usage for gateway accounting', async () => {
+    const invalid = {
+      ...fixture,
+      choices: [{ index: 0, message: { content: '{bad JSON' }, finish_reason: 'stop' }],
+    };
+    const seen: Seen[] = [];
+    const adapter = createAdapter(compatible(), { env, fetch: replay(invalid, seen) });
+    expect(await adapter.generateObject(request)).toMatchObject({
+      validationError: expect.any(String),
+      usage: { in: 120, out: 30 },
+      model: compatible().model,
+    });
+    expect(seen).toHaveLength(1);
+  });
+
+  test('absent SDK usage stays unknown instead of becoming a zero-cost response', async () => {
+    const adapter = createAdapter(compatible(), {
+      env,
+      fetch: replay({ ...fixture, usage: null }),
+    });
+    const result = await adapter.generateObject(request);
+    expect(result.usage).toEqual({});
+  });
+
+  test('the compatible SDK zero default cannot turn missing completion usage into a known cost', async () => {
+    const adapter = createAdapter(compatible(), {
+      env,
+      fetch: replay({ ...fixture, usage: { prompt_tokens: 120 } }),
+    });
+    const result = await adapter.generateObject(request);
+    expect(result.usage).toEqual({ in: 120 });
+  });
+
   test('the key comes only from apiKeyEnv and appears only in the Authorization header', async () => {
     const seen: Seen[] = [];
     const adapter = createAdapter(compatible(), { env, fetch: replay(fixture, seen) });
@@ -167,7 +244,7 @@ describe('real generateObject wrapper with a fake fetch (no network)', () => {
     const gw = createGateway({
       agents: [{ agent: compatible(), adapter }],
       config,
-      onAudit: (event) => events.push(event),
+      onAudit: acknowledgedAudit(events),
     });
     const result = await gw.run({
       agent: 'SRE Bot',

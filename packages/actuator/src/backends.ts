@@ -1,15 +1,18 @@
 import { AppsV1Api, KubeConfig, PatchStrategy, setHeaderOptions } from '@kubernetes/client-node';
+import { z } from 'zod';
 
-import { ActuatorError, type DockerRestarter, type KubeWriter } from './types';
+import * as types from './types';
+
+const ContainersSchema = z.array(z.object({ Id: z.string().min(1) }));
 
 // Docker is reached through a docker-socket-proxy that allows restarts only (SEC-1)
 export function createDockerRestarter(
   baseUrl: string,
-  fetchFn: typeof fetch = fetch,
-): DockerRestarter {
+  fetchFn: types.HttpFetch = fetch,
+): types.DockerRestarter {
   const base = new URL(baseUrl);
   if (!['http:', 'https:'].includes(base.protocol)) {
-    throw new ActuatorError(
+    throw new types.ActuatorError(
       'ACTUATOR_CONFIG',
       'Docker must be reached through the socket-proxy HTTP URL',
     );
@@ -21,10 +24,17 @@ export function createDockerRestarter(
         new URL(`/containers/json?filters=${encodeURIComponent(filters)}`, base),
       );
       if (!list.ok)
-        throw new ActuatorError('ACTUATOR_BACKEND', `container lookup responded ${list.status}`);
-      const containers = (await list.json()) as Array<{ Id: string }>;
+        throw new types.ActuatorError(
+          'ACTUATOR_BACKEND',
+          `container lookup responded ${list.status}`,
+        );
+      const parsed = ContainersSchema.safeParse(await list.json());
+      if (!parsed.success) {
+        throw new types.ActuatorError('ACTUATOR_BACKEND', 'container lookup returned invalid data');
+      }
+      const containers = parsed.data;
       if (containers.length === 0)
-        throw new ActuatorError('ACTUATOR_BACKEND', `no container for ${service}`);
+        throw new types.ActuatorError('ACTUATOR_BACKEND', `no container for ${service}`);
       await Promise.all(
         containers.map(async ({ Id }) => {
           const res = await fetchFn(
@@ -32,7 +42,7 @@ export function createDockerRestarter(
             { method: 'POST' },
           );
           if (!res.ok)
-            throw new ActuatorError('ACTUATOR_BACKEND', `restart responded ${res.status}`);
+            throw new types.ActuatorError('ACTUATOR_BACKEND', `restart responded ${res.status}`);
         }),
       );
     },
@@ -43,7 +53,7 @@ export function createDockerRestarter(
 export function createKubeWriter(
   kc: KubeConfig = inCluster(),
   now: () => Date = () => new Date(),
-): KubeWriter {
+): types.KubeWriter {
   const apps = kc.makeApiClient(AppsV1Api);
   return {
     async rolloutRestart(namespace, name) {

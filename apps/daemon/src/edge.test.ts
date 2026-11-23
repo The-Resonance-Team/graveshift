@@ -5,6 +5,17 @@ import { DEFAULT_HOSTNAME, makeBunEdge, startListener, type Serve } from './edge
 import { handleRequest } from './routes';
 
 describe('HTTP edge adapter', () => {
+  test('a public bind address fails before opening a socket', () => {
+    let started = false;
+    const edge = makeBunEdge(() => {
+      started = true;
+      return { port: 2602, stop: () => {} };
+    });
+    expect(() => edge.start({ port: 2602, hostname: '0.0.0.0', fetch: handleRequest })).toThrow(
+      'loopback',
+    );
+    expect(started).toBe(false);
+  });
   test('start delegates to the injected serve function', () => {
     let received: Parameters<Serve>[0] | undefined;
     let closedWith: boolean | undefined;
