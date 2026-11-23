@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { EnvelopeError, prepareEnvelope } from '@graveshift/core';
 import type { Publisher } from '@graveshift/events';
+import { redact } from '@graveshift/redactor';
 
 import { AuditRepo } from '../../audit/repo/audit.repo';
 import { DeployRepo } from '../../deploys/deploy.repo';
@@ -47,6 +48,7 @@ export class EventIngestService {
       deploymentId: deployment?.deploymentId ?? null,
       environment: deployment?.environment ?? null,
     });
+    await this.publisher.publish(envelope);
     if (deployment === undefined) {
       await this.audit.append({
         projectId: body.projectId,
@@ -54,12 +56,15 @@ export class EventIngestService {
         type: 'event.unassigned',
         payload: {
           projectId: body.projectId,
+          eventId: envelope.id,
           deploymentId: body.deploymentId ?? null,
-          environment: body.environment ?? null,
+          environment:
+            body.environment === undefined || body.environment === null
+              ? null
+              : redact(body.environment),
         },
       });
     }
-    await this.publisher.publish(envelope);
     return { accepted: true, id: envelope.id };
   }
 

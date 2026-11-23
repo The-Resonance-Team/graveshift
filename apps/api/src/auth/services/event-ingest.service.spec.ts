@@ -91,6 +91,34 @@ describe('EventIngestService deployment binding', () => {
     expect(appended[0]).toMatchObject({ projectId: '12345', payload: { projectId: '12345' } });
   });
 
+  test('redacts a secret-like Environment before the unassigned audit entry', async () => {
+    const { service, appended } = setup();
+    await service.ingest(body({ environment: 'Authorization: Bearer abcdef123456' }), principal);
+    expect(appended).toHaveLength(1);
+    expect(JSON.stringify(appended[0]?.payload)).not.toContain('abcdef123456');
+  });
+
+  test('writes no audit entry when publishing fails', async () => {
+    const findByDeployment = mock<DeployRepo['findByDeployment']>(async () => undefined);
+    const appended: unknown[] = [];
+    const audit = {
+      append: async (input: unknown) => {
+        appended.push(input);
+      },
+    };
+    const service = new EventIngestService(
+      {
+        publish: async () => {
+          throw new Error('publish failed');
+        },
+      } as never,
+      { findByDeployment } as unknown as DeployRepo,
+      audit as unknown as AuditRepo,
+    );
+    await expect(service.ingest(body(), principal)).rejects.toThrow('publish failed');
+    expect(appended).toEqual([]);
+  });
+
   test('a client cannot borrow another Project Deployment', async () => {
     const { service, published, findByDeployment } = setup();
     await service.ingest(body(), principal);
