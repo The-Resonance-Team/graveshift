@@ -3,7 +3,7 @@ import { JwtModule } from '@nestjs/jwt';
 
 import { DeployAuthGuard } from './guards/deploy-auth.guard';
 
-/** One global guard serves the release, deploy and environment controllers. */
+/** One global guard serves the deployment and environment controllers. */
 @Global()
 @Module({
   imports: [JwtModule.register({})],

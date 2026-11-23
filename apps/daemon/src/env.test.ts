@@ -62,14 +62,14 @@ describe('daemon example environment values', () => {
       GRAVESHIFT_VERIFY_TIMEOUT_MS: '',
       GRAVESHIFT_DASHBOARD_URL: '',
     };
-    const executor = executorFromEnv(gateway, env);
+    const executor = executorFromEnv(gateway, env, async () => {});
     expect(typeof executor.execute).toBe('function');
     expect(typeof executor.recover).toBe('function');
-    expect(() => executorFromEnv(gateway, { ...env, GRAVESHIFT_GITHUB_APP_ID: '' })).toThrow(
-      'configuration is invalid',
-    );
     expect(() =>
-      executorFromEnv(gateway, { ...env, GRAVESHIFT_GITHUB_PRIVATE_KEY_PEM: '' }),
+      executorFromEnv(gateway, { ...env, GRAVESHIFT_GITHUB_APP_ID: '' }, async () => {}),
+    ).toThrow('configuration is invalid');
+    expect(() =>
+      executorFromEnv(gateway, { ...env, GRAVESHIFT_GITHUB_PRIVATE_KEY_PEM: '' }, async () => {}),
     ).toThrow('configuration is invalid');
     expect(() =>
       readDaemonConfig({

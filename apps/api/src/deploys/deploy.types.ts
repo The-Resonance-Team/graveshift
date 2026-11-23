@@ -6,13 +6,18 @@ export interface DeployPrincipal {
   orgId: string;
   projectId: string;
   scopes: string[];
+  /** The Project named in the route, set only on Project-scoped deploy routes. */
+  routeProjectId?: string | undefined;
+}
+
+/** One of these scopes may read every Project in the Organization. */
+export function canReadAllProjects(principal: DeployPrincipal): boolean {
+  return principal.scopes.includes('org:read') || principal.scopes.includes('org:ci');
 }
 
 /** Only org-wide scopes may read another Project's rows in the Organization. */
 export function readProjectFilter(principal: DeployPrincipal): string | undefined {
-  return principal.scopes.includes('org:read') || principal.scopes.includes('org:ci')
-    ? undefined
-    : principal.projectId;
+  return canReadAllProjects(principal) ? undefined : principal.projectId;
 }
 
 /** A client without org:ci may write only its bound Project. */
@@ -26,14 +31,6 @@ export function assertProjectBound(
   }
 }
 
-export interface ReleaseRecord {
-  id: string;
-  orgId: string;
-  version: string;
-  createdAt: string;
-  projectIds: string[];
-}
-
 export interface EnvironmentRecord {
   id: string;
   orgId: string;
@@ -41,21 +38,21 @@ export interface EnvironmentRecord {
   createdAt: string;
 }
 
+/** The API never exposes the internal uuid row key of a Deployment. */
 export interface DeployRecord {
-  id: string;
   orgId: string;
-  releaseId: string;
-  environmentId: string;
+  projectId: string;
+  deploymentId: string;
   environment: string;
-  name: string;
+  title: string;
   dateStarted: string;
   dateFinished: string | null;
   url: string | null;
+  closedAt: string | null;
   createdAt: string;
-  projectIds: string[];
 }
 
-/** The repository rejects every write that would change or remove a Deploy. */
+/** The repository rejects every write that would change or remove a Deployment row. */
 export class AppendOnlyDeployError extends Error {
   constructor() {
     super('Deploy is append-only');

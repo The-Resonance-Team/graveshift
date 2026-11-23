@@ -1,5 +1,14 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsISO8601, IsIn, IsNotEmpty, IsObject, IsString, Matches } from 'class-validator';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsISO8601,
+  IsIn,
+  IsNotEmpty,
+  IsObject,
+  IsOptional,
+  IsString,
+  Matches,
+  MaxLength,
+} from 'class-validator';
 
 export class PublishEventDto {
   @ApiProperty()
@@ -44,6 +53,18 @@ export class PublishEventDto {
   @IsString()
   @IsNotEmpty()
   fingerprint!: string;
+
+  @ApiPropertyOptional({ description: 'The deployed commit SHA, resolved by the server.' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[0-9a-f]{40}$/)
+  deploymentId?: string | null;
+
+  @ApiPropertyOptional({ description: 'The Organization-scoped Environment name.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(100)
+  environment?: string | null;
 
   @ApiProperty({ type: Object, additionalProperties: true })
   @IsObject()

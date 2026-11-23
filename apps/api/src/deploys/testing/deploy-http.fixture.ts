@@ -16,15 +16,13 @@ import { BOOT_CONFIG } from '../../config/boot.config';
 import { EnvironmentRepo } from '../../environments/environment.repo';
 import { IDENTITY_REPO } from '../../identity/identity.types';
 import { FakeIdentityRepo } from '../../identity/testing/fake-identity.repo';
-import { ReleaseRepo } from '../../releases/release.repo';
 import { DeployRepo } from '../deploy.repo';
-import { FakeDeployRepo, FakeEnvironmentRepo, FakeReleaseRepo } from './deploy-repo.fakes';
+import { FakeDeployRepo, FakeEnvironmentRepo } from './deploy-repo.fakes';
 
 export interface DeployTestContext {
   app: INestApplication;
   identity: FakeIdentityRepo;
   jwt: JwtService;
-  releases: FakeReleaseRepo;
   environments: FakeEnvironmentRepo;
   deploys: FakeDeployRepo;
   orgA: string;
@@ -94,9 +92,8 @@ export async function buildDeployTestApp(): Promise<DeployTestContext> {
     scopes: expandScopes(['org:read', 'org:ci', 'project:read', 'project:write']),
   });
 
-  const releases = new FakeReleaseRepo();
   const environments = new FakeEnvironmentRepo();
-  const deploys = new FakeDeployRepo(environments);
+  const deploys = new FakeDeployRepo();
   environments.deploys = deploys;
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(BOOT_CONFIG)
@@ -109,8 +106,6 @@ export async function buildDeployTestApp(): Promise<DeployTestContext> {
     .useValue(createInMemoryPublisher())
     .overrideProvider(IDENTITY_REPO)
     .useValue(identity)
-    .overrideProvider(ReleaseRepo)
-    .useValue(releases)
     .overrideProvider(EnvironmentRepo)
     .useValue(environments)
     .overrideProvider(DeployRepo)
@@ -124,7 +119,6 @@ export async function buildDeployTestApp(): Promise<DeployTestContext> {
     app,
     identity,
     jwt: moduleRef.get(JwtService),
-    releases,
     environments,
     deploys,
     orgA,

@@ -35,6 +35,7 @@ export function toRecordedHaunting(row: HauntingRow): RecordedHaunting {
     detections: row.detections,
     ...(row.pr === null ? {} : { pr: row.pr }),
     timeline: row.timeline,
+    deploymentId: row.deploymentId,
   });
 }
 
@@ -54,6 +55,7 @@ export function hauntingData(view: RecordedHaunting, auditSeq: number) {
     detections: view.detections,
     pr: view.pr ?? Prisma.DbNull,
     timeline: view.timeline ?? [],
+    deploymentId: view.deploymentId ?? null,
     openedAt: new Date(incident.openedAt),
     updatedAt: new Date(incident.updatedAt),
   } satisfies Omit<Prisma.HauntingCreateInput, 'projectId'>;
@@ -65,6 +67,8 @@ export function mergeRecorded(prior: RecordedHaunting | undefined, next: Recorde
   return prepareRecordedHaunting({
     ...prior,
     ...next,
+    // The opening Event owns the Deployment; later observations cannot move it.
+    deploymentId: next.deploymentId ?? prior?.deploymentId ?? null,
     incident: {
       ...next.incident,
       ...(diagnosis ? { diagnosis } : {}),

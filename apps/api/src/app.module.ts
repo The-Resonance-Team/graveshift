@@ -28,7 +28,6 @@ import { PrismaInfraModule } from './infra/prisma.module';
 import { EventsConfigModule } from './mcp/events/events.config';
 import { GraveshiftMcpModule } from './mcp/mcp.module';
 import { EnvironmentsModule } from './environments/environments.module';
-import { ReleasesModule } from './releases/releases.module';
 import { RulesController } from './rules.controller';
 import { RulesService } from './rules.service';
 import { WorkItemsModule } from './work-items/work-items.module';
@@ -45,7 +44,6 @@ import { WorkItemsModule } from './work-items/work-items.module';
     InternalHttpModule,
     IdentityModule,
     DeployAuthModule,
-    ReleasesModule,
     EnvironmentsModule,
     DeploysModule,
     AuditModule,

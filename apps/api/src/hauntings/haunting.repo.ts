@@ -21,16 +21,22 @@ export class HauntingRepo {
     input: RecordedHaunting,
   ): Promise<RecordedHaunting> {
     const view = prepareRecordedHaunting(input);
+    const deploymentId = view.deploymentId ?? null;
     if (view.detections.some((entry) => entry.projectId !== projectId))
       throw new HauntingConflict();
     return inAuditTransaction(this.prisma, async (tx) => {
-      const entry = await this.audit.appendInTx(tx, projectId, {
-        key: `haunting:${eventId}`,
-        actor: 'daemon',
-        type: 'haunting.recorded',
-        incidentId: view.incident.id,
-        payload: { view },
-      });
+      const entry = await this.audit.appendInTx(
+        tx,
+        projectId,
+        {
+          key: `haunting:${eventId}`,
+          actor: 'daemon',
+          type: 'haunting.recorded',
+          incidentId: view.incident.id,
+          payload: { view, deploymentId },
+        },
+        deploymentId,
+      );
       const where = { projectId_id: { projectId, id: view.incident.id } };
       const row = await tx.haunting.findUnique({ where, select: HAUNTING_SELECT });
       const prior = row ? toRecordedHaunting(row) : undefined;

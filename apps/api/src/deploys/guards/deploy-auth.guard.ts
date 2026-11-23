@@ -23,9 +23,11 @@ export const RequireScopes = (...scopes: string[]) => SetMetadata(DEPLOY_SCOPES,
 
 export interface DeployRequest {
   headers?: { authorization?: string };
-  params?: { orgId?: string };
+  params?: { orgId?: string; projectId?: string };
   deployPrincipal?: DeployPrincipal;
 }
+
+const ORG_SCOPES = ['org:read', 'org:ci'];
 
 /** Reads the principal written by DeployAuthGuard after token verification. */
 export const RequestDeployPrincipal = createParamDecorator(
@@ -72,7 +74,8 @@ export class DeployAuthGuard implements CanActivate {
     const client = await this.identity.findOAuthClient(verified.clientId);
     if (client === undefined) throw new UnauthorizedException();
 
-    if (request.params?.orgId !== undefined && request.params.orgId !== client.orgId) {
+    const orgId = request.params?.orgId;
+    if (orgId === undefined || orgId !== client.orgId) {
       throw new ForbiddenException('The Organization is not available to this client');
     }
     const required =
@@ -84,11 +87,26 @@ export class DeployAuthGuard implements CanActivate {
       throw new ForbiddenException('The client does not hold a scope for this route');
     }
 
+    const routeProjectId = request.params?.projectId;
+    if (routeProjectId !== undefined) {
+      const project = await this.identity.findProject(routeProjectId);
+      if (project === undefined || project.orgId !== client.orgId) {
+        throw new ForbiddenException('The Project is outside the caller Organization');
+      }
+      if (
+        !ORG_SCOPES.some((scope) => verified.scopes.includes(scope)) &&
+        verified.projectId !== routeProjectId
+      ) {
+        throw new ForbiddenException('The Project is outside the bound Project of this client');
+      }
+    }
+
     request.deployPrincipal = {
       clientId: verified.clientId,
       orgId: client.orgId,
       projectId: verified.projectId,
       scopes: verified.scopes,
+      ...(routeProjectId === undefined ? {} : { routeProjectId }),
     };
     return true;
   }

@@ -182,6 +182,7 @@ describe('daemon private transport and config', () => {
     const view = {
       incident: facts.incident,
       category: facts.category,
+      deploymentId: facts.deploymentId,
       detections: [
         {
           id: 'signal-1',
@@ -211,6 +212,7 @@ describe('daemon private transport and config', () => {
       diagnosis,
     });
     expect(result.repo.services).toEqual(['checkout']);
+    expect(result.deploymentId).toBe(facts.deploymentId);
     const detection = view.detections[0];
     if (detection === undefined) throw new Error('Expected recorded detection');
     view.detections.push({ ...detection, id: 'signal-2', eventId: 'event-2' });

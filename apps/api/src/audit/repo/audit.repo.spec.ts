@@ -37,6 +37,7 @@ const toRow = (entry: AuditEntry): PrismaAuditEntry => ({
   actor: entry.actor,
   type: entry.type,
   incidentId: entry.incidentId ?? null,
+  deploymentId: null,
   payload: entry.payload as PrismaAuditEntry['payload'],
   prevHash: entry.prevHash,
   hash: entry.hash,

@@ -1,4 +1,15 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Post,
+  Query,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiBearerAuth,
   ApiCreatedResponse,
@@ -10,11 +21,20 @@ import {
 } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 
-import { CreateDeployDto } from './dto/create-deploy.dto';
+import {
+  CreateDeployDto,
+  DeploymentListQueryDto,
+  DeploymentParamsDto,
+} from './dto/create-deploy.dto';
 import { DeployAuthGuard, RequestDeployPrincipal, RequireScopes } from './guards/deploy-auth.guard';
 import { deployListSchema, deploySchema } from './deploys.schema';
 import type { DeployPrincipal } from './deploy.types';
 import { DeploysService } from './deploys.service';
+
+interface JsonReply {
+  status(code: number): JsonReply;
+  json(value: unknown): void;
+}
 
 @ApiTags('deploys')
 @ApiBearerAuth()
@@ -22,28 +42,38 @@ import { DeploysService } from './deploys.service';
 @ApiUnauthorizedResponse({ description: 'No valid bearer client token was presented.' })
 @ApiForbiddenResponse({ description: 'The Organization, Project or scope is not allowed.' })
 @ApiTooManyRequestsResponse({ description: 'The client exceeded the rate limit.' })
-@Controller('api/organizations/:orgId')
+@Controller('api/organizations/:orgId/projects/:projectId/deployments')
 export class DeploysController {
   constructor(private readonly deploys: DeploysService) {}
 
-  @Get('deploys')
+  @Get()
   @RequireScopes('org:read', 'project:read')
   @ApiOkResponse({
-    description: 'The Deploys in the caller Organization.',
+    description: 'The Deployments in the caller Organization.',
     standardSchema: deployListSchema,
   })
-  list(@RequestDeployPrincipal() principal: DeployPrincipal) {
-    return this.deploys.list(principal);
+  list(
+    @RequestDeployPrincipal() principal: DeployPrincipal,
+    @Query() query: DeploymentListQueryDto,
+  ) {
+    return this.deploys.list(principal, query);
   }
 
-  @Post('deploys')
+  @Post()
   @RequireScopes('org:ci', 'project:write')
   @HttpCode(HttpStatus.CREATED)
   @ApiCreatedResponse({
-    description: 'An appended immutable Deploy.',
+    description: 'An appended immutable Deployment. A redeploy returns the existing row.',
     standardSchema: deploySchema,
   })
-  create(@RequestDeployPrincipal() principal: DeployPrincipal, @Body() dto: CreateDeployDto) {
-    return this.deploys.create(principal, dto);
+  async create(
+    @RequestDeployPrincipal() principal: DeployPrincipal,
+    @Param() params: DeploymentParamsDto,
+    @Body() dto: CreateDeployDto,
+    @Res() response: JsonReply,
+  ): Promise<void> {
+    const { record, created } = await this.deploys.create(principal, params, dto);
+    // A redeploy is idempotent: 200 with the stored row and no new audit entry.
+    response.status(created ? HttpStatus.CREATED : HttpStatus.OK).json(record);
   }
 }

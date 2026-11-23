@@ -1,17 +1,16 @@
 import { z } from 'zod';
 
 export const deploySchema = z.object({
-  id: z.string(),
   orgId: z.string(),
-  releaseId: z.string(),
-  environmentId: z.string(),
+  projectId: z.string(),
+  deploymentId: z.string().regex(/^[0-9a-f]{40}$/),
   environment: z.string(),
-  name: z.string(),
+  title: z.string(),
   dateStarted: z.iso.datetime(),
   dateFinished: z.iso.datetime().nullable(),
   url: z.string().nullable(),
+  closedAt: z.iso.datetime().nullable(),
   createdAt: z.iso.datetime(),
-  projectIds: z.array(z.string()),
 });
 
 export const deployListSchema = z.array(deploySchema);

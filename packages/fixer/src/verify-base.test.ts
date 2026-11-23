@@ -24,7 +24,7 @@ const STALE_SHA = 'd'.repeat(40);
 
 test('a stale patch base blocks before a workspace or runner starts', async () => {
   const { client } = sourceClient();
-  const snapshot = await prepareSource(repo, client);
+  const snapshot = await prepareSource(repo, client, TEST_BASE_SHA);
   let runs = 0;
   const runner: SandboxRunner = async (request) => {
     runs++;
@@ -44,7 +44,7 @@ test('a stale patch base blocks before a workspace or runner starts', async () =
 
 test('a stale file blob blocks before a workspace or runner starts', async () => {
   const { client } = sourceClient();
-  const snapshot = await prepareSource(repo, client);
+  const snapshot = await prepareSource(repo, client, TEST_BASE_SHA);
   let runs = 0;
   const runner: SandboxRunner = async (request) => {
     runs++;
@@ -64,7 +64,7 @@ test('a stale file blob blocks before a workspace or runner starts', async () =>
 
 test('an addition against a non-empty base blob is rejected', async () => {
   const { client } = sourceClient();
-  const snapshot = await prepareSource(repo, client);
+  const snapshot = await prepareSource(repo, client, TEST_BASE_SHA);
   await expect(
     verifyPatch({
       snapshot,
@@ -81,7 +81,7 @@ test('an addition against a non-empty base blob is rejected', async () => {
 
 test('a passing check cannot replace the proposed source with different content', async () => {
   const { client } = sourceClient();
-  const snapshot = await prepareSource(repo, client);
+  const snapshot = await prepareSource(repo, client, TEST_BASE_SHA);
   const runner: SandboxRunner = async (request) => {
     if (request.argv[0] !== 'fixture-check') return gitRunner(request);
     await writeFile(`${request.cwd}/src/app.ts`, 'unchecked output\n');
@@ -100,7 +100,7 @@ test('a passing check cannot replace the proposed source with different content'
 
 test('a check cannot replace the workspace root with a symlink for the parent to follow', async () => {
   const { client } = sourceClient();
-  const snapshot = await prepareSource(repo, client);
+  const snapshot = await prepareSource(repo, client, TEST_BASE_SHA);
   const runner: SandboxRunner = async (request) => {
     if (request.argv[0] !== 'fixture-check') return gitRunner(request);
     await rename(request.cwd, `${request.root}/saved`);
@@ -123,7 +123,7 @@ test('a check cannot replace the workspace root with a symlink for the parent to
 
 test('a passing check cannot change a file mode that publication would preserve', async () => {
   const { client } = sourceClient();
-  const snapshot = await prepareSource(repo, client);
+  const snapshot = await prepareSource(repo, client, TEST_BASE_SHA);
   const runner: SandboxRunner = async (request) => {
     if (request.argv[0] !== 'fixture-check') return gitRunner(request);
     await chmod(`${request.cwd}/src/app.ts`, 0o700);

@@ -15,6 +15,7 @@ type AuditTransaction = Prisma.TransactionClient;
 
 export interface AuditAppendInput extends AuditInput {
   projectId: string;
+  deploymentId?: string | null;
 }
 
 const toEntry = (row: PrismaAuditEntry) =>
@@ -24,6 +25,7 @@ const toEntry = (row: PrismaAuditEntry) =>
     actor: row.actor,
     type: row.type,
     ...(row.incidentId === null ? {} : { incidentId: row.incidentId }),
+    deploymentId: row.deploymentId,
     payload: row.payload,
     prevHash: row.prevHash,
     hash: row.hash,
@@ -56,7 +58,11 @@ export class AuditRepo {
     }
   }
 
-  async appendInTransaction(tx: AuditTransaction, projectId: string, input: AuditInput) {
+  async appendInTransaction(
+    tx: AuditTransaction,
+    projectId: string,
+    input: AuditInput & { deploymentId?: string | null },
+  ) {
     await tx.$queryRaw(
       Prisma.sql`SELECT 1 FROM pg_advisory_xact_lock(hashtextextended(${projectId}, 0))`,
     );
@@ -72,6 +78,7 @@ export class AuditRepo {
           actor: entry.actor,
           type: entry.type,
           incidentId: entry.incidentId ?? null,
+          deploymentId: input.deploymentId ?? null,
           payload: entry.payload as Prisma.InputJsonValue,
           prevHash: entry.prevHash,
           hash: entry.hash,

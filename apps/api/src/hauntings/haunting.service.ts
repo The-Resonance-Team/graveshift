@@ -9,6 +9,7 @@ import {
 import { z } from 'zod';
 
 import { AuditBusy, AuditConflict } from '../audit/audit.errors';
+import { DeployRepo } from '../deploys/deploy.repo';
 import { ProjectGrant } from '../internal/project-grant';
 import type {
   ActiveHauntingDto,
@@ -25,6 +26,7 @@ import { HauntingRepo } from './haunting.repo';
 export class HauntingService {
   constructor(
     private readonly repo: HauntingRepo,
+    private readonly deploys: DeployRepo,
     private readonly grant: ProjectGrant,
   ) {}
 
@@ -35,7 +37,13 @@ export class HauntingService {
   async record(input: RecordHauntingDto) {
     await this.authorize(input);
     try {
-      return await this.repo.upsert(input.projectId, input.eventId, input.view);
+      const view = await this.repo.upsert(input.projectId, input.eventId, input.view);
+      // The first Event with a known Deployment closes that Deployment. A later Event
+      // for the same SHA writes no second entry and never reopens it.
+      if (view.deploymentId !== null && view.deploymentId !== undefined) {
+        await this.deploys.closeFirst(input.projectId, view.deploymentId);
+      }
+      return view;
     } catch (error) {
       if (error instanceof AuditConflict || error instanceof HauntingConflict) {
         throw new ConflictException({ code: error.code, message: error.message });

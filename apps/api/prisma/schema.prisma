@@ -74,7 +74,6 @@ model Organization {
   memberships  Membership[]
   projects     Project[]
   oauthClients OAuthClient[]
-  releases     Release[]
   environments Environment[]
   deploys      Deploy[]
 
@@ -94,44 +93,18 @@ model Membership {
 }
 
 model Project {
-  projectId    String           @id @map("project_id")
-  orgId        String           @map("org_id")
+  projectId    String        @id @map("project_id")
+  orgId        String        @map("org_id")
   name         String
   slug         String
-  createdAt    DateTime         @default(now()) @map("created_at")
-  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  createdAt    DateTime      @default(now()) @map("created_at")
+  organization Organization  @relation(fields: [orgId], references: [id], onDelete: Cascade)
   oauthClients OAuthClient[]
-  releaseLinks ProjectRelease[]
-  deployLinks  DeployProject[]
+  deploys      Deploy[]
 
   @@unique([orgId, slug])
   @@index([orgId])
   @@map("projects")
-}
-
-model Release {
-  id           String           @id @default(uuid())
-  orgId        String           @map("org_id")
-  version      String
-  createdAt    DateTime         @default(now()) @map("created_at")
-  organization Organization     @relation(fields: [orgId], references: [id], onDelete: Restrict)
-  projectLinks ProjectRelease[]
-  deploys      Deploy[]
-
-  @@unique([orgId, version])
-  @@index([orgId])
-  @@map("releases")
-}
-
-model ProjectRelease {
-  projectId String  @map("project_id")
-  releaseId String  @map("release_id")
-  project   Project @relation(fields: [projectId], references: [projectId], onDelete: Restrict)
-  release   Release @relation(fields: [releaseId], references: [id], onDelete: Restrict)
-
-  @@id([projectId, releaseId])
-  @@index([releaseId])
-  @@map("project_releases")
 }
 
 model Environment {
@@ -148,34 +121,25 @@ model Environment {
 }
 
 model Deploy {
-  id            String          @id @default(uuid())
-  orgId         String          @map("org_id")
-  releaseId     String          @map("release_id")
-  environmentId String          @map("environment_id")
-  name          String
-  dateStarted   DateTime        @map("date_started")
-  dateFinished  DateTime?       @map("date_finished")
+  id            String       @id @default(uuid())
+  orgId         String       @map("org_id")
+  projectId     String       @map("project_id")
+  environmentId String       @map("environment_id")
+  deploymentId  String       @map("deployment_id")
+  title         String
+  dateStarted   DateTime     @map("date_started")
+  dateFinished  DateTime?    @map("date_finished")
   url           String?
-  createdAt     DateTime        @default(now()) @map("created_at")
-  organization  Organization    @relation(fields: [orgId], references: [id], onDelete: Restrict)
-  release       Release         @relation(fields: [releaseId], references: [id], onDelete: Restrict)
-  environment   Environment     @relation(fields: [environmentId], references: [id], onDelete: Restrict)
-  projectLinks  DeployProject[]
+  closedAt      DateTime?    @map("closed_at")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  organization  Organization @relation(fields: [orgId], references: [id], onDelete: Restrict)
+  project       Project      @relation(fields: [projectId], references: [projectId], onDelete: Restrict, onUpdate: Restrict)
+  environment   Environment  @relation(fields: [environmentId], references: [id], onDelete: Restrict)
 
-  @@index([orgId, releaseId])
+  @@unique([projectId, deploymentId, environmentId])
+  @@index([projectId, createdAt(sort: Desc), id])
   @@index([environmentId])
   @@map("deploys")
-}
-
-model DeployProject {
-  deployId  String  @map("deploy_id")
-  projectId String  @map("project_id")
-  deploy    Deploy  @relation(fields: [deployId], references: [id], onDelete: Restrict)
-  project   Project @relation(fields: [projectId], references: [projectId], onDelete: Restrict)
-
-  @@id([deployId, projectId])
-  @@index([projectId])
-  @@map("deploy_projects")
 }
 
 model OAuthClient {
@@ -280,17 +244,18 @@ model WorkCommand {
 }
 
 model Haunting {
-  projectId  String   @map("project_id")
-  id         String
-  service    String
-  state      String
-  incident   Json
-  diagnosis  Json?
-  detections Json
-  pr         Json?
-  timeline   Json
-  openedAt   DateTime @map("opened_at")
-  updatedAt  DateTime @map("updated_at")
+  projectId    String   @map("project_id")
+  id           String
+  service      String
+  state        String
+  incident     Json
+  diagnosis    Json?
+  detections   Json
+  pr           Json?
+  timeline     Json
+  deploymentId String?  @map("deployment_id")
+  openedAt     DateTime @map("opened_at")
+  updatedAt    DateTime @map("updated_at")
 
   @@id([projectId, id])
   @@index([projectId, service])
@@ -298,16 +263,17 @@ model Haunting {
 }
 
 model AuditEntry {
-  projectId  String   @map("project_id")
-  eventKey   String?  @map("event_key")
-  seq        Int
-  at         DateTime
-  actor      String
-  type       String
-  incidentId String?  @map("incident_id")
-  payload    Json
-  prevHash   String   @map("prev_hash")
-  hash       String
+  projectId    String   @map("project_id")
+  eventKey     String?  @map("event_key")
+  seq          Int
+  at           DateTime
+  actor        String
+  type         String
+  incidentId   String?  @map("incident_id")
+  deploymentId String?  @map("deployment_id")
+  payload      Json
+  prevHash     String   @map("prev_hash")
+  hash         String
 
   @@id([projectId, seq])
   @@unique([projectId, eventKey])

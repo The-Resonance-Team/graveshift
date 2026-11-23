@@ -1,42 +1,45 @@
 import { Injectable } from '@nestjs/common';
 
-import { AuditRepo } from '../audit/repo/audit.repo';
 import { inAuditTransaction } from '../audit/audit.transaction';
+import { AuditRepo } from '../audit/repo/audit.repo';
 import { PrismaService } from '../infra/prisma.service';
 import { AppendOnlyDeployError, type DeployRecord } from './deploy.types';
 
-const withProjects = { projectLinks: { select: { projectId: true } } } as const;
-const withEnvironment = { environment: { select: { name: true } } } as const;
+const DEPLOY_INCLUDE = { environment: { select: { name: true } } } as const;
 
 type DeployRow = {
-  id: string;
   orgId: string;
-  releaseId: string;
+  projectId: string;
   environmentId: string;
-  name: string;
+  deploymentId: string;
+  title: string;
   dateStarted: Date;
   dateFinished: Date | null;
   url: string | null;
+  closedAt: Date | null;
   createdAt: Date;
   environment: { name: string };
-  projectLinks: Array<{ projectId: string }>;
 };
 
 const toRecord = (row: DeployRow): DeployRecord => ({
-  id: row.id,
   orgId: row.orgId,
-  releaseId: row.releaseId,
-  environmentId: row.environmentId,
+  projectId: row.projectId,
+  deploymentId: row.deploymentId,
   environment: row.environment.name,
-  name: row.name,
+  title: row.title,
   dateStarted: row.dateStarted.toISOString(),
   dateFinished: row.dateFinished?.toISOString() ?? null,
   url: row.url,
+  closedAt: row.closedAt?.toISOString() ?? null,
   createdAt: row.createdAt.toISOString(),
-  projectIds: row.projectLinks.map((link) => link.projectId),
 });
 
-/** Owns Deploy inserts and its Project links. No update or delete path exists. */
+export interface DeployListFilter {
+  deploymentId?: string | undefined;
+  environment?: string | undefined;
+}
+
+/** Owns Deployment rows. No update or delete path exists except one closure transition. */
 @Injectable()
 export class DeployRepo {
   constructor(
@@ -44,74 +47,112 @@ export class DeployRepo {
     private readonly audit: AuditRepo,
   ) {}
 
+  /** Idempotency and event binding share one lookup: Project, SHA and Environment name. */
+  async findByDeployment(
+    projectId: string,
+    deploymentId: string,
+    environment: string,
+  ): Promise<DeployRecord | undefined> {
+    const row = await this.db.deploy.findFirst({
+      where: { projectId, deploymentId, environment: { name: environment } },
+      include: DEPLOY_INCLUDE,
+    });
+    return row === null ? undefined : toRecord(row);
+  }
+
   async append(input: {
     orgId: string;
-    releaseId: string;
+    projectId: string;
     environmentId: string;
-    name: string;
+    environment: string;
+    deploymentId: string;
+    title: string;
     dateStarted: Date;
     dateFinished?: Date | undefined;
     url?: string | undefined;
-    projectIds: string[];
     actor: string;
   }): Promise<DeployRecord> {
     return inAuditTransaction(this.db, async (tx) => {
-      const deploy = await tx.deploy.create({
+      const row = await tx.deploy.create({
         data: {
           orgId: input.orgId,
-          releaseId: input.releaseId,
+          projectId: input.projectId,
           environmentId: input.environmentId,
-          name: input.name,
+          deploymentId: input.deploymentId,
+          title: input.title,
           dateStarted: input.dateStarted,
           dateFinished: input.dateFinished ?? null,
           url: input.url ?? null,
         },
+        include: DEPLOY_INCLUDE,
       });
-      await tx.deployProject.createMany({
-        data: input.projectIds.map((projectId) => ({ deployId: deploy.id, projectId })),
-      });
-      await Promise.all(
-        input.projectIds.map(async (projectId) =>
-          this.audit.appendInTransaction(tx, projectId, {
-            actor: input.actor,
-            type: 'deploy.created',
-            payload: {
-              deployId: deploy.id,
-              releaseId: input.releaseId,
-              environmentId: input.environmentId,
-              name: input.name,
-              dateStarted: deploy.dateStarted.toISOString(),
-              projectId,
-            },
-          }),
-        ),
-      );
-      const row = await tx.deploy.findUniqueOrThrow({
-        where: { id: deploy.id },
-        include: { ...withProjects, ...withEnvironment },
+      await this.audit.appendInTransaction(tx, input.projectId, {
+        actor: input.actor,
+        type: 'deploy.created',
+        payload: {
+          deploymentId: input.deploymentId,
+          projectId: input.projectId,
+          orgId: input.orgId,
+          title: input.title,
+          environment: input.environment,
+        },
+        deploymentId: input.deploymentId,
       });
       return toRecord(row);
     });
   }
 
-  async list(orgId: string, projectId?: string): Promise<DeployRecord[]> {
+  async list(
+    orgId: string,
+    projectId?: string,
+    filter: DeployListFilter = {},
+  ): Promise<DeployRecord[]> {
     const rows = await this.db.deploy.findMany({
       where: {
         orgId,
-        ...(projectId === undefined ? {} : { projectLinks: { some: { projectId } } }),
+        ...(projectId === undefined ? {} : { projectId }),
+        ...(filter.deploymentId === undefined ? {} : { deploymentId: filter.deploymentId }),
+        ...(filter.environment === undefined ? {} : { environment: { name: filter.environment } }),
       },
-      include: { ...withProjects, ...withEnvironment },
-      orderBy: { dateStarted: 'asc' },
+      include: DEPLOY_INCLUDE,
+      orderBy: [{ dateStarted: 'asc' }, { createdAt: 'asc' }],
     });
     return rows.map(toRecord);
   }
 
-  /** Repository rule: a Deploy can be written once and never changed. */
+  /** Closes the first Deployment for this SHA. Later events write no further entry. */
+  async closeFirst(projectId: string, deploymentId: string): Promise<boolean> {
+    return inAuditTransaction(this.db, async (tx) => {
+      const closed = await tx.deploy.updateMany({
+        where: { projectId, deploymentId, closedAt: null },
+        data: { closedAt: new Date() },
+      });
+      if (closed.count === 0) return false;
+      await this.audit.appendInTransaction(tx, projectId, {
+        actor: 'daemon',
+        type: 'deployment.closed',
+        payload: { deploymentId, projectId },
+        deploymentId,
+      });
+      return true;
+    });
+  }
+
+  /** The poll uses this set to stop serving events for a closed Deployment. */
+  async listClosedIds(projectId: string): Promise<string[]> {
+    const rows = await this.db.deploy.findMany({
+      where: { projectId, closedAt: { not: null } },
+      select: { deploymentId: true },
+    });
+    return rows.map((row) => row.deploymentId);
+  }
+
+  /** Repository rule: a Deployment cannot be changed except by closeFirst above. */
   update(): never {
     throw new AppendOnlyDeployError();
   }
 
-  /** Repository rule: a Deploy can be written once and never removed. */
+  /** Repository rule: a Deployment can never be removed. */
   delete(): never {
     throw new AppendOnlyDeployError();
   }

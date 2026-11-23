@@ -10,6 +10,7 @@ export const HAUNTING_SELECT = {
   detections: true,
   pr: true,
   timeline: true,
+  deploymentId: true,
   openedAt: true,
   updatedAt: true,
 } satisfies Prisma.HauntingSelect;

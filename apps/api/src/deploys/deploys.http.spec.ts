@@ -9,164 +9,122 @@ import {
 } from './testing/deploy-http.fixture';
 
 const STARTED = '2026-11-22T07:00:00.000Z';
+const SHA_A = 'a'.repeat(40);
+const SHA_B = 'b'.repeat(40);
+const SHA_C = 'c'.repeat(40);
 
-describe('deploy routes (HTTP)', () => {
+describe('deployment routes (HTTP)', () => {
   let context: DeployTestContext;
-  let releaseId: string;
-  let productionId = '';
-  let stagingId = '';
-  let boundId = '';
-  let canaryId = '';
 
   beforeAll(async () => {
     context = await buildDeployTestApp();
-    const release = await context.releases.create({
-      orgId: context.orgA,
-      version: 'v3.2.0',
-      projectIds: [context.projectA, context.projectA2],
-      actor: context.orgCiClient,
-    });
-    releaseId = release.id;
   });
 
   afterAll(async () => {
     await context?.app.close();
   });
 
-  const create = (token: string, orgId: string, body: Record<string, unknown>) =>
-    http(context)
-      .post(`/api/organizations/${orgId}/deploys`)
-      .set(bearer(token))
-      .send({ releaseId, name: 'deploy-1', dateStarted: STARTED, ...body });
+  const route = (orgId: string, projectId: string) =>
+    `/api/organizations/${orgId}/projects/${projectId}/deployments`;
+
+  const create = (token: string, orgId: string, projectId: string, body: object) =>
+    http(context).post(route(orgId, projectId)).set(bearer(token)).send(body);
 
   const ciToken = () =>
     clientToken(context, context.orgCiClient, context.projectA, ['org:ci', 'project:write']);
 
-  test('create a Deploy with an environment and a projects array', async () => {
-    const result = await create(await ciToken(), context.orgA, {
+  test('POST appends a Deployment with a commit SHA and no internal row id', async () => {
+    const result = await create(await ciToken(), context.orgA, context.projectA, {
+      deploymentId: SHA_A,
+      title: 'deploy-1',
       environment: 'production',
-      projects: [context.projectA],
+      dateStarted: STARTED,
       url: 'https://ci.example.test/runs/42',
     }).expect(201);
 
-    productionId = result.body.id as string;
-    expect(result.body.orgId).toBe(context.orgA);
-    expect(result.body.releaseId).toBe(releaseId);
-    expect(result.body.environment).toBe('production');
-    expect(result.body.dateStarted).toBe(STARTED);
-    expect(result.body.projectIds).toEqual([context.projectA]);
-    expect(context.environments.rows.size).toBe(1);
+    expect(result.body).toMatchObject({
+      orgId: context.orgA,
+      projectId: context.projectA,
+      deploymentId: SHA_A,
+      environment: 'production',
+      title: 'deploy-1',
+      dateStarted: STARTED,
+      url: 'https://ci.example.test/runs/42',
+      dateFinished: null,
+      closedAt: null,
+    });
+    expect(result.body.id).toBeUndefined();
+    expect(result.body.releaseId).toBeUndefined();
+    expect(result.body.projectIds).toBeUndefined();
+    expect(context.deploys.rows.size).toBe(1);
   });
 
-  test('create a Deploy with no projects array targets all Release Projects', async () => {
-    const result = await create(await ciToken(), context.orgA, { environment: 'staging' }).expect(
-      201,
-    );
-
-    stagingId = result.body.id as string;
-    expect(result.body.projectIds).toEqual([context.projectA, context.projectA2]);
-    expect(result.body.dateFinished).toBeNull();
-    expect(result.body.url).toBeNull();
-  });
-
-  test('a Project-bound client creates a Deploy for its bound Project', async () => {
-    const token = await clientToken(context, context.clientA, context.projectA, ['project:write']);
-    const result = await create(token, context.orgA, {
-      environment: 'bound',
-      projects: [context.projectA],
+  test('POST with org:ci targets another Project in the same Organization', async () => {
+    const result = await create(await ciToken(), context.orgA, context.projectA2, {
+      deploymentId: 'd'.repeat(40),
+      title: 'second-project',
+      environment: 'staging',
+      dateStarted: STARTED,
     }).expect(201);
-    boundId = result.body.id as string;
-    expect(result.body.projectIds).toEqual([context.projectA]);
+    expect(result.body.projectId).toBe(context.projectA2);
   });
 
-  test('a Project-bound client targeting another Project in the Organization returns 403', async () => {
+  test('a Project-bound client creates a Deployment for its bound Project', async () => {
     const token = await clientToken(context, context.clientA, context.projectA, ['project:write']);
-    const result = await create(token, context.orgA, {
+    const result = await create(token, context.orgA, context.projectA, {
+      deploymentId: SHA_B,
+      title: 'bound',
+      environment: 'bound-env',
+      dateStarted: STARTED,
+    }).expect(201);
+    expect(result.body.projectId).toBe(context.projectA);
+  });
+
+  test('a bound client targeting another Project returns 403', async () => {
+    const token = await clientToken(context, context.clientA, context.projectA, ['project:write']);
+    await create(token, context.orgA, context.projectA2, {
+      deploymentId: SHA_C,
+      title: 'foreign',
       environment: 'canary',
-      projects: [context.projectA2],
+      dateStarted: STARTED,
     }).expect(403);
-    expect(result.body.statusCode).toBe(403);
     expect(context.deploys.rows.size).toBe(3);
   });
 
-  test('project:read list does not return other Projects data', async () => {
-    const canary = await create(await ciToken(), context.orgA, {
-      environment: 'canary',
-      projects: [context.projectA2],
-    }).expect(201);
-    canaryId = canary.body.id as string;
-
-    const token = await clientToken(context, context.clientA2, context.projectA2, ['project:read']);
-    const result = await http(context)
-      .get(`/api/organizations/${context.orgA}/deploys`)
-      .set(bearer(token))
-      .expect(200);
-    const ids = result.body.map((row: { id: string }) => row.id);
-    expect(ids).toContain(stagingId);
-    expect(ids).toContain(canaryId);
-    expect(ids).not.toContain(productionId);
-    expect(ids).not.toContain(boundId);
-  });
-
   test('a foreign Organization returns 403', async () => {
-    const result = await create(await ciToken(), context.orgB, {
+    await create(await ciToken(), context.orgB, context.projectA, {
+      deploymentId: SHA_C,
+      title: 'foreign-org',
       environment: 'production',
+      dateStarted: STARTED,
     }).expect(403);
-    expect(result.body.statusCode).toBe(403);
   });
 
   test('a Project outside the caller Organization returns 403', async () => {
-    const result = await create(await ciToken(), context.orgA, {
+    await create(await ciToken(), context.orgA, context.projectB, {
+      deploymentId: SHA_C,
+      title: 'foreign-project',
       environment: 'production',
-      projects: [context.projectB],
+      dateStarted: STARTED,
     }).expect(403);
-    expect(result.body.statusCode).toBe(403);
-    expect(context.deploys.rows.size).toBe(4);
+    expect(context.deploys.rows.size).toBe(3);
   });
 
   test('a missing scope returns 403', async () => {
     const token = await clientToken(context, context.clientA2, context.projectA2, ['project:read']);
-    await create(token, context.orgA, { environment: 'production' }).expect(403);
+    await create(token, context.orgA, context.projectA2, {
+      deploymentId: SHA_C,
+      title: 'no-scope',
+      environment: 'production',
+      dateStarted: STARTED,
+    }).expect(403);
   });
 
   test('an invalid token returns 401', async () => {
     await http(context)
-      .get(`/api/organizations/${context.orgA}/deploys`)
+      .get(route(context.orgA, context.projectA))
       .set('authorization', 'Bearer invalid-test-token')
       .expect(401);
-  });
-
-  test('invalid urls are refused at the request boundary', async () => {
-    const token = await ciToken();
-    const urls = ['not-a-url', 'javascript:alert(1)', 'ftp://example.test/file'];
-    const responses = await Promise.all(
-      urls.map(async (url) =>
-        create(token, context.orgA, { environment: 'production', url }).expect(422),
-      ),
-    );
-    expect(responses.every((response) => response.body.statusCode === 422)).toBe(true);
-  });
-
-  test('an org:ci-only client creates both a Release and a Deploy', async () => {
-    const token = await clientToken(context, context.ciClient, context.projectA, ['org:ci']);
-    const created = await http(context)
-      .post(`/api/organizations/${context.orgA}/releases`)
-      .set(bearer(token))
-      .send({ version: 'v3.ci.1', projects: [context.projectA] })
-      .expect(201);
-    const deployed = await http(context)
-      .post(`/api/organizations/${context.orgA}/deploys`)
-      .set(bearer(token))
-      .send({
-        releaseId: created.body.id,
-        name: 'ci-deploy',
-        dateStarted: STARTED,
-        environment: 'ci',
-        projects: [context.projectA],
-      })
-      .expect(201);
-    expect(deployed.body.releaseId).toBe(created.body.id);
-    expect(deployed.body.projectIds).toEqual([context.projectA]);
   });
 
   test('anonymous request is 401 before any store access', async () => {
@@ -175,24 +133,114 @@ describe('deploy routes (HTTP)', () => {
       throw new Error('The identity store must not be read for an anonymous request');
     };
     try {
-      const result = await http(context)
-        .get(`/api/organizations/${context.orgA}/deploys`)
-        .expect(401);
-      expect(result.body.statusCode).toBe(401);
-      expect(context.deploys.rows.size).toBe(5);
+      await http(context).get(route(context.orgA, context.projectA)).expect(401);
     } finally {
       context.identity.findOAuthClient = original;
     }
   });
 
-  test('environments are filtered for a Project-bound reader', async () => {
+  for (const body of [
+    { deploymentId: 'A'.repeat(40) },
+    { deploymentId: 'short' },
+    { title: '' },
+    { title: 'x'.repeat(201) },
+    { environment: '' },
+    { dateStarted: 'yesterday' },
+    { url: 'javascript:alert(1)' },
+    { releaseId: 'release-1' },
+    { projects: ['1001'] },
+    { name: 'old-name' },
+  ]) {
+    test(`POST rejects invalid field ${JSON.stringify(body).slice(0, 60)} with 422`, async () => {
+      await create(await ciToken(), context.orgA, context.projectA, {
+        deploymentId: SHA_C,
+        title: 'valid',
+        environment: 'validation',
+        dateStarted: STARTED,
+        ...body,
+      }).expect(422);
+    });
+  }
+
+  test('a redeploy of the same SHA and Environment returns 200 with no new row or audit', async () => {
+    const token = await ciToken();
+    const body = {
+      deploymentId: SHA_C,
+      title: 'deploy-1',
+      environment: 'production',
+      dateStarted: STARTED,
+    };
+    const first = await create(token, context.orgA, context.projectA, body).expect(201);
+    const rowsAfterFirst = context.deploys.rows.size;
+    const entriesAfterFirst = context.deploys.auditTypes.length;
+    const second = await create(token, context.orgA, context.projectA, {
+      ...body,
+      title: 'changed title',
+    }).expect(200);
+    expect(second.body).toEqual(first.body);
+    expect(context.deploys.rows.size).toBe(rowsAfterFirst);
+    expect(context.deploys.auditTypes.length).toBe(entriesAfterFirst);
+  });
+
+  test('GET lists all Deployments of the Organization for org:read', async () => {
+    const token = await clientToken(context, context.clientA, context.projectA, ['org:read']);
+    const result = await http(context)
+      .get(route(context.orgA, context.projectA))
+      .set(bearer(token))
+      .expect(200);
+    expect(result.body).toHaveLength(4);
+    expect(result.body.every((row: { orgId: string }) => row.orgId === context.orgA)).toBe(true);
+    expect(result.body.some((row: { id?: string }) => row.id !== undefined)).toBe(false);
+  });
+
+  test('GET with project:read returns only the bound Project', async () => {
+    const token = await clientToken(context, context.clientA2, context.projectA2, ['project:read']);
+    const result = await http(context)
+      .get(route(context.orgA, context.projectA2))
+      .set(bearer(token))
+      .expect(200);
+    expect(result.body).toHaveLength(1);
+    expect(result.body[0].projectId).toBe(context.projectA2);
+  });
+
+  test('GET filters by deploymentId and Environment', async () => {
+    const token = await clientToken(context, context.clientA, context.projectA, ['org:read']);
+    const bySha = await http(context)
+      .get(route(context.orgA, context.projectA))
+      .query({ deploymentId: SHA_A })
+      .set(bearer(token))
+      .expect(200);
+    expect(bySha.body).toHaveLength(1);
+    expect(bySha.body[0].deploymentId).toBe(SHA_A);
+
+    const byEnvironment = await http(context)
+      .get(route(context.orgA, context.projectA))
+      .query({ environment: 'production' })
+      .set(bearer(token))
+      .expect(200);
+    expect(byEnvironment.body).toHaveLength(2);
+    expect(
+      byEnvironment.body.every((row: { environment: string }) => row.environment === 'production'),
+    ).toBe(true);
+
+    await http(context)
+      .get(route(context.orgA, context.projectA))
+      .query({ deploymentId: 'not-a-sha' })
+      .set(bearer(token))
+      .expect(422);
+  });
+
+  test('environments stay Organization-scoped and filtered for a bound reader', async () => {
     const orgToken = await clientToken(context, context.clientA, context.projectA, ['org:read']);
     const orgResult = await http(context)
       .get(`/api/organizations/${context.orgA}/environments`)
       .set(bearer(orgToken))
       .expect(200);
-    const names = orgResult.body.map((row: { name: string }) => row.name);
-    expect(names).toEqual(['production', 'staging', 'bound', 'canary', 'ci']);
+    expect(orgResult.body.map((row: { name: string }) => row.name).sort()).toEqual([
+      'bound-env',
+      'production',
+      'staging',
+    ]);
 
     const projectToken = await clientToken(context, context.clientA2, context.projectA2, [
       'project:read',
@@ -201,7 +249,6 @@ describe('deploy routes (HTTP)', () => {
       .get(`/api/organizations/${context.orgA}/environments`)
       .set(bearer(projectToken))
       .expect(200);
-    const scoped = projectResult.body.map((row: { name: string }) => row.name);
-    expect(scoped).toEqual(['staging', 'canary']);
+    expect(projectResult.body.map((row: { name: string }) => row.name)).toEqual(['staging']);
   });
 });

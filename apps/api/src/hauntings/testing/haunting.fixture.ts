@@ -44,4 +44,5 @@ export const HAUNTING_FIXTURE = prepareRecordedHaunting({
     headSha: 'a'.repeat(40),
   },
   timeline: [{ at: HAUNTING_AT, type: 'diagnosed', detail: 'Recorded facts' }],
+  deploymentId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
 });

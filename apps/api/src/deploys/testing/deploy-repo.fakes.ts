@@ -1,45 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
-import type { DeployRecord, EnvironmentRecord, ReleaseRecord } from '../deploy.types';
+import type { DeployRecord, EnvironmentRecord } from '../deploy.types';
 
-/** In-memory Release store for HTTP tests. No database or network call is made. */
-export class FakeReleaseRepo {
-  readonly rows = new Map<string, ReleaseRecord>();
-
-  async create(input: {
-    orgId: string;
-    version: string;
-    projectIds: string[];
-    actor: string;
-  }): Promise<ReleaseRecord> {
-    const record: ReleaseRecord = {
-      id: randomUUID(),
-      orgId: input.orgId,
-      version: input.version,
-      createdAt: new Date().toISOString(),
-      projectIds: input.projectIds,
-    };
-    this.rows.set(record.id, record);
-    return record;
-  }
-
-  async findByVersion(orgId: string, version: string): Promise<ReleaseRecord | undefined> {
-    return [...this.rows.values()].find((row) => row.orgId === orgId && row.version === version);
-  }
-
-  async findById(id: string): Promise<ReleaseRecord | undefined> {
-    return this.rows.get(id);
-  }
-
-  async list(orgId: string, projectId?: string): Promise<ReleaseRecord[]> {
-    return [...this.rows.values()].filter(
-      (row) =>
-        row.orgId === orgId && (projectId === undefined || row.projectIds.includes(projectId)),
-    );
-  }
-}
-
-/** In-memory Environment store for HTTP tests. */
+/** In-memory Environment store for HTTP tests. No database or network call is made. */
 export class FakeEnvironmentRepo {
   readonly rows = new Map<string, EnvironmentRecord>();
   deploys?: FakeDeployRepo;
@@ -47,7 +10,7 @@ export class FakeEnvironmentRepo {
   async createWithAudit(input: {
     orgId: string;
     name: string;
-    projectIds: string[];
+    projectId: string;
     actor: string;
   }): Promise<{ record: EnvironmentRecord; created: boolean }> {
     const existing = [...this.rows.values()].find(
@@ -70,52 +33,91 @@ export class FakeEnvironmentRepo {
         row.orgId === orgId &&
         (projectId === undefined ||
           [...(this.deploys?.rows.values() ?? [])].some(
-            (deploy) => deploy.environmentId === row.id && deploy.projectIds.includes(projectId),
+            (deploy) => deploy.environment === row.name && deploy.projectId === projectId,
           )),
     );
   }
 }
 
-/** In-memory Deploy store for HTTP tests. */
+/** In-memory Deployment store for HTTP tests. The uuid row key stays internal. */
 export class FakeDeployRepo {
   readonly rows = new Map<string, DeployRecord>();
+  readonly auditTypes: string[] = [];
 
-  constructor(private readonly environments: FakeEnvironmentRepo) {}
+  private key(projectId: string, deploymentId: string, environment: string): string {
+    return JSON.stringify([projectId, deploymentId, environment]);
+  }
+
+  async findByDeployment(
+    projectId: string,
+    deploymentId: string,
+    environment: string,
+  ): Promise<DeployRecord | undefined> {
+    return this.rows.get(this.key(projectId, deploymentId, environment));
+  }
 
   async append(input: {
     orgId: string;
-    releaseId: string;
+    projectId: string;
     environmentId: string;
-    name: string;
+    environment: string;
+    deploymentId: string;
+    title: string;
     dateStarted: Date;
     dateFinished?: Date | undefined;
     url?: string | undefined;
-    projectIds: string[];
     actor: string;
   }): Promise<DeployRecord> {
     const record: DeployRecord = {
-      id: randomUUID(),
       orgId: input.orgId,
-      releaseId: input.releaseId,
-      environmentId: input.environmentId,
-      environment:
-        [...this.environments.rows.values()].find((row) => row.id === input.environmentId)?.name ??
-        '',
-      name: input.name,
+      projectId: input.projectId,
+      deploymentId: input.deploymentId,
+      environment: input.environment,
+      title: input.title,
       dateStarted: input.dateStarted.toISOString(),
       dateFinished: input.dateFinished?.toISOString() ?? null,
       url: input.url ?? null,
+      closedAt: null,
       createdAt: new Date().toISOString(),
-      projectIds: input.projectIds,
     };
-    this.rows.set(record.id, record);
+    const key = this.key(input.projectId, input.deploymentId, input.environment);
+    this.rows.set(key, record);
+    this.auditTypes.push('deploy.created');
     return record;
   }
 
-  async list(orgId: string, projectId?: string): Promise<DeployRecord[]> {
+  async list(
+    orgId: string,
+    projectId?: string,
+    filter: { deploymentId?: string; environment?: string } = {},
+  ): Promise<DeployRecord[]> {
     return [...this.rows.values()].filter(
       (row) =>
-        row.orgId === orgId && (projectId === undefined || row.projectIds.includes(projectId)),
+        row.orgId === orgId &&
+        (projectId === undefined || row.projectId === projectId) &&
+        (filter.deploymentId === undefined || row.deploymentId === filter.deploymentId) &&
+        (filter.environment === undefined || row.environment === filter.environment),
     );
+  }
+
+  async closeFirst(projectId: string, deploymentId: string): Promise<boolean> {
+    for (const [key, row] of this.rows) {
+      if (
+        row.projectId === projectId &&
+        row.deploymentId === deploymentId &&
+        row.closedAt === null
+      ) {
+        this.rows.set(key, { ...row, closedAt: new Date().toISOString() });
+        this.auditTypes.push('deployment.closed');
+        return true;
+      }
+    }
+    return false;
+  }
+
+  async listClosedIds(projectId: string): Promise<string[]> {
+    return [...this.rows.values()]
+      .filter((row) => row.projectId === projectId && row.closedAt !== null)
+      .map((row) => row.deploymentId);
   }
 }

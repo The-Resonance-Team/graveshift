@@ -10,7 +10,7 @@ import { AppModule } from '../src/app.module';
 import { CREDENTIAL_CONFIG, CREDENTIAL_REPO } from '../src/auth/auth.types';
 import { IDENTITY_REPO } from '../src/identity/identity.types';
 import { InMemoryEventSource } from '../src/mcp/events/events.source';
-import { MCP_EVENT_SOURCE } from '../src/mcp/events/events.types';
+import { CLOSED_DEPLOYMENTS, MCP_EVENT_SOURCE } from '../src/mcp/events/events.types';
 import { MCP_BACKEND, MCP_POLICY } from '../src/mcp/mcp.types';
 import { McpTokenVerifierService } from '../src/mcp/mcp-token.verifier';
 import { TEST_CONFIG } from './fakes/auth-test-config';
@@ -61,6 +61,8 @@ describe('POST /mcp bearer auth (e2e)', () => {
       .useValue(testIdentityRepo())
       .overrideProvider(MCP_EVENT_SOURCE)
       .useValue(eventSource)
+      .overrideProvider(CLOSED_DEPLOYMENTS)
+      .useValue({ listClosedIds: async () => [] })
       .compile();
     app = moduleRef.createNestApplication();
     jwtService = moduleRef.get(JwtService);

@@ -7,6 +7,12 @@ import { MCP_READ_SCOPES } from '../../auth/scopes';
 /** Injection token. The source is a port; the poll service owns the wire rules. */
 export const MCP_EVENT_SOURCE = Symbol('MCP_EVENT_SOURCE');
 
+/** Read-only port over closed Deployments. No per-poll timeout: closure is final. */
+export const CLOSED_DEPLOYMENTS = Symbol('CLOSED_DEPLOYMENTS');
+export interface ClosedDeploymentQuery {
+  listClosedIds(projectId: string): Promise<string[]>;
+}
+
 /** Six MCP scopes serve as Event scopes. One event type declares one of them. */
 export type EventScope = (typeof MCP_READ_SCOPES)[number];
 
@@ -53,6 +59,12 @@ export interface EventSource {
 const EventFilterSchema = z.strictObject({
   service: z.string().describe('Only events for this Grave.').optional(),
   severity: z.enum(['info', 'warning', 'critical']).optional(),
+  deploymentId: z
+    .string()
+    .regex(/^[0-9a-f]{40}$/)
+    .describe('Only events stamped with this deployed commit SHA.')
+    .optional(),
+  environment: z.string().describe('Only events for this Environment name.').optional(),
 });
 export type EventFilter = z.infer<typeof EventFilterSchema>;
 
@@ -134,7 +146,9 @@ function descriptor(
       return (
         eventTypeFor(envelope) === name &&
         (filter.service === undefined || filter.service === envelope.service) &&
-        (filter.severity === undefined || filter.severity === envelope.severity)
+        (filter.severity === undefined || filter.severity === envelope.severity) &&
+        (filter.deploymentId === undefined || filter.deploymentId === envelope.deploymentId) &&
+        (filter.environment === undefined || filter.environment === envelope.environment)
       );
     },
     occurrence(input) {

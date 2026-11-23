@@ -3,6 +3,7 @@ import { connectNatsPublisher } from '@graveshift/events/nats';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 
+import { DeploysModule } from '../deploys/deploys.module';
 import { EVENT_PUBLISHER, NATS_CONNECTOR } from './auth.types';
 import { CredentialCoreModule } from './credential-core.module';
 import { CredentialsController } from './controllers/credentials.controller';
@@ -22,7 +23,7 @@ import { OAuthTokenService } from './services/oauth-token.service';
 import { SentryIngestService } from './services/sentry-ingest.service';
 
 @Module({
-  imports: [PassportModule, JwtModule.register({}), CredentialCoreModule],
+  imports: [PassportModule, JwtModule.register({}), CredentialCoreModule, DeploysModule],
   controllers: [CredentialsController, EventsController, OAuthController, SentryEventsController],
   providers: [
     EventIngestService,

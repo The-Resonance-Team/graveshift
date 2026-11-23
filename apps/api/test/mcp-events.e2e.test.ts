@@ -14,7 +14,7 @@ import { AppModule } from '../src/app.module';
 import { CREDENTIAL_CONFIG, CREDENTIAL_REPO } from '../src/auth/auth.types';
 import { IDENTITY_REPO } from '../src/identity/identity.types';
 import { InMemoryEventSource } from '../src/mcp/events/events.source';
-import { MCP_EVENT_SOURCE } from '../src/mcp/events/events.types';
+import { CLOSED_DEPLOYMENTS, MCP_EVENT_SOURCE } from '../src/mcp/events/events.types';
 import { MCP_BACKEND, MCP_POLICY } from '../src/mcp/mcp.types';
 import { TEST_CONFIG } from './fakes/auth-test-config';
 import { FakeCredentialRepo } from './fakes/fake-credential-repo';
@@ -112,6 +112,8 @@ describe('MCP Events extension through /mcp (e2e)', () => {
       .useValue(testIdentityRepo())
       .overrideProvider(MCP_EVENT_SOURCE)
       .useValue(source)
+      .overrideProvider(CLOSED_DEPLOYMENTS)
+      .useValue({ listClosedIds: async () => [] })
       .compile();
     app = moduleRef.createNestApplication();
     configureApp(app);

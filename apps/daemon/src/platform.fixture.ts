@@ -104,6 +104,7 @@ export async function createPlatform(db: PrismaService) {
       gateway,
       verification: { 'team/grave': { commands: [['git', 'diff', '--check']], timeoutMs: 10_000 } },
       dashboardUrl: '',
+      audit,
       runner: gitChecks,
     }),
     recover: (intent) => recoverPublication(recording.client, intent),
@@ -125,6 +126,7 @@ export async function createPlatform(db: PrismaService) {
     const view: RecordedHaunting = {
       incident: facts.incident,
       category: facts.category,
+      deploymentId: TEST_BASE_SHA,
       detections: [
         {
           id: 'signal-1',

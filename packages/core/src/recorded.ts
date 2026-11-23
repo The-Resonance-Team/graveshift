@@ -48,6 +48,11 @@ export const RecordedHauntingSchema = z
     detections: z.array(RecordedDetectionSchema),
     pr: PrRefSchema.optional(),
     timeline: z.array(HauntingTimelineSchema).optional(),
+    // Inherited from the Event that opened this Haunting. Null when unassigned.
+    deploymentId: z
+      .string()
+      .regex(/^[0-9a-f]{40}$/)
+      .nullish(),
   })
   .superRefine((view, context) => {
     if (view.incident.diagnosis && view.incident.diagnosis.incidentId !== view.incident.id) {
@@ -70,6 +75,7 @@ export function prepareRecordedHaunting(input: unknown): RecordedHaunting {
   assertSafeMetadata([
     incident.id,
     incident.service,
+    ...(view.deploymentId === null || view.deploymentId === undefined ? [] : [view.deploymentId]),
     ...incident.signalIds,
     ...(diagnosis
       ? [diagnosis.id, diagnosis.incidentId, ...diagnosis.evidence.map((e) => e.ref)]

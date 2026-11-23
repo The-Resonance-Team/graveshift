@@ -16,7 +16,7 @@ import { generatePatch } from '@graveshift/patch';
 import { PATCH_SYSTEM } from '@graveshift/patch/generate';
 import { z } from 'zod';
 
-import { currentAuditScope } from './audit';
+import { currentAuditScope, type WriteAudit } from './audit';
 import { ExecutionFailure, type FixExecutor } from './execution';
 import { withModelContext } from './model-context';
 import { cancellableGitHub } from './cancellable-github';
@@ -27,22 +27,51 @@ export interface ExecutorOptions {
   gateway: Pick<Gateway, 'run'>;
   verification: Readonly<Record<string, VerificationConfig>>;
   dashboardUrl: string;
+  audit: WriteAudit;
   runner?: SandboxRunner;
 }
+
+export const FIX_BASE_SHA_AUDIT_TYPE = 'fix.base_sha';
 
 export function createFixExecutor(options: ExecutorOptions): FixExecutor {
   return async (input) => {
     input.signal?.throwIfAborted();
     // Checked before the first model call: a patch call with no authenticated audit scope would
     // spend budget on a model call whose durable entry has no chain to belong to.
-    if (currentAuditScope() === undefined) {
+    const scope = currentAuditScope();
+    if (scope === undefined) {
       throw new ExecutionFailure('audit_failed', 'No authenticated audit scope for the Agent');
+    }
+    const baseSha = input.context.deploymentId;
+    if (!/^[0-9a-f]{40}$/.test(baseSha)) {
+      throw new ExecutionFailure('fix_error', 'No bound Deployment for this Fix');
+    }
+    try {
+      await options.audit(
+        {
+          key: `fix:${input.attempt.id}:base:${baseSha}`,
+          actor: scope.actor,
+          type: FIX_BASE_SHA_AUDIT_TYPE,
+          incidentId: input.context.incident.id,
+          payload: {
+            baseSha,
+            deploymentId: baseSha,
+            repo: input.context.repo.repo,
+            workItemId: input.snapshot.item.id,
+            attemptId: input.attempt.id,
+            service: input.context.incident.service,
+          },
+        },
+        scope,
+      );
+    } catch {
+      throw new ExecutionFailure('audit_failed', 'The base SHA audit was not persisted');
     }
     const client = cancellableGitHub(options.client, input.signal);
     const verification = options.verification[input.context.repo.repo];
     if (verification === undefined)
       throw new ExecutionFailure('fix_error', 'Repository verification is not configured');
-    const snapshot = await prepareSource(input.context.repo, client);
+    const snapshot = await prepareSource(input.context.repo, client, baseSha);
     input.signal?.throwIfAborted();
     let auditFailed = false;
     const generated = await generatePatch({
@@ -53,7 +82,11 @@ export function createFixExecutor(options: ExecutorOptions): FixExecutor {
       gateway: {
         async run(task) {
           const result = await withModelContext(
-            { incidentId: input.context.incident.id, service: input.context.incident.service },
+            {
+              incidentId: input.context.incident.id,
+              service: input.context.incident.service,
+              deploymentId: baseSha,
+            },
             () =>
               options.gateway.run({
                 ...task,
@@ -132,6 +165,7 @@ const ExecutionEnvSchema = z.object({
 export function executorFromEnv(
   gateway: Pick<Gateway, 'run'>,
   env: Record<string, string | undefined>,
+  audit: WriteAudit,
 ) {
   const config = parseDaemonEnv(ExecutionEnvSchema, env, 'Fix execution configuration is invalid');
   const client = createRestClient(
@@ -152,6 +186,7 @@ export function executorFromEnv(
     gateway,
     verification,
     dashboardUrl: config.GRAVESHIFT_DASHBOARD_URL ?? '',
+    audit,
   });
   return {
     execute,

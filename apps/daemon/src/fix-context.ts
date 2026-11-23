@@ -11,9 +11,13 @@ export interface FixContext {
   diagnosis: Diagnosis;
   incident: Incident;
   category: HauntingCategory;
+  /** The deployed commit SHA inherited from the Event that opened the Haunting. */
+  deploymentId: string;
   repo: RepoPolicy;
   policy: PolicyContext;
 }
+
+const COMMIT_SHA = /^[0-9a-f]{40}$/;
 
 export type ResolveContext = (caller: WorkCaller, snapshot: WorkSnapshot) => Promise<FixContext>;
 
@@ -56,7 +60,10 @@ export function contextClient(api: PrivateApi, policy: Policy, envMode?: string)
         facts.category !== view.category ||
         view.detections.some((entry) => entry.projectId !== caller.projectId) ||
         new Set(facts.signals).size !== new Set(view.detections.map((entry) => entry.rule)).size ||
-        view.detections.some((entry) => !facts.signals.includes(entry.rule))
+        view.detections.some((entry) => !facts.signals.includes(entry.rule)) ||
+        view.deploymentId === null ||
+        view.deploymentId === undefined ||
+        !COMMIT_SHA.test(view.deploymentId)
       ) {
         throw new ContextFailure('invalid_context');
       }
@@ -65,6 +72,7 @@ export function contextClient(api: PrivateApi, policy: Policy, envMode?: string)
         diagnosis,
         incident: view.incident,
         category: view.category,
+        deploymentId: view.deploymentId,
         repo,
         policy: {
           service: facts.service,

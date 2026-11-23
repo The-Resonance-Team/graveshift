@@ -1,13 +1,15 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { Inject, Injectable, Optional } from '@nestjs/common';
 import { ProtocolError } from '@modelcontextprotocol/server';
 import { redact } from '@graveshift/redactor';
 import {
+  CLOSED_DEPLOYMENTS,
   EVENT_TYPES,
   findEventType,
   MCP_EVENT_SOURCE,
   type EventReadResult,
   type EventOccurrence,
   type EventFilter,
+  type ClosedDeploymentQuery,
   type EventSource,
   type EventTypeDescriptor,
   type StoredEvent,
@@ -34,6 +36,8 @@ const IDENTITY_KEYS = new Set([
   'fingerprint',
   'id',
   'projectId',
+  'deploymentId',
+  'environment',
   'service',
   'type',
   'name',
@@ -116,7 +120,12 @@ export class EventPollService {
   /** Test seam: a small window exercises the recursive scan with few entries. */
   windowSize?: number;
 
-  constructor(@Inject(MCP_EVENT_SOURCE) private readonly source: EventSource) {}
+  constructor(
+    @Inject(MCP_EVENT_SOURCE) private readonly source: EventSource,
+    @Optional()
+    @Inject(CLOSED_DEPLOYMENTS)
+    private readonly closed?: ClosedDeploymentQuery,
+  ) {}
 
   list(): EventListResult {
     return {
@@ -163,9 +172,15 @@ export class EventPollService {
       last: { firstSeq: 0, headSeq: 0, scannedThroughSeq: 0, events: [], truncated: false },
       scanCursor: afterSeq,
     };
+    // Closure is final and has no timeout. Once a Deployment is closed, its events are
+    // no longer pulled; the Project's watcher and all other Deployments stay alive.
+    const closedIds =
+      this.closed === undefined || projectId === undefined
+        ? new Set<string>()
+        : new Set(await this.closed.listClosedIds(projectId));
     // A wider raw window limits recursion when many entries do not match.
     const window = this.windowSize ?? Math.max(maxEvents + 1, 100);
-    await this.scan(state, descriptor, args, floor, maxEvents, window, projectId);
+    await this.scan(state, descriptor, args, floor, maxEvents, window, projectId, closedIds);
 
     const hasMore = state.found.length > maxEvents || !state.reachedHead;
     const page = state.found.slice(0, maxEvents);
@@ -195,6 +210,7 @@ export class EventPollService {
     maxEvents: number,
     window: number,
     projectId: string | undefined,
+    closedIds: ReadonlySet<string>,
   ): Promise<void> {
     const read = await this.source.read(state.scanCursor, window);
     state.last = read;
@@ -203,7 +219,7 @@ export class EventPollService {
     state.scannedTotal += Math.max(progress, 0);
 
     for (const stored of read.events) {
-      if (!this.matches(stored, descriptor, args, projectId)) continue;
+      if (!this.matches(stored, descriptor, args, projectId, closedIds)) continue;
       if (floor !== undefined && Date.parse(stored.envelope.observedAt) < floor) {
         state.truncated = true;
         continue;
@@ -220,17 +236,19 @@ export class EventPollService {
     }
     if (state.scanCursor !== null && read.scannedThroughSeq <= state.scanCursor) return;
     state.scanCursor = read.scannedThroughSeq;
-    return this.scan(state, descriptor, args, floor, maxEvents, window, projectId);
+    return this.scan(state, descriptor, args, floor, maxEvents, window, projectId, closedIds);
   }
 
-  /** Project isolation plus the descriptor's declared type, service and severity filter. */
+  /** Project isolation, Deployment closure, and the descriptor's declared filters. */
   private matches(
     stored: StoredEvent,
     descriptor: EventTypeDescriptor,
     args: EventFilter,
     projectId: string | undefined,
+    closedIds: ReadonlySet<string>,
   ): boolean {
     if (projectId !== undefined && stored.envelope.projectId !== projectId) return false;
+    if (closedIds.has(stored.envelope.deploymentId ?? '')) return false;
     return descriptor.matches(stored.envelope, args);
   }
 

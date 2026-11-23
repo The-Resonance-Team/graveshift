@@ -17,6 +17,12 @@ export const EventEnvelopeSchema = z.object({
   observedAt: timestamp,
   traceId: id,
   fingerprint: id,
+  // A Deployment binding is stamped by the API. A client cannot choose another Project's SHA.
+  deploymentId: z
+    .string()
+    .regex(/^[0-9a-f]{40}$/)
+    .nullish(),
+  environment: z.string().min(1).max(100).nullish(),
   payload: z.record(z.string(), z.unknown()),
 });
 export type EventEnvelope = z.infer<typeof EventEnvelopeSchema>;

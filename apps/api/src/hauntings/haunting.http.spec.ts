@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test';
 import request from 'supertest';
 
 import { AuditConflict } from '../audit/audit.errors';
+import { DeployRepo } from '../deploys/deploy.repo';
 import { ProjectGrant } from '../internal/project-grant';
 import { testProjectGrant } from '../internal/testing/project-grant.fixture';
 import { InternalGuard } from '../internal/internal.guard';
@@ -19,6 +20,7 @@ const upsert = mock<HauntingRepo['upsert']>(async () => HAUNTING_FIXTURE);
 const list = mock<HauntingRepo['list']>(async () => [HAUNTING_FIXTURE]);
 const get = mock<HauntingRepo['get']>(async () => HAUNTING_FIXTURE);
 const context = mock<HauntingRepo['context']>(async () => HAUNTING_FIXTURE);
+const closeFirst = mock<DeployRepo['closeFirst']>(async () => true);
 let app: INestApplication;
 
 describe('private Haunting boundary', () => {
@@ -36,6 +38,7 @@ describe('private Haunting boundary', () => {
           }),
         },
         { provide: HauntingRepo, useValue: { upsert, list, get, context } },
+        { provide: DeployRepo, useValue: { closeFirst } },
       ],
     }).compile();
     app = moduleRef.createNestApplication();
@@ -98,6 +101,11 @@ describe('private Haunting boundary', () => {
       commit.resolve(HAUNTING_FIXTURE);
     }
     expect((await response).body).toEqual(HAUNTING_FIXTURE);
+  });
+
+  test('a recorded Haunting closes the Deployment inherited from its Event', async () => {
+    await call('', body).expect(200);
+    expect(closeFirst).toHaveBeenCalledWith('project-1', HAUNTING_FIXTURE.deploymentId);
   });
 
   test('a reused event key produces a conflict with no success acknowledgement', async () => {

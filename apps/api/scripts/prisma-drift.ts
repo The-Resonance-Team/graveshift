@@ -145,27 +145,28 @@ export function migrationOwnershipViolations(sql: string): string[] {
 const V3_TRIGGERS = [
   { name: 'deploys_no_update', event: 'UPDATE', table: 'deploys' },
   { name: 'deploys_no_delete', event: 'DELETE', table: 'deploys' },
-  { name: 'deploy_projects_no_update', event: 'UPDATE', table: 'deploy_projects' },
-  { name: 'deploy_projects_no_delete', event: 'DELETE', table: 'deploy_projects' },
   { name: 'deploys_org_consistency', event: 'INSERT', table: 'deploys' },
-  { name: 'project_releases_org_consistency', event: 'INSERT', table: 'project_releases' },
-  { name: 'deploy_projects_org_consistency', event: 'INSERT', table: 'deploy_projects' },
-  { name: 'releases_org_immutable', event: 'UPDATE', table: 'releases' },
   { name: 'environments_org_immutable', event: 'UPDATE', table: 'environments' },
-  { name: 'project_releases_project_immutable', event: 'UPDATE', table: 'project_releases' },
   { name: 'projects_org_link_guard', event: 'UPDATE', table: 'projects' },
 ] as const;
 
 const V3_RESTRICT_CONSTRAINTS = [
-  'releases_org_id_fkey',
-  'project_releases_project_id_fkey',
-  'project_releases_release_id_fkey',
   'environments_org_id_fkey',
   'deploys_org_id_fkey',
-  'deploys_release_id_fkey',
+  'deploys_project_id_fkey',
   'deploys_environment_id_fkey',
-  'deploy_projects_deploy_id_fkey',
-  'deploy_projects_project_id_fkey',
+] as const;
+
+const REMOVED_V3_OBJECTS = [
+  'CREATE TABLE "releases"',
+  'CREATE TABLE "project_releases"',
+  'CREATE TABLE "deploy_projects"',
+  'CREATE TRIGGER releases_org_immutable',
+  'CREATE TRIGGER project_releases_org_consistency',
+  'CREATE TRIGGER project_releases_project_immutable',
+  'CREATE TRIGGER deploy_projects_no_update',
+  'CREATE TRIGGER deploy_projects_no_delete',
+  'CREATE TRIGGER deploy_projects_org_consistency',
 ] as const;
 
 /** Checks that the v3 deploy enforcement block sits on its intended tables. */
@@ -173,6 +174,9 @@ export function v3DeployViolations(sql: string): string[] {
   const block = V3_DEPLOY_BLOCK.exec(sql)?.[0];
   if (block === undefined) return ['v3 deploy enforcement block is missing from the migration'];
   const violations: string[] = [];
+  for (const object of REMOVED_V3_OBJECTS) {
+    if (sql.includes(object)) violations.push(`removed v3 object is still present: ${object}`);
+  }
   const triggers = new Map<string, { event: string; table: string }>();
   for (const match of block.matchAll(TRIGGER)) {
     const [, name, event, table] = match;
@@ -194,11 +198,12 @@ export function v3DeployViolations(sql: string): string[] {
   }
   for (const extra of triggers.keys()) violations.push(`unexpected v3 trigger ${extra}`);
   for (const constraint of V3_RESTRICT_CONSTRAINTS) {
+    const update = constraint === 'deploys_project_id_fkey' ? 'RESTRICT' : 'CASCADE';
     const pattern = new RegExp(
-      `ADD CONSTRAINT "${constraint}"[^;]*ON DELETE RESTRICT ON UPDATE CASCADE;`,
+      `ADD CONSTRAINT "${constraint}"[^;]*ON DELETE RESTRICT ON UPDATE ${update};`,
     );
     if (!pattern.test(sql))
-      violations.push(`foreign key ${constraint} must use ON DELETE RESTRICT`);
+      violations.push(`foreign key ${constraint} must use ON DELETE RESTRICT ON UPDATE ${update}`);
   }
   if (
     !/ADD CONSTRAINT "deploys_url_http_check"\s+CHECK \("url" IS NULL OR "url" ~\* '\^https\?:\/\/'\)/.test(

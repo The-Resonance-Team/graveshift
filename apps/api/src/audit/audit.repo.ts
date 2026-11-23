@@ -15,9 +15,11 @@ import { GENESIS_HASH, hashEntry, verifyEntries } from './chain';
 export class AuditRepo {
   constructor(private readonly prisma: PrismaService) {}
 
-  append(projectId: string, draft: AuditDraft): Promise<AuditEntry> {
+  append(projectId: string, draft: AuditDraft, deploymentId?: string | null): Promise<AuditEntry> {
     const normalized = normalizeDraft(draft);
-    return inAuditTransaction(this.prisma, (tx) => this.appendInTx(tx, projectId, normalized));
+    return inAuditTransaction(this.prisma, (tx) =>
+      this.appendInTx(tx, projectId, normalized, deploymentId),
+    );
   }
 
   /** Repositories only. The caller owns a serializable, retryable transaction and commit. */
@@ -25,6 +27,7 @@ export class AuditRepo {
     tx: Prisma.TransactionClient,
     projectId: string,
     input: AuditDraft,
+    deploymentId?: string | null,
   ): Promise<AuditEntry> {
     const draft = normalizeDraft(input);
     await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtextextended(${projectId}, 0))::text`;
@@ -56,6 +59,7 @@ export class AuditRepo {
         ...entry,
         at: new Date(entry.at),
         projectId,
+        deploymentId: deploymentId ?? null,
         eventKey: draft.key,
         prevHash,
         hash: hashEntry(entry, prevHash),

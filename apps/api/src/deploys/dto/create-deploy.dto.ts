@@ -1,8 +1,6 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
-  ArrayNotEmpty,
-  IsArray,
   IsDate,
   IsOptional,
   IsString,
@@ -12,26 +10,54 @@ import {
   MinLength,
 } from 'class-validator';
 
+export const DEPLOYMENT_ID_PATTERN = /^[0-9a-f]{40}$/;
 const NUMERIC_ID = /^\d{1,20}$/;
 
-export class CreateDeployDto {
-  @ApiProperty({ example: 'release-1' })
+/** The Organization id and the Project id are bound by DeployAuthGuard. */
+export class DeploymentParamsDto {
+  @ApiProperty({ example: '00000000-0000-4000-8000-000000000000' })
   @IsString()
   @MinLength(1)
-  @MaxLength(80)
-  releaseId!: string;
+  orgId!: string;
+
+  @ApiProperty({ example: '1001' })
+  @IsString()
+  @Matches(NUMERIC_ID)
+  projectId!: string;
+}
+
+export class DeploymentListQueryDto {
+  @ApiPropertyOptional({ description: 'The deployed commit SHA.', example: 'a'.repeat(40) })
+  @IsOptional()
+  @IsString()
+  @Matches(DEPLOYMENT_ID_PATTERN)
+  deploymentId?: string;
+
+  @ApiPropertyOptional({ description: 'The Organization-scoped Environment name.' })
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  @MaxLength(100)
+  environment?: string;
+}
+
+export class CreateDeployDto {
+  @ApiProperty({ description: 'The 40-hex deployed commit SHA.', example: 'a'.repeat(40) })
+  @IsString()
+  @Matches(DEPLOYMENT_ID_PATTERN)
+  deploymentId!: string;
+
+  @ApiProperty({ description: 'The commit or tag title.', example: 'fix: restart policy' })
+  @IsString()
+  @MinLength(1)
+  @MaxLength(200)
+  title!: string;
 
   @ApiProperty({ description: 'The Organization-scoped Environment name.', example: 'production' })
   @IsString()
   @MinLength(1)
   @MaxLength(100)
   environment!: string;
-
-  @ApiProperty({ example: 'deploy-2026-11-22' })
-  @IsString()
-  @MinLength(1)
-  @MaxLength(200)
-  name!: string;
 
   @ApiProperty({ example: '2026-11-22T07:00:00.000Z' })
   @Type(() => Date)
@@ -49,16 +75,4 @@ export class CreateDeployDto {
   @IsUrl({ protocols: ['http', 'https'], require_protocol: true })
   @MaxLength(2048)
   url?: string;
-
-  @ApiPropertyOptional({
-    type: [String],
-    description: 'Project ids to target. All Release Projects are used when absent.',
-    example: ['1001'],
-  })
-  @IsOptional()
-  @IsArray()
-  @ArrayNotEmpty()
-  @IsString({ each: true })
-  @Matches(NUMERIC_ID, { each: true })
-  projects?: string[];
 }

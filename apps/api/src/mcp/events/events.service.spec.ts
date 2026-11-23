@@ -164,6 +164,62 @@ describe('EventPollService', () => {
     expect(errorCode(error)).toBe(-32602);
   });
 
+  test('filters events by deploymentId and Environment', async () => {
+    const { source, service } = setup();
+    const sha = 'a'.repeat(40);
+    source.push(
+      validEnvelope({ id: 'bound', type: 'signal.oom', deploymentId: sha, environment: 'prod' }),
+    );
+    source.push(
+      validEnvelope({
+        id: 'other',
+        type: 'signal.oom',
+        deploymentId: 'b'.repeat(40),
+        environment: 'prod',
+      }),
+    );
+    const bySha = await poll(service, {
+      name: 'incident.changed',
+      cursor: START,
+      arguments: { deploymentId: sha },
+    });
+    expect(bySha.events.map((event) => event.eventId)).toEqual(['bound']);
+    const byEnvironment = await poll(service, {
+      name: 'incident.changed',
+      cursor: START,
+      arguments: { environment: 'prod' },
+    });
+    expect(byEnvironment.events).toHaveLength(2);
+    const invalid = await poll(service, {
+      name: 'incident.changed',
+      cursor: START,
+      arguments: { deploymentId: 'not-a-sha' },
+    }).catch((reason: unknown) => reason);
+    expect(errorCode(invalid)).toBe(-32602);
+  });
+
+  test('stops polling a closed Deployment without stopping the Project watcher', async () => {
+    const source = new InMemoryEventSource();
+    const closed = new Set<string>(['a'.repeat(40)]);
+    const service = new EventPollService(source, { listClosedIds: async () => [...closed] });
+    const sha = [...closed][0]!;
+    source.push(validEnvelope({ id: 'closed-event', type: 'signal.oom', deploymentId: sha }));
+    source.push(
+      validEnvelope({
+        id: 'open-event',
+        type: 'signal.oom',
+        deploymentId: 'b'.repeat(40),
+      }),
+    );
+    source.push(validEnvelope({ id: 'unassigned', type: 'signal.oom' }));
+    const result = await poll(service, { name: 'incident.changed', cursor: START });
+    expect(result.events.map((event) => event.eventId).sort()).toEqual([
+      'open-event',
+      'unassigned',
+    ]);
+    expect(result.hasMore).toBe(false);
+  });
+
   test('a static catalog declares one scope per event type', () => {
     const scopesByType = EVENT_TYPES.map((type) => type.scope);
     expect(new Set(scopesByType).size).toBe(6);

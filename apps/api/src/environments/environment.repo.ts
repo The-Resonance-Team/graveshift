@@ -30,7 +30,7 @@ export class EnvironmentRepo {
   async createWithAudit(input: {
     orgId: string;
     name: string;
-    projectIds: string[];
+    projectId: string;
     actor: string;
   }): Promise<{ record: EnvironmentRecord; created: boolean }> {
     return inAuditTransaction(this.db, async (tx) => {
@@ -49,15 +49,15 @@ export class EnvironmentRepo {
         }
         throw error;
       }
-      await Promise.all(
-        input.projectIds.map(async (projectId) =>
-          this.audit.appendInTransaction(tx, projectId, {
-            actor: input.actor,
-            type: 'environment.created',
-            payload: { environmentId: row.id, orgId: input.orgId, projectId },
-          }),
-        ),
-      );
+      await this.audit.appendInTransaction(tx, input.projectId, {
+        actor: input.actor,
+        type: 'environment.created',
+        payload: {
+          environmentId: row.id,
+          orgId: input.orgId,
+          projectId: input.projectId,
+        },
+      });
       return { record: toRecord(row), created: true };
     });
   }
@@ -66,9 +66,7 @@ export class EnvironmentRepo {
     const rows = await this.db.environment.findMany({
       where: {
         orgId,
-        ...(projectId === undefined
-          ? {}
-          : { deploys: { some: { projectLinks: { some: { projectId } } } } }),
+        ...(projectId === undefined ? {} : { deploys: { some: { projectId } } }),
       },
       orderBy: { name: 'asc' },
     });

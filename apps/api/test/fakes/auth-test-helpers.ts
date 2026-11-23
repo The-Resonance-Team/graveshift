@@ -6,6 +6,9 @@ import { createInMemoryPublisher, type InMemoryPublisher } from '@graveshift/eve
 
 import { configureApp } from '../../src/app.factory';
 import { AppModule } from '../../src/app.module';
+import { AuditRepo, type AuditAppendInput } from '../../src/audit/repo/audit.repo';
+import { DeployRepo } from '../../src/deploys/deploy.repo';
+import { FakeDeployRepo } from '../../src/deploys/testing/deploy-repo.fakes';
 import {
   CREDENTIAL_CONFIG,
   CREDENTIAL_REPO,
@@ -22,12 +25,24 @@ import { FakeCredentialRepo } from './fake-credential-repo';
 
 export { TEST_CONFIG };
 
+/** Records audit appends without touching PostgreSQL. No network call is made. */
+export class FakeAuditRepo {
+  readonly appended: AuditAppendInput[] = [];
+
+  append(input: AuditAppendInput): Promise<{ seq: number }> {
+    this.appended.push(input);
+    return Promise.resolve({ seq: this.appended.length });
+  }
+}
+
 export interface AuthTestApp {
   app: INestApplication;
   jwt: JwtService;
   repo: FakeCredentialRepo;
   identity: FakeIdentityRepo;
   publisher: InMemoryPublisher;
+  audit: FakeAuditRepo;
+  deploys: FakeDeployRepo;
 }
 
 /** Seeds the in-memory OAuth client registry and the stored deployment grant. */
@@ -49,6 +64,8 @@ export async function buildAuthApp(
 ): Promise<AuthTestApp> {
   const repo = new FakeCredentialRepo();
   const identity = testIdentityRepo();
+  const audit = new FakeAuditRepo();
+  const deploys = new FakeDeployRepo();
   const publisher = publisherOverride ?? createInMemoryPublisher();
   const config = { ...TEST_CONFIG, ...overrides };
   const boot = { ...(await testBootConfig()), auth: config };
@@ -61,6 +78,10 @@ export async function buildAuthApp(
     .useValue(repo)
     .overrideProvider(IDENTITY_REPO)
     .useValue(identity)
+    .overrideProvider(AuditRepo)
+    .useValue(audit)
+    .overrideProvider(DeployRepo)
+    .useValue(deploys)
     .overrideProvider(EVENT_PUBLISHER)
     .useValue(publisher);
   if (sentryVerifier) {
@@ -70,7 +91,7 @@ export async function buildAuthApp(
   const app = moduleRef.createNestApplication();
   configureApp(app);
   await app.init();
-  return { app, jwt: moduleRef.get(JwtService), repo, identity, publisher };
+  return { app, jwt: moduleRef.get(JwtService), repo, identity, publisher, audit, deploys };
 }
 
 export function accessToken(
