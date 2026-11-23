@@ -1,4 +1,4 @@
-import { prepareEnvelope, type EventEnvelope } from '@graveshift/core';
+import { ENVIRONMENT_PATTERN, prepareEnvelope, type EventEnvelope } from '@graveshift/core';
 import { ProtocolError } from '@modelcontextprotocol/server';
 import { z } from 'zod';
 
@@ -68,7 +68,11 @@ const EventFilterSchema = z.strictObject({
     .regex(/^[0-9a-f]{40}$/)
     .describe('Only events stamped with this deployed commit SHA.')
     .optional(),
-  environment: z.string().describe('Only events for this Environment name.').optional(),
+  environment: z
+    .string()
+    .regex(ENVIRONMENT_PATTERN)
+    .describe('Only events for this Environment name.')
+    .optional(),
 });
 export type EventFilter = z.infer<typeof EventFilterSchema>;
 

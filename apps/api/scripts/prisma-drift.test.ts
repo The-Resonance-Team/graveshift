@@ -10,7 +10,7 @@ const migration = join(
 );
 const v3Migration = join(
   dirname(import.meta.dir),
-  'prisma/migrations/20261122120000_v3_releases_deploys/migration.sql',
+  'prisma/migrations/20261122120000_v3_deployments/migration.sql',
 );
 const sql = readFileSync(migration, 'utf8');
 const v3Sql = readFileSync(v3Migration, 'utf8');

@@ -19,6 +19,7 @@ export class HauntingRepo {
     projectId: string,
     eventId: string,
     input: RecordedHaunting,
+    eventEnvironment?: string | null,
   ): Promise<RecordedHaunting> {
     const view = prepareRecordedHaunting(input);
     const deploymentId = view.deploymentId ?? null;
@@ -44,7 +45,10 @@ export class HauntingRepo {
       )
         throw new HauntingConflict();
       const recorded = mergeRecorded(prior, view);
-      const data = hauntingData(recorded, entry.seq);
+      // A later Event cannot change the opening pair. The first Event supplies the
+      // Environment; every later row keeps the one already stored on the Haunting.
+      const deploymentEnvironment = recorded.deploymentEnvironment ?? eventEnvironment ?? null;
+      const data = hauntingData({ ...recorded, deploymentEnvironment }, entry.seq);
       const saved = await tx.haunting.upsert({
         where,
         create: { projectId, ...data },

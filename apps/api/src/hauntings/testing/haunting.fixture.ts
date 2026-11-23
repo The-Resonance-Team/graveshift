@@ -45,4 +45,5 @@ export const HAUNTING_FIXTURE = prepareRecordedHaunting({
   },
   timeline: [{ at: HAUNTING_AT, type: 'diagnosed', detail: 'Recorded facts' }],
   deploymentId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+  deploymentEnvironment: 'production',
 });

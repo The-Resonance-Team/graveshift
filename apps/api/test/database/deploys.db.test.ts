@@ -72,12 +72,12 @@ describe.skipIf(!dbTestEnabled)('v3 deployment database rules', () => {
     await db.deploy.create({
       data: { ...base, deploymentId: 'c'.repeat(40), title: 'tie-second' },
     });
-    const expected = (
-      await db.deploy.findMany({
-        where: { projectId: '1001' },
-        orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
-      })
-    ).map((row) => row.title);
+    // The expected order comes from SQL on the same rows, not from the repo's Prisma orderBy.
+    const rows = await db.$queryRaw<Array<{ title: string }>>`
+      SELECT title FROM deploys WHERE project_id = ${'1001'}
+      ORDER BY created_at DESC, id ASC
+    `;
+    const expected = rows.map((row) => row.title);
     const actual = (await new DeployRepo(db, audit).list('1001')).map((row) => row.title);
     expect(actual).toEqual(expected);
   });

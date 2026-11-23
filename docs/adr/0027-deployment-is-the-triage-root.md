@@ -12,6 +12,8 @@ The decision follows the Sentry research and the review of PR #125. Sentry uses 
 
 Only events ingested with a bound Deployment carry `deploymentId`. Collector events and Sentry events arrive with no SHA, so they stay unassigned and their Hauntings have no fix point. This is accepted for this version.
 
+Closure keeps the opening pair. The first Event with a bound Deployment records its SHA and Environment on the Haunting. A later Event closes that Deployment only when its own SHA and Environment both equal the opening pair. An Event from another Environment with the same SHA never closes the opening Deployment.
+
 Vercel confirms one Deployment belongs to one Project and one commit creates one Deployment per connected Project.
 
 Trade-off: Graveshift differs from Sentry on the Event shape; Events carry a `deploymentId` that Sentry Events do not have. In return, triage groups by code version without extra tags.

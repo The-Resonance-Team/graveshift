@@ -1,3 +1,4 @@
+import { ENVIRONMENT_PATTERN } from '@graveshift/core';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
   IsISO8601,
@@ -62,7 +63,7 @@ export class PublishEventDto {
   @ApiPropertyOptional({ description: 'The Environment name on the Deployment.' })
   @IsOptional()
   @IsString()
-  @Matches(/^[A-Za-z0-9._-]{1,100}$/)
+  @Matches(ENVIRONMENT_PATTERN)
   environment?: string | null;
 
   @ApiProperty({ type: Object, additionalProperties: true })

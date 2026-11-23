@@ -53,6 +53,8 @@ export const RecordedHauntingSchema = z
       .string()
       .regex(/^[0-9a-f]{40}$/)
       .nullish(),
+    // The Environment of that same opening Event. Paired with deploymentId for closure.
+    deploymentEnvironment: field.environment,
   })
   .superRefine((view, context) => {
     if (view.incident.diagnosis && view.incident.diagnosis.incidentId !== view.incident.id) {

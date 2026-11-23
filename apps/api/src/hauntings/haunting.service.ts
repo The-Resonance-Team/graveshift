@@ -37,16 +37,25 @@ export class HauntingService {
   async record(input: RecordHauntingDto) {
     await this.authorize(input);
     try {
-      const view = await this.repo.upsert(input.projectId, input.eventId, input.view);
-      // The first Event with a known Deployment closes that Deployment. A later Event
-      // for the same SHA writes no second entry and never reopens it.
+      const view = await this.repo.upsert(
+        input.projectId,
+        input.eventId,
+        input.view,
+        input.environment,
+      );
+      const eventDeploymentId = input.view.deploymentId;
+      const eventEnvironment = input.environment;
+      // Close only when the current Event matches the opening Deployment pair.
+      // A later Event from another Environment with the same SHA closes nothing.
       if (
-        view.deploymentId !== null &&
-        view.deploymentId !== undefined &&
-        input.environment !== null &&
-        input.environment !== undefined
+        eventDeploymentId !== null &&
+        eventDeploymentId !== undefined &&
+        eventEnvironment !== null &&
+        eventEnvironment !== undefined &&
+        view.deploymentId === eventDeploymentId &&
+        view.deploymentEnvironment === eventEnvironment
       ) {
-        await this.deploys.closeFirst(input.projectId, view.deploymentId, input.environment);
+        await this.deploys.closeFirst(input.projectId, eventDeploymentId, eventEnvironment);
       }
       return view;
     } catch (error) {

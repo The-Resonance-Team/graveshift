@@ -28,6 +28,15 @@ describe('EventEnvelope', () => {
     );
   });
 
+  test('rejects an Environment name outside the shared pattern', () => {
+    for (const bad of ['bad name', 'prod/us', '', 'a'.repeat(101)]) {
+      expect(EventEnvelopeSchema.safeParse({ ...envelope, environment: bad }).success).toBe(false);
+    }
+    expect(EventEnvelopeSchema.safeParse({ ...envelope, environment: 'prod.us-1' }).success).toBe(
+      true,
+    );
+  });
+
   test('rejects a missing projectId', () => {
     const { projectId: _projectId, ...rest } = envelope;
     expect(EventEnvelopeSchema.safeParse(rest).success).toBe(false);

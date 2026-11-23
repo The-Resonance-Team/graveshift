@@ -86,6 +86,16 @@ describe('private Haunting boundary', () => {
     expect(upsert).not.toHaveBeenCalled();
   });
 
+  test('rejects a recorded Environment name outside the shared pattern', async () => {
+    upsert.mockClear();
+    const inputs = ['bad name', 'prod/us', 'a'.repeat(101)].map((environment) => ({
+      ...body,
+      environment,
+    }));
+    await Promise.all(inputs.map((input) => call('', input).expect(422)));
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
   test('does not acknowledge the event before the repository commit resolves', async () => {
     const entered = Promise.withResolvers<void>();
     const commit = Promise.withResolvers<typeof HAUNTING_FIXTURE>();
@@ -101,7 +111,7 @@ describe('private Haunting boundary', () => {
     await entered.promise;
     try {
       expect(acknowledged).toBe(false);
-      expect(upsert).toHaveBeenCalledWith('project-1', 'event-1', HAUNTING_FIXTURE);
+      expect(upsert).toHaveBeenCalledWith('project-1', 'event-1', HAUNTING_FIXTURE, 'production');
     } finally {
       commit.resolve(HAUNTING_FIXTURE);
     }
@@ -115,6 +125,16 @@ describe('private Haunting boundary', () => {
       HAUNTING_FIXTURE.deploymentId,
       'production',
     );
+  });
+
+  test('a later Event from another Environment with the same SHA does not close the opening Deployment', async () => {
+    closeFirst.mockClear();
+    upsert.mockImplementationOnce(async () => ({
+      ...HAUNTING_FIXTURE,
+      deploymentEnvironment: 'staging',
+    }));
+    await call('', body).expect(200);
+    expect(closeFirst).not.toHaveBeenCalled();
   });
 
   test('a reused event key produces a conflict with no success acknowledgement', async () => {

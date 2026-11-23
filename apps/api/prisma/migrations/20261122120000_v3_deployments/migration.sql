@@ -16,6 +16,7 @@ CREATE TABLE "deploys" (
 
 -- AlterTable. A Haunting inherits the Deployment of the Event that opened it.
 ALTER TABLE "hauntings" ADD COLUMN     "deployment_id" TEXT;
+ALTER TABLE "hauntings" ADD COLUMN     "deployment_environment" TEXT;
 
 -- CreateIndex
 CREATE INDEX "deploys_project_id_created_at_id_idx" ON "deploys"("project_id", "created_at" DESC, "id");

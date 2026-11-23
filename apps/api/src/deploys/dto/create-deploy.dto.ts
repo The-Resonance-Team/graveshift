@@ -1,3 +1,4 @@
+import { ENVIRONMENT_PATTERN } from '@graveshift/core';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 import {
@@ -12,7 +13,6 @@ import {
 
 export const DEPLOYMENT_ID_PATTERN = /^[0-9a-f]{40}$/;
 const NUMERIC_ID = /^\d{1,20}$/;
-export const ENVIRONMENT_PATTERN = /^[A-Za-z0-9._-]{1,100}$/;
 
 /** The Organization id and the Project id are bound by DeployAuthGuard. */
 export class DeploymentParamsDto {

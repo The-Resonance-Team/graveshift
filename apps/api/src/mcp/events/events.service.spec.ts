@@ -198,6 +198,22 @@ describe('EventPollService', () => {
     expect(errorCode(invalid)).toBe(-32602);
   });
 
+  test('rejects an MCP Environment filter outside the shared pattern', async () => {
+    const { service } = setup();
+    const invalid = await Promise.all(
+      ['bad name', 'prod/us', 'a'.repeat(101)].map((environment) =>
+        poll(service, {
+          name: 'incident.changed',
+          cursor: START,
+          arguments: { environment },
+        })
+          .then(() => undefined)
+          .catch((reason: unknown) => reason),
+      ),
+    );
+    expect(invalid.map(errorCode)).toEqual([-32602, -32602, -32602]);
+  });
+
   test('skips a closed Deployment only in its Environment', async () => {
     const source = new InMemoryEventSource();
     const sha = 'a'.repeat(40);

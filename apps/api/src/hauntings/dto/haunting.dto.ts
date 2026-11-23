@@ -1,4 +1,4 @@
-import { SUBJECT_TOKEN_PATTERN } from '@graveshift/core';
+import { ENVIRONMENT_PATTERN, SUBJECT_TOKEN_PATTERN } from '@graveshift/core';
 import { RecordedHauntingSchema, type RecordedHaunting } from '@graveshift/core/recorded';
 import {
   IsInt,
@@ -40,8 +40,7 @@ export class RecordHauntingDto extends HauntingProjectDto {
 
   @ValidateIf((_, value) => value !== undefined && value !== null)
   @IsString()
-  @MinLength(1)
-  @MaxLength(100)
+  @Matches(ENVIRONMENT_PATTERN)
   environment?: string | null;
 
   @IsObject()

@@ -34,6 +34,7 @@ export {
   CounterSnapshotSchema,
   CounterSourceSchema,
   DiagnosisSchema,
+  ENVIRONMENT_PATTERN,
   EventEnvelopeSchema,
   EVENT_SEVERITIES,
   INCIDENT_STATES,
