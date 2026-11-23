@@ -43,6 +43,13 @@ export interface Call {
   args: unknown[];
 }
 
+/** The one argument of one recorded call, or a failure that names the missing call. */
+export function callArg(calls: Call[], method: string, index: number): unknown {
+  const found = calls.find((call) => call.method === method);
+  if (found === undefined) throw new Error(`no ${method} call was made`);
+  return found.args[index];
+}
+
 export function fakeClient(over: { pr?: PullRequestState[]; checks?: CheckRun[][] } = {}) {
   const calls: Call[] = [];
   let pollPr = 0;
@@ -56,6 +63,13 @@ export function fakeClient(over: { pr?: PullRequestState[]; checks?: CheckRun[][
   const client: GitHubClient = {
     getBaseSha: record('getBaseSha', () => 'base-sha'),
     getCommitTree: record('getCommitTree', () => 'base-tree'),
+    listTree: record('listTree', () => [
+      { path: 'src/app.ts', blobSha: 'blob-base-src-app' },
+      { path: 'README.md', blobSha: 'blob-base-readme' },
+    ]),
+    getBlobBytes: record('getBlobBytes', (_repo: string, blobSha: string) =>
+      Buffer.from(`bytes-of-${blobSha}`, 'utf8'),
+    ),
     createBlob: record('createBlob', (_repo: string, content: string) => `blob-${content.length}`),
     createTree: record('createTree', () => 'tree-sha'),
     createCommit: record('createCommit', () => 'commit-sha'),

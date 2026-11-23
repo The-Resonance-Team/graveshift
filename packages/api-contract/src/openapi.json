@@ -777,6 +777,50 @@
                           ],
                           "additionalProperties": false
                         },
+                        "sandbox": {
+                          "default": {
+                            "commands": [],
+                            "timeoutMs": 60000,
+                            "pathDirs": []
+                          },
+                          "type": "object",
+                          "properties": {
+                            "commands": {
+                              "default": [],
+                              "type": "array",
+                              "items": {
+                                "minItems": 1,
+                                "type": "array",
+                                "items": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              }
+                            },
+                            "timeoutMs": {
+                              "default": 60000,
+                              "type": "integer",
+                              "minimum": 0,
+                              "exclusiveMinimum": true,
+                              "maximum": 9007199254740991
+                            },
+                            "pathDirs": {
+                              "default": [],
+                              "type": "array",
+                              "items": {
+                                "type": "string",
+                                "format": "starts_with",
+                                "pattern": "^\\/.*"
+                              }
+                            }
+                          },
+                          "required": [
+                            "commands",
+                            "timeoutMs",
+                            "pathDirs"
+                          ],
+                          "additionalProperties": false
+                        },
                         "github": {
                           "type": "object",
                           "properties": {
@@ -811,6 +855,7 @@
                         "agent",
                         "promptTemplate",
                         "gateway",
+                        "sandbox",
                         "github"
                       ],
                       "additionalProperties": false
@@ -1454,6 +1499,11 @@
                               "headSha": {
                                 "type": "string",
                                 "minLength": 1
+                              },
+                              "openedAt": {
+                                "type": "string",
+                                "format": "date-time",
+                                "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                               }
                             },
                             "required": [
@@ -1461,7 +1511,8 @@
                               "number",
                               "url",
                               "branch",
-                              "headSha"
+                              "headSha",
+                              "openedAt"
                             ],
                             "additionalProperties": false
                           }
@@ -1740,6 +1791,11 @@
                         "headSha": {
                           "type": "string",
                           "minLength": 1
+                        },
+                        "openedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                         }
                       },
                       "required": [
@@ -1747,7 +1803,8 @@
                         "number",
                         "url",
                         "branch",
-                        "headSha"
+                        "headSha",
+                        "openedAt"
                       ],
                       "additionalProperties": false
                     }
@@ -2017,6 +2074,11 @@
                             "headSha": {
                               "type": "string",
                               "minLength": 1
+                            },
+                            "openedAt": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                             }
                           },
                           "required": [
@@ -2024,7 +2086,8 @@
                             "number",
                             "url",
                             "branch",
-                            "headSha"
+                            "headSha",
+                            "openedAt"
                           ],
                           "additionalProperties": false
                         }
@@ -2082,7 +2145,10 @@
                             "context_unavailable",
                             "invalid_context",
                             "policy_denied",
+                            "source_unavailable",
                             "patch_rejected",
+                            "checks_failed",
+                            "stale_base",
                             "pr_failed",
                             "fix_error",
                             "already_fixed"
@@ -2350,6 +2416,11 @@
                             "headSha": {
                               "type": "string",
                               "minLength": 1
+                            },
+                            "openedAt": {
+                              "type": "string",
+                              "format": "date-time",
+                              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                             }
                           },
                           "required": [
@@ -2357,7 +2428,8 @@
                             "number",
                             "url",
                             "branch",
-                            "headSha"
+                            "headSha",
+                            "openedAt"
                           ],
                           "additionalProperties": false
                         }
@@ -2430,6 +2502,11 @@
                         "headSha": {
                           "type": "string",
                           "minLength": 1
+                        },
+                        "openedAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d(?:\\.\\d+)?(?:Z))$"
                         }
                       },
                       "required": [
@@ -2437,7 +2514,8 @@
                         "number",
                         "url",
                         "branch",
-                        "headSha"
+                        "headSha",
+                        "openedAt"
                       ],
                       "additionalProperties": false
                     },
@@ -2453,7 +2531,10 @@
                         "context_unavailable",
                         "invalid_context",
                         "policy_denied",
+                        "source_unavailable",
                         "patch_rejected",
+                        "checks_failed",
+                        "stale_base",
                         "pr_failed",
                         "fix_error",
                         "already_fixed"

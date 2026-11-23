@@ -43,6 +43,33 @@ export function createRestClient(auth: GitHubAppAuth, fetchFn: typeof fetch = fe
       return (await call(repo, 'GET', `/git/commits/${commitSha}`, z.object({ tree: sha }))).tree
         .sha;
     },
+    async listTree(repo, treeSha) {
+      const result = await call(
+        repo,
+        'GET',
+        `/git/trees/${encodeURIComponent(treeSha)}?recursive=1`,
+        z.object({
+          tree: z.array(
+            z.object({ path: z.string(), mode: z.string(), type: z.string(), sha: z.string() }),
+          ),
+        }),
+      );
+      return result.tree
+        .filter((entry) => entry.type === 'blob')
+        .map((entry) => ({ path: entry.path, blobSha: entry.sha }));
+    },
+    async getBlobBytes(repo, blobSha) {
+      const blob = await call(
+        repo,
+        'GET',
+        `/git/blobs/${encodeURIComponent(blobSha)}`,
+        z.object({ content: z.string(), encoding: z.string() }),
+      );
+      if (blob.encoding !== 'base64') {
+        throw new GitHubApiError(`unexpected blob encoding ${blob.encoding}`);
+      }
+      return Buffer.from(blob.content, 'base64');
+    },
     async createBlob(repo, content) {
       return (await call(repo, 'POST', '/git/blobs', sha, { content, encoding: 'utf-8' })).sha;
     },

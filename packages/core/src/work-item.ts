@@ -22,6 +22,7 @@ export const WorkItemSeveritySchema = z.enum(WORK_ITEM_SEVERITIES);
 export type WorkItemSeverity = z.infer<typeof WorkItemSeveritySchema>;
 
 // A draft pull request is the terminal state of a fix. No merge ref exists here.
+// `openedAt` is when Graveshift opened it: the counter source for policy limits.
 export const PrRefSchema = z
   .object({
     repo: id,
@@ -29,6 +30,7 @@ export const PrRefSchema = z
     url: z.string().min(1),
     branch: z.string().min(1),
     headSha: z.string().min(1),
+    openedAt: z.iso.datetime(),
   })
   .strict();
 export type PrRef = z.infer<typeof PrRefSchema>;

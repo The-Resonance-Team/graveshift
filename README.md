@@ -17,7 +17,7 @@ Indie developers, teams of one to ten developers, students with deployed project
 1. **Wraith** (`packages/watcher`) turns runtime events, logs and Prometheus queries into detections with seven rules, a 10-minute fingerprint dedupe and one haunting (incident) per service.
 2. **Medium** (`packages/diagnoser`) builds a diagnosis from logs and signals. It sends redacted context to the selected Agent through `packages/gateway`. It checks evidence and uses a rules-only diagnosis when the model is unavailable, its budget is exhausted or its output remains invalid after one validation retry.
 3. **Policy** (`packages/policy`) decides every action. It is pure, deny-first and default deny.
-4. **Exorcist** (`packages/fixer`) pushes to a `graveshift/` branch and opens a draft pull request. It has no merge call. The daemon does not yet generate patches, so no real draft pull request opens today.
+4. **Exorcist** (`packages/fixer`) reads the base commit through the injected `GitHubClient`, proposes a guarded patch, verifies it in a throwaway sandbox directory with the configured checks under no network and no secrets, then pushes to a `graveshift/` branch and opens a draft pull request. Check commands and their `PATH` directories come only from `fix.sandbox` in the one config file, never from the model or the host, and the published body carries identifiers, check results and diff stats only. It has no merge call. `apps/api/src/fix` runs that path end to end, and `fix.enabled` in the one config file turns it on. The daemon read surface is still empty, so the diagnosis context is derived from Work item data (see ADR 0016).
 5. **Actuator** (`packages/actuator`) is a separate service that runs only approved, HMAC-signed, unexpired, single-use actions.
 6. **Banshee** (Discord) is a stub. Notifications and blessings are planned.
 7. `apps/api/src/audit` stores credential audit events in PostgreSQL. The API in `apps/api` exposes `graveshift-mcp` read tools to Kiro.
@@ -64,7 +64,6 @@ The Kubernetes runtime source (`packages/sources-k8s`) is tested against fixture
 | --- | --- |
 | Discord Banshee bot, blessings and banishments, so no approval endpoint exists in the daemon | #13 |
 | Kubernetes Deployments, kind overlay, working `bootstrap.sh`, public k3s demo with daily reset | #14 |
-| Daemon and API wiring for model calls and draft pull requests | none yet |
 | Provider keys, GitHub App and Discord application | #12 |
 | Demo video and Devpost submission (human only) | #15 |
 | Kiro usage screenshots and final write-up | #16 |

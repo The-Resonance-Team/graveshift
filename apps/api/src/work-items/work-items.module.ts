@@ -1,4 +1,5 @@
 import { type WorkItem } from '@graveshift/core';
+import type { GraveshiftConfig } from '@graveshift/config';
 import { Module } from '@nestjs/common';
 
 import { OAuthClientAccessGuard } from '../auth/oauth-client-access.guard';
@@ -19,7 +20,13 @@ import { WorkItemsController } from './work-items.controller';
     FixService,
     OAuthClientAccessGuard,
     WorkItemScopeGuard,
-    { provide: FIX_DEPS, useFactory: createFixDeps, inject: [GRAVESHIFT_CONFIG] },
+    {
+      provide: FIX_DEPS,
+      // The factory reads the open-PR counter from the same store the routes use.
+      useFactory: (config: GraveshiftConfig, store: WorkItemStore) =>
+        createFixDeps(config, { store }),
+      inject: [GRAVESHIFT_CONFIG, WorkItemStore],
+    },
     {
       provide: WORK_ITEM_SEED,
       // No demo data in production. An explicit flag is the only way to seed the store.

@@ -119,8 +119,17 @@ describe('config response document', () => {
       'agent',
       'promptTemplate',
       'gateway',
+      'sandbox',
       'github',
     ]);
+    // The sandbox block publishes only the owner-set check commands, their timeout
+    // and the owner-set PATH directories. It holds no secret.
+    expect(Object.keys(schema.properties.fix.properties.sandbox.properties)).toEqual([
+      'commands',
+      'timeoutMs',
+      'pathDirs',
+    ]);
+    expect(schema.properties.fix.properties.sandbox.properties.pathDirs.items.type).toBe('string');
     // The three credential fields stay environment variable names in the document.
     expect(Object.keys(schema.properties.fix.properties.github.properties)).toEqual([
       'appIdEnv',
@@ -179,6 +188,11 @@ describe('config response document', () => {
           maxRetries: 0,
           timeoutMs: 1000,
           priceTableUsdPer1M: {},
+        },
+        sandbox: {
+          commands: [],
+          timeoutMs: 60000,
+          pathDirs: [],
         },
         github: {
           appIdEnv: 'GRAVESHIFT_TEST_GITHUB_APP_ID',

@@ -1,5 +1,11 @@
 import { type WorkItem } from '@graveshift/core';
-import type { GitHubClient, RepoPolicy } from '@graveshift/fixer';
+import type {
+  FixWorkspace,
+  GitHubClient,
+  RepoPolicy,
+  SandboxConfig,
+  SourceProvider,
+} from '@graveshift/fixer';
 import type { PatchGateway } from '@graveshift/patch';
 import type { Policy, PolicyContext } from '@graveshift/policy';
 import { z } from 'zod';
@@ -37,7 +43,10 @@ export type FixFailureCode =
   | 'context_unavailable'
   | 'invalid_context'
   | 'policy_denied'
+  | 'source_unavailable'
   | 'patch_rejected'
+  | 'checks_failed'
+  | 'stale_base'
   | 'pr_failed'
   | 'fix_error'
   | 'already_fixed';
@@ -48,10 +57,17 @@ export interface FixDeps {
   readonly repo: RepoPolicy;
   readonly gateway: PatchGateway;
   readonly client: GitHubClient;
+  /** Reads the real repository at the base ref before any model call. */
+  readonly source: SourceProvider;
+  /** Applies the verified patch to a throwaway checkout and runs the checks. */
+  readonly workspace: FixWorkspace;
+  /** Check commands from the committed config file; never from the model. */
+  readonly sandbox: SandboxConfig;
   readonly context: FixContextProvider;
   readonly agent: string;
   readonly autoFixEnabled: boolean;
   readonly promptTemplate: string;
+  readonly now: () => Date;
   readonly agentMeta: {
     readonly name: string;
     readonly role: string;

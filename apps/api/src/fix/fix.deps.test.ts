@@ -1,7 +1,8 @@
 import { loadGraveshiftConfig } from '@graveshift/config';
-import { PatchSchema } from '@graveshift/patch';
+import { PatchProposalSchema } from '@graveshift/patch';
 import { describe, expect, test } from 'bun:test';
 
+import { WorkItemStore } from '../work-items/work-item.store';
 import { createFixDeps, FixConfigError } from './fix.deps';
 
 const config = await loadGraveshiftConfig();
@@ -14,14 +15,14 @@ const env = {
 
 describe('createFixDeps', () => {
   test('fails closed on first fix when the Agent key env is unset', async () => {
-    const deps = createFixDeps(config, { env: {} });
+    const deps = createFixDeps(config, { env: {}, store: new WorkItemStore([]) });
     try {
       await deps.gateway.run({
         agent: 'Exorcist',
         task: 'generate_patch',
         system: 'system',
         prompt: 'prompt',
-        schema: PatchSchema,
+        schema: PatchProposalSchema,
         validate: () => undefined,
       });
       throw new Error('expected the gateway to fail');
@@ -33,7 +34,7 @@ describe('createFixDeps', () => {
   });
 
   test('builds the real gateway and GitHub client from the committed config', () => {
-    const deps = createFixDeps(config, { env });
+    const deps = createFixDeps(config, { env, store: new WorkItemStore([]) });
     expect(deps.agent).toBe('Exorcist');
     expect(deps.autoFixEnabled).toBe(false);
     expect(deps.promptTemplate).toContain('{{DIAGNOSIS}}');
@@ -43,8 +44,16 @@ describe('createFixDeps', () => {
     expect(typeof deps.client.createPullRequest).toBe('function');
   });
 
-  test('leaves the diagnosis context closed until the daemon read is wired', async () => {
-    const deps = createFixDeps(config, { env });
+  test('builds the sandbox and source seams from the committed config', () => {
+    const deps = createFixDeps(config, { env, store: new WorkItemStore([]) });
+    expect(deps.sandbox.commands.length).toBeGreaterThan(0);
+    expect(deps.sandbox.timeoutMs).toBeGreaterThan(0);
+    expect(typeof deps.source.readBase).toBe('function');
+    expect(typeof deps.workspace.verify).toBe('function');
+  });
+
+  test('fails closed when the work item has no triage labels', async () => {
+    const deps = createFixDeps(config, { env, store: new WorkItemStore([]) });
     const loaded = await deps.context.load({
       id: 'wi-1',
       title: 'Fix OOM on api',
@@ -69,5 +78,36 @@ describe('createFixDeps', () => {
       draftPr: null,
     });
     expect(loaded.ok).toBe(false);
+  });
+
+  test('builds the context from real triage labels and the store', async () => {
+    const deps = createFixDeps(config, { env, store: new WorkItemStore([]) });
+    const loaded = await deps.context.load({
+      id: 'wi-1',
+      title: 'Fix OOM on api',
+      description: '',
+      successCriteria: [],
+      subtasks: { items: [], completed: 0 },
+      status: 'todo',
+      priority: 'medium',
+      assignee: 'needs_human',
+      reporter: 'wraith',
+      startDate: null,
+      dueDate: null,
+      sprint: null,
+      parent: null,
+      labels: ['confidence:0.8', 'category:code_bug', 'signal:oom_killed'],
+      team: 'sre',
+      watchers: [],
+      severity: 'warning',
+      service: 'api',
+      diagnosisRef: 'diag-1',
+      fixPriority: 100,
+      draftPr: null,
+    });
+    expect(loaded.ok).toBe(true);
+    if (!loaded.ok) return;
+    expect(loaded.value.confidence).toBe(0.8);
+    expect(loaded.value.category).toBe('code_bug');
   });
 });
