@@ -1,6 +1,6 @@
 import { expect, test } from 'bun:test';
 
-import { openDraftPr } from './open-pr';
+import { publicationText, writeDraft } from './open-pr';
 import { createRestClient } from './rest';
 import { diagnosis, file, incident, repo, TEST_BASE_SHA } from './test-helpers';
 
@@ -14,7 +14,6 @@ test('the REST adapter opens a draft and has no monitor or merge methods', async
         url,
         body: init?.body ? JSON.parse(String(init.body)) : undefined,
       });
-      if (url.includes('/git/ref/')) return Response.json({ object: { sha: TEST_BASE_SHA } });
       if (url.includes(`/git/commits/${TEST_BASE_SHA}`))
         return Response.json({ tree: { sha: 't0' } });
       if (url.endsWith('/pulls')) return Response.json({ number: 5, html_url: 'https://x/pull/5' });
@@ -23,7 +22,7 @@ test('the REST adapter opens a draft and has no monitor or merge methods', async
     { preconnect: fetch.preconnect },
   );
   const client = createRestClient({ installationToken: async () => 'tok' }, fetchFn);
-  await openDraftPr({
+  const input = {
     client,
     repo,
     patch: { baseSha: TEST_BASE_SHA, files: [file('src/a.ts')] },
@@ -31,7 +30,9 @@ test('the REST adapter opens a draft and has no monitor or merge methods', async
     diagnosis,
     category: 'code_bug',
     dashboardUrl: 'https://g',
-  });
+  };
+  const baseTree = await client.getCommitTree(repo.repo, TEST_BASE_SHA);
+  await writeDraft(input, publicationText(input), TEST_BASE_SHA, baseTree);
   expect(seen.find((request) => request.url.endsWith('/pulls'))?.body).toMatchObject({
     draft: true,
     base: 'main',

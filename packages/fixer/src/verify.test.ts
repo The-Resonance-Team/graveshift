@@ -12,7 +12,7 @@ import { verifyPatch } from './verify';
 
 test('the production verifier runs configured Git checks inside the platform sandbox', async () => {
   const { client } = sourceClient();
-  const snapshot = await prepareSource(repo, client);
+  const snapshot = await prepareSource(repo, client, TEST_BASE_SHA);
   try {
     const verified = await verifyPatch({
       snapshot,
@@ -39,7 +39,7 @@ test('the production verifier runs configured Git checks inside the platform san
 
 test('uses actual file changes and checks real patched files in a private workspace', async () => {
   const { client } = sourceClient({ 'src/app.ts': 'before\n', 'src/remove.ts': 'remove\n' });
-  const snapshot = await prepareSource(repo, client);
+  const snapshot = await prepareSource(repo, client, TEST_BASE_SHA);
   let workspace = '';
   let checks = 0;
   const runner: SandboxRunner = async (request) => {
@@ -97,7 +97,7 @@ test('uses actual file changes and checks real patched files in a private worksp
 
 test('a failed check stops verification and cleans up the workspace', async () => {
   const { client } = sourceClient();
-  const snapshot = await prepareSource(repo, client);
+  const snapshot = await prepareSource(repo, client, TEST_BASE_SHA);
   let workspace = '';
   const runner: SandboxRunner = async (request) => {
     workspace = request.root;
@@ -131,7 +131,7 @@ test('a failed check stops verification and cleans up the workspace', async () =
 
 test('a symlink created before application is rejected without writing its target', async () => {
   const { client } = sourceClient();
-  const snapshot = await prepareSource(repo, client);
+  const snapshot = await prepareSource(repo, client, TEST_BASE_SHA);
   let outside = '';
   const runner: SandboxRunner = async (request) => {
     const result = await gitRunner(request);
@@ -163,7 +163,7 @@ test('a symlink created before application is rejected without writing its targe
 
 test('forbidden paths and missing commands fail before a runner is called', async () => {
   const { client } = sourceClient();
-  const snapshot = await prepareSource(repo, client);
+  const snapshot = await prepareSource(repo, client, TEST_BASE_SHA);
   let runs = 0;
   const runner: SandboxRunner = async () => {
     runs++;
@@ -207,7 +207,7 @@ test('forbidden paths and missing commands fail before a runner is called', asyn
 
 test('a deletion uses the real base size when the proposal reports zero changed lines', async () => {
   const { client } = sourceClient({ 'src/app.ts': 'line\n'.repeat(201) });
-  const snapshot = await prepareSource(repo, client);
+  const snapshot = await prepareSource(repo, client, TEST_BASE_SHA);
   await expect(
     verifyPatch({
       snapshot,
@@ -227,7 +227,7 @@ test('a deletion uses the real base size when the proposal reports zero changed 
 
 test('can verify deletion of the only selected file', async () => {
   const { client } = sourceClient({ 'src/app.ts': 'before\n' });
-  const snapshot = await prepareSource(repo, client);
+  const snapshot = await prepareSource(repo, client, TEST_BASE_SHA);
   const verified = await verifyPatch({
     snapshot,
     patch: {
@@ -249,6 +249,7 @@ test('tree metadata rejects a new descendant of an excluded symlink before any r
   const snapshot = await prepareSource(
     { ...repo, forbiddenPaths: [...repo.forbiddenPaths, 'src/link'] },
     client,
+    TEST_BASE_SHA,
   );
   let runs = 0;
   const runner: SandboxRunner = async (request) => {

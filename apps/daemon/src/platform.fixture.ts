@@ -45,8 +45,6 @@ export const PLATFORM_AGENTS = [
 export async function createPlatform(db: PrismaService) {
   const http = await platformHttp(db, PLATFORM_AGENTS);
   const recording = githubRecording();
-  // A patch must carry a 40-hex base; the recorded client is pinned to it.
-  recording.client.getBaseSha = async () => TEST_BASE_SHA;
   const models: ModelRequest[] = [];
   const audit = createAudit(http.api);
   const gateway = createGateway({
@@ -104,6 +102,7 @@ export async function createPlatform(db: PrismaService) {
       gateway,
       verification: { 'team/grave': { commands: [['git', 'diff', '--check']], timeoutMs: 10_000 } },
       dashboardUrl: '',
+      audit,
       runner: gitChecks,
     }),
     recover: (intent) => recoverPublication(recording.client, intent),
@@ -125,6 +124,7 @@ export async function createPlatform(db: PrismaService) {
     const view: RecordedHaunting = {
       incident: facts.incident,
       category: facts.category,
+      deploymentId: TEST_BASE_SHA,
       detections: [
         {
           id: 'signal-1',

@@ -10,6 +10,8 @@ import request from 'supertest';
 
 import { InternalAuditController } from '../../api/src/audit/audit.controller';
 import { AuditRepo } from '../../api/src/audit/audit.repo';
+import { AuditRepo as PlatformAuditRepo } from '../../api/src/audit/repo/audit.repo';
+import { DeployRepo } from '../../api/src/deploys/deploy.repo';
 import { BOOT_CONFIG } from '../../api/src/config/boot.config';
 import { ProjectGrant } from '../../api/src/internal/project-grant';
 import { DaemonWorkClient } from '../../api/src/fix/daemon-work.client';
@@ -53,6 +55,8 @@ function fetchAdapter(reply: (incoming: Request) => Promise<Response>): typeof f
 export async function platformHttp(db: PrismaService, agents: readonly AgentConfig[]) {
   const audit = new AuditRepo(db);
   const work = new WorkItemRepo(db, audit, agents, testProjectGrant([caller.projectId]));
+  const platformAudit = new PlatformAuditRepo(db);
+  const deploys = new DeployRepo(db, platformAudit);
   const hauntings = new HauntingRepo(db, audit);
   const captured: HttpCapture[] = [];
   const responses: Array<{ side: 'api' | 'daemon'; path: string; status: number; bytes: number }> =
@@ -103,6 +107,7 @@ export async function platformHttp(db: PrismaService, agents: readonly AgentConf
       { provide: AuditRepo, useValue: audit },
       { provide: WorkItemRepo, useValue: work },
       { provide: HauntingRepo, useValue: hauntings },
+      { provide: DeployRepo, useValue: deploys },
       { provide: BOOT_CONFIG, useValue: { agents, policy } },
       {
         provide: ConfigService,
@@ -121,8 +126,8 @@ export async function platformHttp(db: PrismaService, agents: readonly AgentConf
         context.switchToHttp().getRequest<{ user: object }>().user = {
           projectId: caller.projectId,
           clientId: 'platform-person',
-          // The management surface plus the Fix trigger: this composition runs real Fix routes.
-          scopes: ['tokens:manage', 'fix:trigger'],
+          // The management surface, the read scope and the Fix trigger: this composition runs real routes.
+          scopes: ['tokens:manage', 'incidents:read', 'fix:trigger'],
         };
         return true;
       },

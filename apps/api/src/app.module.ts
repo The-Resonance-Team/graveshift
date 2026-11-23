@@ -5,6 +5,8 @@ import { ThrottlerModule } from '@nestjs/throttler';
 
 import { HealthController } from './health.controller';
 import { ActionsModule } from './actions/actions.module';
+import { DeploysModule } from './deploys/deploys.module';
+import { DeployAuthModule } from './deploys/deploy-auth.module';
 import { AuditModule } from './audit/audit.module';
 import { AuthConfigModule } from './auth/auth.config.module';
 import { envSchema } from './auth/env.schema';
@@ -40,6 +42,8 @@ import { WorkItemsModule } from './work-items/work-items.module';
     InternalAccessModule,
     InternalHttpModule,
     IdentityModule,
+    DeployAuthModule,
+    DeploysModule,
     AuditModule,
     ActionsModule,
     HauntingsModule,

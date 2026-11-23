@@ -10,8 +10,7 @@ import { verifyPatch } from './verify';
 
 async function fixture(content = 'const price = 0;\n', baseSha = TEST_BASE_SHA) {
   const { client, calls, entries } = sourceClient();
-  if (baseSha !== TEST_BASE_SHA) client.getBaseSha = async () => baseSha;
-  const snapshot = await prepareSource(repo, client);
+  const snapshot = await prepareSource(repo, client, baseSha);
   const verified = await verifyPatch({
     snapshot,
     patch: {
@@ -57,9 +56,6 @@ test('plans the publication without effects and publishes a checked draft agains
   expect(reference.number).toBe(42);
   expect(calls.map((call) => call.method)).toEqual([
     'getExistingDraft',
-    'getBaseSha',
-    'getCommitTree',
-    'getTree',
     'createBlob',
     'createTree',
     'createCommit',
@@ -80,15 +76,24 @@ test('plans the publication without effects and publishes a checked draft agains
   expect(draftInput.body).toContain('+1 / -1');
 });
 
-test.each(['base', 'blob'])('a changed %s fails before the first GitHub write', async (changed) => {
-  const { input, calls, entries } = await fixture();
+test('a changed base SHA after verification fails before the first GitHub write', async () => {
+  const { input, calls } = await fixture();
   const plan = planPublication(input);
-  if (changed === 'base') input.client.getBaseSha = async () => 'a-new-base';
-  else {
-    input.client.getTree = async () => entries.map((entry) => ({ ...entry, blobSha: 'changed' }));
-  }
-  await expect(publishVerified({ ...input, plan })).rejects.toMatchObject({ code: 'STALE_BASE' });
+  const tampered = {
+    ...input,
+    snapshot: { ...input.snapshot, baseSha: 'b'.repeat(40) },
+  };
+  await expect(publishVerified({ ...tampered, plan })).rejects.toMatchObject({
+    code: 'STALE_BASE',
+  });
   expect(calls.some((call) => call.method.startsWith('create'))).toBe(false);
+});
+
+test('publication never re-reads the branch HEAD after source verification', async () => {
+  const { input, calls } = await fixture();
+  const plan = planPublication(input);
+  expect((await publishVerified({ ...input, plan })).number).toBe(42);
+  expect(calls.some((call) => call.method === 'getCommitTree')).toBe(false);
 });
 
 test('recovery returns the known draft without checking a newer base or writing again', async () => {
@@ -108,9 +113,6 @@ test('recovery returns the known draft without checking a newer base or writing 
       baseSha: plan.baseSha,
     });
     return reference;
-  };
-  input.client.getBaseSha = async () => {
-    throw new Error('must not recheck an already published draft');
   };
   expect(await recoverPublication(input.client, plan)).toEqual(reference);
   expect(await publishVerified({ ...input, plan })).toEqual(reference);

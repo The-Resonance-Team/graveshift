@@ -38,6 +38,7 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 import type { PrincipalRequest } from '../../auth/auth.types';
 import { AuditScopeInterceptor } from '../../audit/audit-scope.interceptor';
 import { FixTriggerScopeGuard } from '../fix-trigger-scope.guard';
+import { IncidentsReadScopeGuard } from '../incidents-read-scope.guard';
 import { AnswerRequestDto } from '../dto/answer-request.dto';
 import { FixNowRequestDto } from '../dto/fix-now-request.dto';
 import { ListWorkItemsQueryDto } from '../dto/list-work-items-query.dto';
@@ -78,6 +79,7 @@ export class WorkItemsController {
   ) {}
 
   @Get()
+  @UseGuards(IncidentsReadScopeGuard)
   @ApiOkResponse({
     description: 'Work items ordered by fix priority, title, and ID.',
     standardSchema: workItemListResponseSchema,
@@ -87,6 +89,7 @@ export class WorkItemsController {
   }
 
   @Get(':id')
+  @UseGuards(IncidentsReadScopeGuard)
   @ApiOkResponse({ description: 'One Work item.', standardSchema: WorkItemSchema })
   @ApiNotFoundResponse({ description: 'The Work item does not exist in this project.' })
   async get(@Param() params: WorkItemParamsDto, @Req() request: PrincipalRequest) {
@@ -94,6 +97,7 @@ export class WorkItemsController {
   }
 
   @Get(':id/routing')
+  @UseGuards(IncidentsReadScopeGuard)
   @ApiOkResponse({
     description:
       'Safe active Fix attempt summary. Recover a saved question after a lost response or restart. No request text or Agent params are returned.',

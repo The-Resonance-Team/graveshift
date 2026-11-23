@@ -12,7 +12,7 @@ describe('bounded repository source', () => {
       'src/.env': 'never read me',
       'docs/private.md': 'outside allowed paths',
     });
-    const snapshot = await prepareSource(repo, client);
+    const snapshot = await prepareSource(repo, client, TEST_BASE_SHA);
     expect(snapshot).toMatchObject({
       repo: repo.repo,
       baseBranch: 'main',
@@ -32,16 +32,18 @@ describe('bounded repository source', () => {
 
   test('rejects excessive file counts before reading blobs', async () => {
     const { client, calls } = sourceClient({ 'src/one.ts': 'one', 'src/two.ts': 'two' });
-    await expect(prepareSource(repo, client, { maxFiles: 1, maxBytes: 100 })).rejects.toMatchObject(
-      { code: 'SOURCE_UNAVAILABLE' },
-    );
+    await expect(
+      prepareSource(repo, client, TEST_BASE_SHA, { maxFiles: 1, maxBytes: 100 }),
+    ).rejects.toMatchObject({ code: 'SOURCE_UNAVAILABLE' });
     expect(calls.filter((call) => call.method === 'readBlob')).toHaveLength(0);
   });
 
   test('bounds declared and actual bytes without reading further files', async () => {
     const { client, calls, entries } = sourceClient({ 'src/one.ts': '1234', 'src/two.ts': '5678' });
     for (const entry of entries) delete entry.size;
-    await expect(prepareSource(repo, client, { maxFiles: 2, maxBytes: 3 })).rejects.toMatchObject({
+    await expect(
+      prepareSource(repo, client, TEST_BASE_SHA, { maxFiles: 2, maxBytes: 3 }),
+    ).rejects.toMatchObject({
       code: 'SOURCE_UNAVAILABLE',
     });
     expect(calls.filter((call) => call.method === 'readBlob')).toHaveLength(1);
@@ -52,24 +54,25 @@ describe('bounded repository source', () => {
     const entry = entries[0];
     if (!entry) throw new Error('missing source');
     entry.mode = mode;
-    await expect(prepareSource(repo, client)).rejects.toMatchObject({ code: 'SOURCE_UNAVAILABLE' });
+    await expect(prepareSource(repo, client, TEST_BASE_SHA)).rejects.toMatchObject({
+      code: 'SOURCE_UNAVAILABLE',
+    });
     expect(calls.filter((call) => call.method === 'readBlob')).toHaveLength(0);
   });
 
   test('refuses an underreported or corrupt blob identity', async () => {
     const { client } = sourceClient();
     client.readBlob = async () => 'changed after its hash was recorded';
-    await expect(prepareSource(repo, client)).rejects.toMatchObject({ code: 'SOURCE_UNAVAILABLE' });
+    await expect(prepareSource(repo, client, TEST_BASE_SHA)).rejects.toMatchObject({
+      code: 'SOURCE_UNAVAILABLE',
+    });
   });
 
-  test('contains transport details in a safe source fault', async () => {
-    const { client } = sourceClient();
-    client.getBaseSha = async () => {
-      throw new Error('TOKEN=private-value');
-    };
-    await expect(prepareSource(repo, client)).rejects.toMatchObject({
-      code: 'SOURCE_UNAVAILABLE',
-      message: 'repository source could not be read',
+  test('refuses a base SHA that is not the deployed commit SHA', async () => {
+    const { client, calls } = sourceClient();
+    await expect(prepareSource(repo, client, 'not-a-sha')).rejects.toMatchObject({
+      code: 'STALE_BASE',
     });
+    expect(calls).toEqual([]);
   });
 });

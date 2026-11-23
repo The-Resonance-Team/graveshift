@@ -54,7 +54,7 @@ export const program = Effect.scoped(
       'Agent bindings or gateway pricing are invalid',
     );
     const executor = yield* startup(
-      () => executorFromEnv(gateway, env),
+      () => executorFromEnv(gateway, env, audit),
       'Fix execution configuration is invalid',
     );
     const collectors = yield* startup(

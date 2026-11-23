@@ -1,18 +1,18 @@
 import type { Patch } from '@graveshift/patch/schemas';
 import { describe, expect, test } from 'bun:test';
 
-import { openDraftPr } from './open-pr';
 import { renderPrBody } from './pr-body';
 import {
   diagnosis,
   fakeClient,
   incident,
+  publishPinned,
   repo,
   TEST_BASE_SHA,
   TEST_BLOB_SHA,
 } from './test-helpers';
 
-describe('openDraftPr', () => {
+describe('verified draft publication', () => {
   const patch: Patch = {
     baseSha: TEST_BASE_SHA,
     files: [
@@ -31,14 +31,12 @@ describe('openDraftPr', () => {
 
   test('pushes a graveshift/ branch and opens a labelled draft PR', async () => {
     const { client, calls } = fakeClient();
-    const pr = await openDraftPr({ client, ...input });
+    const pr = await publishPinned({ client, ...input });
     expect(pr.number).toBe(42);
     expect(pr.branch).toMatch(
       /^refs\/heads\/graveshift\/inc-[a-f0-9]{32}-get-candies-id-calls-tofixed-on-a-null-p$/,
     );
     expect(calls.map((c) => c.method)).toEqual([
-      'getBaseSha',
-      'getCommitTree',
       'createBlob',
       'createBlob',
       'createTree',
@@ -61,7 +59,7 @@ describe('openDraftPr', () => {
   test('headline drives title, subject and slug while the body keeps the wrapped root cause', async () => {
     const { client, calls } = fakeClient();
     const wrapped = '<untrusted_root_cause>\nhello world\n</untrusted_root_cause>';
-    await openDraftPr({
+    await publishPinned({
       client,
       ...input,
       headline: 'hello world',
@@ -84,7 +82,7 @@ describe('openDraftPr', () => {
   test('rejects a service the repo does not cover, before any call', async () => {
     const { client, calls } = fakeClient();
     await expect(
-      openDraftPr({ client, ...input, incident: { ...incident, service: 'postgres' } }),
+      publishPinned({ client, ...input, incident: { ...incident, service: 'postgres' } }),
     ).rejects.toMatchObject({ code: 'REPO_NOT_ALLOWED' });
     expect(calls).toHaveLength(0);
   });

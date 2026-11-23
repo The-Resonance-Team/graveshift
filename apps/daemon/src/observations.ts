@@ -54,7 +54,15 @@ export async function createObservations(options: ObservationOptions) {
     const view = prepareRecordedHaunting(input);
     const persisted = await api.post(
       '/internal/hauntings',
-      { projectId, eventId, view },
+      {
+        projectId,
+        eventId,
+        environment: current.environment ?? undefined,
+        view: {
+          ...view,
+          deploymentId: current.deploymentId ?? view.deploymentId ?? null,
+        },
+      },
       RecordedHauntingSchema,
     );
     views.set(persisted.incident.id, persisted);

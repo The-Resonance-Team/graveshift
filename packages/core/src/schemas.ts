@@ -5,6 +5,8 @@ const timestamp = z.iso.datetime();
 export const SUBJECT_TOKEN_PATTERN = /^[A-Za-z0-9_-]+$/;
 // A type may span several NATS tokens, but every token must be non-empty.
 export const SUBJECT_TYPE_PATTERN = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/;
+/** One Environment name shape shared by every wire layer. */
+export const ENVIRONMENT_PATTERN = /^[A-Za-z0-9._-]{1,100}$/;
 export const EVENT_SEVERITIES = ['info', 'warning', 'critical'] as const;
 
 export const EventEnvelopeSchema = z.object({
@@ -17,6 +19,12 @@ export const EventEnvelopeSchema = z.object({
   observedAt: timestamp,
   traceId: id,
   fingerprint: id,
+  // A Deployment binding is stamped by the API. A client cannot choose another Project's SHA.
+  deploymentId: z
+    .string()
+    .regex(/^[0-9a-f]{40}$/)
+    .nullish(),
+  environment: z.string().regex(ENVIRONMENT_PATTERN).nullish(),
   payload: z.record(z.string(), z.unknown()),
 });
 export type EventEnvelope = z.infer<typeof EventEnvelopeSchema>;

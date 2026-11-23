@@ -3,6 +3,8 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 export interface ModelContext {
   incidentId: string;
   service: string;
+  /** The bound commit point the Agent must patch, when the Fix context carries one. */
+  deploymentId?: string | undefined;
   signal?: AbortSignal;
 }
 

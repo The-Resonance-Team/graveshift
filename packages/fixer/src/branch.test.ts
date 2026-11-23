@@ -2,13 +2,13 @@ import { expect, test } from 'bun:test';
 import fc from 'fast-check';
 
 import { assertBranchPrefix, BranchError, branchRef } from './branch';
+import { publicationText } from './open-pr';
 import { diagnosis, fakeClient, file, incident, repo, TEST_BASE_SHA } from './test-helpers';
-import { openDraftPr } from './open-pr';
 
-test('direct publication keeps long identities with a common prefix distinct and stable', async () => {
-  const publish = async (id: string) => {
+test('publication keeps long identities with a common prefix distinct and stable', () => {
+  const branchFor = (id: string) => {
     const { client } = fakeClient();
-    return openDraftPr({
+    return publicationText({
       client,
       repo,
       patch: { baseSha: TEST_BASE_SHA, files: [file('src/a.ts')] },
@@ -17,16 +17,14 @@ test('direct publication keeps long identities with a common prefix distinct and
       category: 'code_bug',
       dashboardUrl: '',
       headline: 'Null guard: candy price!',
-    });
+    }).branch;
   };
   const first = 'work-item-with-a-long-common-prefix-one';
   const second = 'work-item-with-a-long-common-prefix-two';
-  const refs = await Promise.all([publish(first), publish(second), publish(first)]);
-  expect(refs[0]?.branch).not.toBe(refs[1]?.branch);
-  expect(refs[0]?.branch).toBe(refs[2]?.branch);
-  expect(refs[0]?.branch).toMatch(
-    /^refs\/heads\/graveshift\/inc-[a-f0-9]{32}-null-guard-candy-price$/,
-  );
+  const branches = [branchFor(first), branchFor(second), branchFor(first)];
+  expect(branches[0]).not.toBe(branches[1]);
+  expect(branches[0]).toBe(branches[2]);
+  expect(branches[0]).toMatch(/^refs\/heads\/graveshift\/inc-[a-f0-9]{32}-null-guard-candy-price$/);
 });
 
 test('identity uses the full original value, including case and punctuation', () => {

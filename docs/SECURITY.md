@@ -119,6 +119,8 @@ Durable claims protect token and action identity across process restart. A prior
 
 ## Audit and database enforcement
 
+Deployment rows are append-only in SQL; only the `closed_at` transition is allowed. The route org is checked against the verified OAuth client. The tenant comes from the Project; there is no org column on Deployment. The `environment` name is limited to `^[A-Za-z0-9._-]{1,100}$` on every wire DTO. Client-supplied `environment` and `title` are redacted before they enter an audit payload.
+
 Each project has one append-only hash chain. A transaction assigns sequence, timestamp, canonical payload, previous hash and hash. PostgreSQL triggers reject UPDATE and DELETE. An exact producer-key retry returns the prior entry; changed facts conflict. Credential changes and their chain entry commit together.
 
 Verification detects edited fields, sequence gaps, reordering and changed hashes. Tail truncation still requires an external head anchor to detect. Database operators retain control over schema and backups; triggers do not replace that operational trust.

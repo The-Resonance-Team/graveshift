@@ -9,11 +9,13 @@ import { AuthModule } from '../auth/auth.module';
 import { AuditModule } from '../audit/audit.module';
 import { BOOT_CONFIG, type RootBootConfig } from '../config/boot.config';
 import { GRAVESHIFT_CONFIG } from '../config/config.provider';
+import { DeployRepo } from '../deploys/deploy.repo';
+import { DeploysModule } from '../deploys/deploys.module';
 import { DaemonReadClientModule, DaemonReadConfigModule } from './daemon-read.config';
 import { EventsBridge } from './events/events.bridge';
 import { EventPollService } from './events/events.service';
 import { NatsEventSource } from './events/events.source';
-import { MCP_EVENT_SOURCE } from './events/events.types';
+import { CLOSED_DEPLOYMENTS, MCP_EVENT_SOURCE } from './events/events.types';
 import { HttpMcpBackend } from './mcp.backend';
 import { McpPrompts } from './mcp.prompts';
 import { McpResources } from './mcp.resources';
@@ -33,6 +35,7 @@ export class McpProjectContextModule {}
   imports: [
     McpProjectContextModule,
     AuthModule,
+    DeploysModule,
     ThrottlerModule,
     AuditModule,
     DaemonReadConfigModule,
@@ -47,6 +50,7 @@ export class McpProjectContextModule {}
     EventPollService,
     EventsBridge,
     { provide: MCP_EVENT_SOURCE, useClass: NatsEventSource },
+    { provide: CLOSED_DEPLOYMENTS, useExisting: DeployRepo },
     { provide: MCP_BACKEND, useClass: HttpMcpBackend },
     {
       provide: MCP_POLICY,

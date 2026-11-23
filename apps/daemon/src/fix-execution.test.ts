@@ -11,11 +11,7 @@ const TEST_BASE_SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 // Blob SHA of the source text recorded by githubRecording() for src/main.ts.
 const BASE_BLOB_SHA = '96759cc1f604468aa78a72be3c5be39abfc788b2';
 
-const recorded = () => {
-  const recording = githubRecording();
-  recording.client.getBaseSha = async () => TEST_BASE_SHA;
-  return recording;
-};
+const recorded = () => githubRecording();
 
 function configured(failAudit = false) {
   const selected = agent();
@@ -79,19 +75,31 @@ async function input() {
 }
 
 describe('concrete daemon fix executor', () => {
-  test('uses source and assigned instructions, verifies the actual diff, and publishes the verified base', async () => {
+  test('uses the deployed SHA as the patch base, audits it, and never re-reads the branch HEAD', async () => {
     const recording = recorded();
     const model = configured();
+    const audits: Array<{ type: string; payload: Record<string, unknown> }> = [];
     const executor = createFixExecutor({
       client: recording.client,
       gateway: model.gateway,
       verification: { 'team/grave': { commands: [['git', 'diff', '--check']], timeoutMs: 10_000 } },
       dashboardUrl: '',
+      audit: async (draft) => {
+        audits.push({ type: draft.type, payload: draft.payload });
+      },
       runner: gitChecks,
     });
     const request = await input();
     const prepared = await withFixAuditScope(() => executor(request));
     expect(recording.writes).toEqual([]);
+    expect(recording.calls).not.toContain('base');
+    expect(audits).toContainEqual({
+      type: 'fix.base_sha',
+      payload: expect.objectContaining({
+        deploymentId: TEST_BASE_SHA,
+        repo: 'team/grave',
+      }),
+    });
     expect(prepared.intent).toMatchObject({ repo: 'team/grave', baseSha: TEST_BASE_SHA });
     expect(model.prompts[0]?.system).toContain('configured Agent instructions for v2');
     expect(model.prompts[0]?.prompt).toContain(`Source base: ${TEST_BASE_SHA}`);
@@ -116,6 +124,7 @@ describe('concrete daemon fix executor', () => {
       gateway: model.gateway,
       verification: { 'team/grave': { commands: [['git', 'diff', '--check']], timeoutMs: 1000 } },
       dashboardUrl: '',
+      audit: async () => {},
       runner: async () => {
         checks++;
         throw new Error('Must not verify an unaudited patch');
@@ -130,6 +139,26 @@ describe('concrete daemon fix executor', () => {
     expect(recording.writes).toEqual([]);
   });
 
+  test('a Fix with no bound commit SHA is denied before source or model access', async () => {
+    const recording = recorded();
+    const model = configured();
+    const executor = createFixExecutor({
+      client: recording.client,
+      gateway: model.gateway,
+      verification: { 'team/grave': { commands: [['git', 'diff', '--check']], timeoutMs: 1000 } },
+      dashboardUrl: '',
+      audit: async () => {},
+    });
+    const request = await input();
+    await expect(
+      withFixAuditScope(() =>
+        executor({ ...request, context: { ...request.context, deploymentId: '' } }),
+      ),
+    ).rejects.toMatchObject({ failure: 'fix_error' });
+    expect(recording.calls).toEqual([]);
+    expect(model.prompts).toEqual([]);
+  });
+
   test('missing repository checks fail before source and model access', async () => {
     const recording = recorded();
     const model = configured();
@@ -141,6 +170,7 @@ describe('concrete daemon fix executor', () => {
           gateway: model.gateway,
           verification: {},
           dashboardUrl: '',
+          audit: async () => {},
         })(request),
       ),
     ).rejects.toMatchObject({ failure: 'fix_error' });
@@ -156,6 +186,7 @@ describe('concrete daemon fix executor', () => {
       gateway: model.gateway,
       verification: { 'team/grave': { commands: [['git', 'diff', '--check']], timeoutMs: 1000 } },
       dashboardUrl: '',
+      audit: async () => {},
       runner: async () => ({ exitCode: 1, stdout: '', timedOut: false }),
     });
     const request = await input();

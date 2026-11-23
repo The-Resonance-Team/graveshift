@@ -2,13 +2,18 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { describe, expect, test } from 'bun:test';
 
-import { migrationOwnershipViolations, normalize } from './prisma-drift';
+import { migrationOwnershipViolations, normalize, v3DeployViolations } from './prisma-drift';
 
 const migration = join(
   dirname(import.meta.dir),
   'prisma/migrations/20261121052714_init/migration.sql',
 );
+const v3Migration = join(
+  dirname(import.meta.dir),
+  'prisma/migrations/20261122120000_v3_deployments/migration.sql',
+);
 const sql = readFileSync(migration, 'utf8');
+const v3Sql = readFileSync(v3Migration, 'utf8');
 const violations = (text: string) => migrationOwnershipViolations(text).join('\n');
 
 describe('DB-free migration ownership check', () => {
@@ -91,5 +96,39 @@ describe('DB-free migration ownership check', () => {
   test('normalize strips the audit block from the drift comparison', () => {
     expect(normalize(sql)).not.toContain('prevent_audit_entry_mutation');
     expect(normalize(sql)).not.toContain('-- BEGIN unmanaged append-only audit enforcement');
+  });
+});
+
+describe('v3 deployment migration ownership', () => {
+  test('accepts the committed v3 enforcement block', () => {
+    expect(v3DeployViolations(v3Sql)).toEqual([]);
+  });
+
+  test('fails when a deploy trigger moves to a removed table', () => {
+    const moved = v3Sql.replace(
+      'BEFORE UPDATE ON "deploys"\nFOR EACH ROW EXECUTE FUNCTION prevent_deploy_mutation();',
+      'BEFORE UPDATE ON "deploy_projects"\nFOR EACH ROW EXECUTE FUNCTION prevent_deploy_mutation();',
+    );
+    expect(moved).not.toBe(v3Sql);
+    expect(v3DeployViolations(moved).join('\n')).toContain(
+      'v3 trigger deploys_no_update targets UPDATE on "deploy_projects"',
+    );
+    expect(v3DeployViolations(moved).join('\n')).toContain('expected UPDATE on "deploys"');
+  });
+
+  test('fails when a removed table returns to the migration', () => {
+    const restored = `${v3Sql}\nCREATE TABLE "releases" ("id" TEXT);\n`;
+    expect(v3DeployViolations(restored)).toContain(
+      'removed v3 object is still present: CREATE TABLE "releases"',
+    );
+  });
+
+  test('fails when the Project foreign key loses RESTRICT on update', () => {
+    const changed = v3Sql.replace(
+      'REFERENCES "projects"("project_id") ON DELETE RESTRICT ON UPDATE RESTRICT;',
+      'REFERENCES "projects"("project_id") ON DELETE RESTRICT ON UPDATE CASCADE;',
+    );
+    expect(changed).not.toBe(v3Sql);
+    expect(v3DeployViolations(changed).join('\n')).toContain('deploys_project_id_fkey');
   });
 });

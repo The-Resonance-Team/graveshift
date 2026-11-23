@@ -1,4 +1,5 @@
 import { prepareRecordedHaunting, type RecordedHaunting } from '@graveshift/core/recorded';
+import { redact } from '@graveshift/redactor';
 import { Injectable } from '@nestjs/common';
 
 import { AuditRepo } from '../audit/audit.repo';
@@ -19,8 +20,10 @@ export class HauntingRepo {
     projectId: string,
     eventId: string,
     input: RecordedHaunting,
+    eventEnvironment?: string | null,
   ): Promise<RecordedHaunting> {
     const view = prepareRecordedHaunting(input);
+    const deploymentId = view.deploymentId ?? null;
     if (view.detections.some((entry) => entry.projectId !== projectId))
       throw new HauntingConflict();
     return inAuditTransaction(this.prisma, async (tx) => {
@@ -29,7 +32,16 @@ export class HauntingRepo {
         actor: 'daemon',
         type: 'haunting.recorded',
         incidentId: view.incident.id,
-        payload: { view },
+        payload: {
+          view: {
+            ...view,
+            deploymentEnvironment:
+              view.deploymentEnvironment === null || view.deploymentEnvironment === undefined
+                ? null
+                : redact(view.deploymentEnvironment),
+          },
+          deploymentId,
+        },
       });
       const where = { projectId_id: { projectId, id: view.incident.id } };
       const row = await tx.haunting.findUnique({ where, select: HAUNTING_SELECT });
@@ -43,7 +55,10 @@ export class HauntingRepo {
       )
         throw new HauntingConflict();
       const recorded = mergeRecorded(prior, view);
-      const data = hauntingData(recorded, entry.seq);
+      // A later Event cannot change the opening pair. The first Event supplies the
+      // Environment; every later row keeps the one already stored on the Haunting.
+      const deploymentEnvironment = recorded.deploymentEnvironment ?? eventEnvironment ?? null;
+      const data = hauntingData({ ...recorded, deploymentEnvironment }, entry.seq);
       const saved = await tx.haunting.upsert({
         where,
         create: { projectId, ...data },

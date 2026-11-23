@@ -159,6 +159,24 @@ describe.skipIf(!dbTestEnabled)('Postgres API and daemon composition over privat
   });
 
   test('NATS delivery creates and activates the assigned automatic Agent before acknowledgement', async () => {
+    const org = await db.organization.create({ data: { name: 'Platform', slug: 'platform' } });
+    await db.project.create({
+      data: {
+        projectId: caller.projectId,
+        orgId: org.id,
+        name: 'Platform',
+        slug: 'platform',
+      },
+    });
+    await db.deploy.create({
+      data: {
+        projectId: caller.projectId,
+        environment: 'production',
+        deploymentId: TEST_BASE_SHA,
+        title: 'platform-deploy',
+        dateStarted: new Date('2026-11-21T10:00:00.000Z'),
+      },
+    });
     const observe = await platform.observe();
     const acknowledgements: string[] = [];
     const delivery = {
@@ -181,6 +199,11 @@ describe.skipIf(!dbTestEnabled)('Postgres API and daemon composition over privat
     expect(await db.workItem.count()).toBe(1);
     expect(await db.fixAttempt.count()).toBe(1);
     expect(await db.auditEntry.count({ where: { type: 'model.call' } })).toBe(2);
+    expect(await db.auditEntry.count({ where: { type: 'deployment.closed' } })).toBe(1);
+    expect(await db.deploy.findFirstOrThrow()).toMatchObject({
+      deploymentId: TEST_BASE_SHA,
+      closedAt: expect.any(Date),
+    });
     const restarted = await platform.observe();
     await processQueued(delivery, caller.projectId, restarted);
     expect(acknowledgements).toEqual(['ack', 'ack']);

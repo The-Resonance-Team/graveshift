@@ -26,9 +26,10 @@ This file holds system-wide domain terms only. Each area's terms live in the `GL
 
 ## Delivery
 
-- **Release** — a versioned build of a Grave that a Deploy can place in an Environment.
-- **Environment** — a target where a Release runs, such as staging or production.
-- **Deploy** — the act of placing a Release in an Environment.
+- **Deployment** — one commit SHA deployed by one Project into one Environment. It is the root for triage of Events, data, Incidents and the agent's resolution point. Deployment is the user-facing noun. Code identifiers keep the legacy name Deploy, as in the Deploy model, DeployRepo and the deploys table.
+- **Environment** — a name on a Deployment, such as production or sandbox; it is not a separate table.
+- **Deploy** — to place code in an Environment.
+- **title** — the commit or tag title read from git at the deployed SHA.
 
 ## Product and license
 
@@ -45,5 +46,6 @@ This file holds system-wide domain terms only. Each area's terms live in the `GL
 
 - _Avoid_ **User** — say Account.
 - _Avoid_ **Client** for a person — say Account.
-- _Avoid_ **Deployment event** — say Deploy.
+- _Avoid_ **Release** — say Deployment.
+- _Avoid_ **Deploy** as a noun in user-facing copy — say Deployment. Code identifiers keep Deploy.
 - _Avoid_ **Subscription** for the event subscription term. That term lives in `apps/api/GLOSSARY.md`.

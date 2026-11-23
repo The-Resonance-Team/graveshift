@@ -13,7 +13,6 @@ export interface SourceEntry {
 
 // Deliberately has no merge method: the fixer cannot merge because the client cannot.
 export interface GitHubClient {
-  getBaseSha(repo: string, branch: string): Promise<string>;
   getCommitTree(repo: string, commitSha: string): Promise<string>;
   getTree(repo: string, treeSha: string): Promise<SourceEntry[]>;
   readBlob(repo: string, sha: string): Promise<string>;

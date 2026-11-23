@@ -63,7 +63,7 @@ describe('Work item HTTP boundary', () => {
       {
         sub: 'client-1',
         projectId: '12345',
-        scope: ['tokens:manage', 'fix:trigger'],
+        scope: ['tokens:manage', 'fix:trigger', 'incidents:read'],
       },
       {
         secret: TEST_CONFIG.jwtSecret,
@@ -93,7 +93,7 @@ describe('Work item HTTP boundary', () => {
 
   test('rejects a signed token from a different project with PROJECT_FORBIDDEN', async () => {
     const foreign = app.get(JwtService).sign(
-      { sub: 'client-2', projectId: '12346', scope: ['tokens:manage'] },
+      { sub: 'client-2', projectId: '12346', scope: ['tokens:manage', 'incidents:read'] },
       {
         secret: TEST_CONFIG.jwtSecret,
         issuer: TEST_CONFIG.jwtIssuer,

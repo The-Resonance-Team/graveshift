@@ -5,6 +5,8 @@ import { prepareSource } from './source';
 import { gitBlob } from './source.test-helpers';
 import { repo } from './test-helpers';
 
+const SHA = 'a'.repeat(40);
+
 function recordingTransport(responses: unknown[]) {
   const requests: Array<{ url: string; method: string }> = [];
   const fetchFn: typeof fetch = Object.assign(
@@ -26,7 +28,6 @@ test('the REST source adapter records encoded ref, tree and blob reads', async (
   const content = 'const price = "kẹo";\n';
   const blobSha = gitBlob(content);
   const { client, requests } = recordingTransport([
-    { object: { sha: 'base/sha' } },
     { tree: { sha: 'tree/sha' } },
     {
       truncated: false,
@@ -52,16 +53,13 @@ test('the REST source adapter records encoded ref, tree and blob reads', async (
   const snapshot = await prepareSource(
     { ...repo, repo: 'owner/project name', baseBranch: 'release/fix #1' },
     client,
+    SHA,
   );
   expect(snapshot.files).toMatchObject([{ path: 'src/app.ts', mode: '100755', content }]);
   expect(requests).toEqual([
     {
       method: 'GET',
-      url: 'https://api.github.com/repos/owner/project%20name/git/ref/heads/release/fix%20%231',
-    },
-    {
-      method: 'GET',
-      url: 'https://api.github.com/repos/owner/project%20name/git/commits/base%2Fsha',
+      url: `https://api.github.com/repos/owner/project%20name/git/commits/${SHA}`,
     },
     {
       method: 'GET',
@@ -76,12 +74,13 @@ test('the REST source adapter records encoded ref, tree and blob reads', async (
 
 test('a truncated tree fails closed without a blob read', async () => {
   const { client, requests } = recordingTransport([
-    { object: { sha: 'base' } },
     { tree: { sha: 'tree' } },
     { truncated: true, tree: [] },
   ]);
-  await expect(prepareSource(repo, client)).rejects.toMatchObject({ code: 'SOURCE_UNAVAILABLE' });
-  expect(requests).toHaveLength(3);
+  await expect(prepareSource(repo, client, SHA)).rejects.toMatchObject({
+    code: 'SOURCE_UNAVAILABLE',
+  });
+  expect(requests).toHaveLength(2);
 });
 
 test('the REST adapter rejects corrupt blob encodings and sizes', async () => {

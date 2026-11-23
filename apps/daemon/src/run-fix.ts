@@ -110,7 +110,12 @@ async function runOwnedFix(
   let routed: RoutingResult;
   try {
     routed = await withModelContext(
-      { incidentId: context.incident.id, service: context.incident.service, signal },
+      {
+        incidentId: context.incident.id,
+        service: context.incident.service,
+        deploymentId: context.deploymentId,
+        signal,
+      },
       async () =>
         attempt.routingProgress === null
           ? await routing.begin({
@@ -149,7 +154,12 @@ async function runOwnedFix(
   };
   try {
     const prepared = await withModelContext(
-      { incidentId: context.incident.id, service: context.incident.service, signal },
+      {
+        incidentId: context.incident.id,
+        service: context.incident.service,
+        deploymentId: context.deploymentId,
+        signal,
+      },
       () =>
         options.execute({
           caller,

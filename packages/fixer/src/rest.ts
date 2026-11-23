@@ -86,15 +86,6 @@ export function createRestClient(auth: GitHubAppAuth, fetchFn: typeof fetch = fe
   }
 
   return {
-    async getBaseSha(repo, branch) {
-      const ref = await call(
-        repo,
-        'GET',
-        `/git/ref/heads/${refPath(branch)}`,
-        z.object({ object: sha }),
-      );
-      return ref.object.sha;
-    },
     async getCommitTree(repo, commitSha) {
       return (
         await call(repo, 'GET', `/git/commits/${segment(commitSha)}`, z.object({ tree: sha }))

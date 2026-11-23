@@ -47,6 +47,10 @@ export interface paths {
   "/api/organizations/{orgId}/oauth-clients": {
     post: operations["OrganizationsController_createOAuthClient"];
   };
+  "/api/organizations/{orgId}/projects/{projectId}/deployments": {
+    get: operations["DeploysController_list"];
+    post: operations["DeploysController_create"];
+  };
   "/api/credentials": {
     get: operations["CredentialsController_list"];
     post: operations["CredentialsController_create"];
@@ -114,6 +118,35 @@ export interface components {
     CreateProjectDto: Record<string, never>;
     AddMemberDto: Record<string, never>;
     CreateOAuthClientDto: Record<string, never>;
+    CreateDeployDto: {
+      /**
+       * @description The 40-hex deployed commit SHA.
+       * @example aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+       */
+      deploymentId: string;
+      /**
+       * @description The commit or tag title.
+       * @example fix: restart policy
+       */
+      title: string;
+      /**
+       * @description The Environment name on the Deployment.
+       * @example production
+       */
+      environment: string;
+      /**
+       * Format: date-time
+       * @example 2026-11-22T07:00:00.000Z
+       */
+      dateStarted: string;
+      /**
+       * Format: date-time
+       * @example 2026-11-22T07:05:00.000Z
+       */
+      dateFinished?: string;
+      /** @example https://ci.example.test/runs/42 */
+      url?: string;
+    };
     CreateCredentialDto: {
       /** @enum {string} */
       kind: "mcp" | "plugin";
@@ -139,6 +172,10 @@ export interface components {
       observedAt: string;
       traceId: string;
       fingerprint: string;
+      /** @description The deployed commit SHA, resolved by the server. */
+      deploymentId?: string;
+      /** @description The Environment name on the Deployment. */
+      environment?: string;
       payload: {
         [key: string]: unknown;
       };
@@ -560,6 +597,101 @@ export interface operations {
             projectId: string;
           };
         };
+      };
+    };
+  };
+  DeploysController_list: {
+    parameters: {
+      query?: {
+        /** @description The deployed commit SHA. */
+        deploymentId?: string;
+        /** @description The Environment name on the Deployment. */
+        environment?: string;
+      };
+      path: {
+        orgId: string;
+        projectId: string;
+      };
+    };
+    responses: {
+      /** @description The Deployments of the route Project in the caller Organization. */
+      200: {
+        content: {
+          "application/json": ({
+              projectId: string;
+              deploymentId: string;
+              environment: string;
+              title: string;
+              /** Format: date-time */
+              dateStarted: string;
+              /** Format: date-time */
+              dateFinished: string | null;
+              url: string | null;
+              /** Format: date-time */
+              closedAt: string | null;
+              /** Format: date-time */
+              createdAt: string;
+            })[];
+        };
+      };
+      /** @description No valid bearer client token was presented. */
+      401: {
+        content: never;
+      };
+      /** @description The Organization, Project or scope is not allowed. */
+      403: {
+        content: never;
+      };
+      /** @description The client exceeded the rate limit. */
+      429: {
+        content: never;
+      };
+    };
+  };
+  DeploysController_create: {
+    parameters: {
+      path: {
+        orgId: string;
+        projectId: string;
+      };
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateDeployDto"];
+      };
+    };
+    responses: {
+      /** @description An appended immutable Deployment. A redeploy returns the existing row. */
+      201: {
+        content: {
+          "application/json": {
+            projectId: string;
+            deploymentId: string;
+            environment: string;
+            title: string;
+            /** Format: date-time */
+            dateStarted: string;
+            /** Format: date-time */
+            dateFinished: string | null;
+            url: string | null;
+            /** Format: date-time */
+            closedAt: string | null;
+            /** Format: date-time */
+            createdAt: string;
+          };
+        };
+      };
+      /** @description No valid bearer client token was presented. */
+      401: {
+        content: never;
+      };
+      /** @description The Organization, Project or scope is not allowed. */
+      403: {
+        content: never;
+      };
+      /** @description The client exceeded the rate limit. */
+      429: {
+        content: never;
       };
     };
   };

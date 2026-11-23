@@ -1,5 +1,14 @@
-import { ApiProperty } from '@nestjs/swagger';
-import { IsISO8601, IsIn, IsNotEmpty, IsObject, IsString, Matches } from 'class-validator';
+import { ENVIRONMENT_PATTERN } from '@graveshift/core';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  IsISO8601,
+  IsIn,
+  IsNotEmpty,
+  IsObject,
+  IsOptional,
+  IsString,
+  Matches,
+} from 'class-validator';
 
 export class PublishEventDto {
   @ApiProperty()
@@ -44,6 +53,18 @@ export class PublishEventDto {
   @IsString()
   @IsNotEmpty()
   fingerprint!: string;
+
+  @ApiPropertyOptional({ description: 'The deployed commit SHA, resolved by the server.' })
+  @IsOptional()
+  @IsString()
+  @Matches(/^[0-9a-f]{40}$/)
+  deploymentId?: string | null;
+
+  @ApiPropertyOptional({ description: 'The Environment name on the Deployment.' })
+  @IsOptional()
+  @IsString()
+  @Matches(ENVIRONMENT_PATTERN)
+  environment?: string | null;
 
   @ApiProperty({ type: Object, additionalProperties: true })
   @IsObject()

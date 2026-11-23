@@ -1,6 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import { DiagnosisSchema, IncidentSchema } from '@graveshift/core';
 
+import { AuditRepo } from '../../src/audit/audit.repo';
+import { HAUNTING_FIXTURE } from '../../src/hauntings/testing/haunting.fixture';
+import { HauntingRepo } from '../../src/hauntings/haunting.repo';
 import type { PrismaService } from '../../src/infra/prisma.service';
 import {
   FIXTURE_AT,
@@ -84,6 +87,31 @@ describe.skipIf(!dbTestEnabled)('Postgres recorded Haunting facts', () => {
     expect(
       await db.haunting.findMany({ where: { projectId: 'absent', service: 'fixture' } }),
     ).toEqual([]);
+  });
+
+  test('a later Event through the real repo keeps the opening Deployment pair', async () => {
+    await db.organization.deleteMany();
+    const org = await db.organization.create({ data: { name: 'Alpha', slug: 'alpha' } });
+    await db.project.create({
+      data: { projectId: 'project-1', orgId: org.id, name: 'First', slug: 'first' },
+    });
+    const repo = new HauntingRepo(db, new AuditRepo(db));
+    const laterAt = '2026-11-21T00:02:00.000Z';
+    await repo.upsert('project-1', 'event-1', HAUNTING_FIXTURE, 'production');
+    await repo.upsert(
+      'project-1',
+      'event-2',
+      {
+        ...HAUNTING_FIXTURE,
+        deploymentId: 'b'.repeat(40),
+        deploymentEnvironment: 'staging',
+        incident: { ...HAUNTING_FIXTURE.incident, updatedAt: laterAt },
+      },
+      'staging',
+    );
+    const saved = await repo.get('project-1', HAUNTING_FIXTURE.incident.id);
+    expect(saved?.deploymentId).toBe('a'.repeat(40));
+    expect(saved?.deploymentEnvironment).toBe('production');
   });
 
   test('reset and counts include Haunting without deleting another model list', async () => {

@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test';
 import request from 'supertest';
 
 import { AuditConflict } from '../audit/audit.errors';
+import { DeployRepo } from '../deploys/deploy.repo';
 import { ProjectGrant } from '../internal/project-grant';
 import { testProjectGrant } from '../internal/testing/project-grant.fixture';
 import { InternalGuard } from '../internal/internal.guard';
@@ -14,11 +15,17 @@ import { HauntingService } from './haunting.service';
 import { HAUNTING_FIXTURE } from './testing/haunting.fixture';
 
 const token = 'haunting-test-internal-only-32-chars';
-const body = { projectId: 'project-1', eventId: 'event-1', view: HAUNTING_FIXTURE };
+const body = {
+  projectId: 'project-1',
+  eventId: 'event-1',
+  environment: 'production',
+  view: HAUNTING_FIXTURE,
+};
 const upsert = mock<HauntingRepo['upsert']>(async () => HAUNTING_FIXTURE);
 const list = mock<HauntingRepo['list']>(async () => [HAUNTING_FIXTURE]);
 const get = mock<HauntingRepo['get']>(async () => HAUNTING_FIXTURE);
 const context = mock<HauntingRepo['context']>(async () => HAUNTING_FIXTURE);
+const closeFirst = mock<DeployRepo['closeFirst']>(async () => true);
 let app: INestApplication;
 
 describe('private Haunting boundary', () => {
@@ -36,6 +43,7 @@ describe('private Haunting boundary', () => {
           }),
         },
         { provide: HauntingRepo, useValue: { upsert, list, get, context } },
+        { provide: DeployRepo, useValue: { closeFirst } },
       ],
     }).compile();
     app = moduleRef.createNestApplication();
@@ -78,6 +86,16 @@ describe('private Haunting boundary', () => {
     expect(upsert).not.toHaveBeenCalled();
   });
 
+  test('rejects a recorded Environment name outside the shared pattern', async () => {
+    upsert.mockClear();
+    const inputs = ['bad name', 'prod/us', 'a'.repeat(101)].map((environment) => ({
+      ...body,
+      environment,
+    }));
+    await Promise.all(inputs.map((input) => call('', input).expect(422)));
+    expect(upsert).not.toHaveBeenCalled();
+  });
+
   test('does not acknowledge the event before the repository commit resolves', async () => {
     const entered = Promise.withResolvers<void>();
     const commit = Promise.withResolvers<typeof HAUNTING_FIXTURE>();
@@ -93,11 +111,30 @@ describe('private Haunting boundary', () => {
     await entered.promise;
     try {
       expect(acknowledged).toBe(false);
-      expect(upsert).toHaveBeenCalledWith('project-1', 'event-1', HAUNTING_FIXTURE);
+      expect(upsert).toHaveBeenCalledWith('project-1', 'event-1', HAUNTING_FIXTURE, 'production');
     } finally {
       commit.resolve(HAUNTING_FIXTURE);
     }
     expect((await response).body).toEqual(HAUNTING_FIXTURE);
+  });
+
+  test('a recorded Haunting closes the Deployment inherited from its Event', async () => {
+    await call('', body).expect(200);
+    expect(closeFirst).toHaveBeenCalledWith(
+      'project-1',
+      HAUNTING_FIXTURE.deploymentId,
+      'production',
+    );
+  });
+
+  test('a later Event from another Environment with the same SHA does not close the opening Deployment', async () => {
+    closeFirst.mockClear();
+    upsert.mockImplementationOnce(async () => ({
+      ...HAUNTING_FIXTURE,
+      deploymentEnvironment: 'staging',
+    }));
+    await call('', body).expect(200);
+    expect(closeFirst).not.toHaveBeenCalled();
   });
 
   test('a reused event key produces a conflict with no success acknowledgement', async () => {

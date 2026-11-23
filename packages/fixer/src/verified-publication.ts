@@ -1,7 +1,7 @@
 import type { GitHubClient } from './client';
 import { FixerFault, PublicationError } from './faults';
 import { publicationText, writeDraft, type OpenDraftPrInput } from './open-pr';
-import { assertCurrentSource, type SourceSnapshot } from './source';
+import type { SourceSnapshot } from './source';
 import type { PrRef } from './types';
 import { assertVerified, type VerifiedPatch } from './verify';
 
@@ -61,7 +61,6 @@ export async function publishVerified(
   const text = publicationText(publication, input.verified);
   const existing = await recoverPublication(input.client, expected);
   if (existing) return existing;
-  await assertCurrentSource(input.client, snapshot);
   return writeDraft(
     publication,
     text,

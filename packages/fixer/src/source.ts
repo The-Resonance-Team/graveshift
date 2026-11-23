@@ -163,9 +163,13 @@ export function validatePatchTargets(snapshot: SourceSnapshot, patch: Patch): vo
 export async function prepareSource(
   repo: RepoPolicy,
   client: GitHubClient,
+  baseSha: string,
   limits: SourceLimits = SOURCE_LIMITS,
 ): Promise<SourceSnapshot> {
   try {
+    if (!/^[0-9a-f]{40}$/.test(baseSha)) {
+      throw new FixerFault('STALE_BASE', 'the Deployment does not carry a commit SHA');
+    }
     if (
       !Number.isInteger(limits.maxFiles) ||
       limits.maxFiles < 1 ||
@@ -182,7 +186,7 @@ export async function prepareSource(
       maxFilesChanged: repo.maxFilesChanged,
       maxLinesChanged: repo.maxLinesChanged,
     });
-    const baseSha = await client.getBaseSha(repo.repo, repo.baseBranch);
+    // The patch base is the deployed SHA, not the current branch HEAD.
     const treeSha = await client.getCommitTree(repo.repo, baseSha);
     const treeEntries = await client.getTree(repo.repo, treeSha);
     if (treeEntries.length > 20_000)
@@ -222,37 +226,5 @@ export async function prepareSource(
   } catch (error) {
     if (error instanceof FixerFault) throw error;
     throw new FixerFault('SOURCE_UNAVAILABLE', 'repository source could not be read');
-  }
-}
-
-export async function assertCurrentSource(
-  client: GitHubClient,
-  snapshot: SourceSnapshot,
-): Promise<void> {
-  try {
-    const baseSha = await client.getBaseSha(snapshot.repo, snapshot.baseBranch);
-    if (baseSha !== snapshot.baseSha) {
-      throw new FixerFault('STALE_BASE', 'repository base no longer matches the verified source');
-    }
-    const treeSha = await client.getCommitTree(snapshot.repo, baseSha);
-    const entries = sourceEntries(await client.getTree(snapshot.repo, treeSha), snapshot.rules);
-    if (
-      treeSha !== snapshot.treeSha ||
-      entries.length !== snapshot.files.length ||
-      snapshot.files.some(
-        (file) =>
-          !entries.some(
-            (entry) =>
-              entry.path === file.path &&
-              entry.blobSha === file.blobSha &&
-              entry.mode === file.mode,
-          ),
-      )
-    ) {
-      throw new FixerFault('STALE_BASE', 'repository base no longer matches the verified source');
-    }
-  } catch (error) {
-    if (error instanceof FixerFault) throw error;
-    throw new FixerFault('SOURCE_UNAVAILABLE', 'repository base could not be checked');
   }
 }

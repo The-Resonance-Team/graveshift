@@ -22,7 +22,7 @@ See [Architecture](docs/ARCHITECTURE.md), [Security](docs/SECURITY.md), [Glossar
 
 ## Local setup
 
-Requires Bun 1.4.4 and Docker. Configure an untracked `.env` using `.env.example`. Set `DATABASE_URL`, the v2 bootstrap value `GRAVESHIFT_PROJECT_ID`, two distinct strong internal tokens (`GRAVESHIFT_API_INTERNAL_TOKEN` and `GRAVESHIFT_DAEMON_INTERNAL_TOKEN`), and a separate `GRAVESHIFT_OAUTH_JWT_SECRET`. The bootstrap value binds this host in the v2 setup; it is not the product model. [ADR 0023](docs/adr/0023-organization-is-the-tenant-root.md) sets the scope model, and the implementation will take project identity from the authenticated request.
+Requires Bun 1.4.4 and Docker. Configure an untracked `.env` using `.env.example`. Set `DATABASE_URL`, two distinct strong internal tokens (`GRAVESHIFT_API_INTERNAL_TOKEN` and `GRAVESHIFT_DAEMON_INTERNAL_TOKEN`), and a separate `GRAVESHIFT_OAUTH_JWT_SECRET`. There is no host-wide project id: the authenticated OAuth client supplies the Project. [ADR 0023](docs/adr/0023-organization-is-the-tenant-root.md) sets the product model: one deployment serves many Organizations, and each Organization owns its Projects directly.
 
 ```sh
 bun install
@@ -111,7 +111,7 @@ examples/       fault-injection demo
 powers/         local Kiro Power scaffold
 ```
 
-The API reads its boot config from the environment. `GRAVESHIFT_OAUTH_JWT_SECRET` has no default and must be at least 32 characters. `GRAVESHIFT_OAUTH_CLIENTS` is a JSON map of client id to `{ "secret", "projectId", "scopes" }`; `POST /api/oauth/token` exchanges those values for a short-lived token. `GRAVESHIFT_OAUTH_ISSUER` and `GRAVESHIFT_OAUTH_AUDIENCE` set the token claims that the API checks.
+The API reads its boot config from the environment. `GRAVESHIFT_OAUTH_JWT_SECRET` has no default and must be at least 32 characters. OAuth clients are registered in PostgreSQL with an Organization, a Project and scopes; there is no boot registry of clients. `POST /api/oauth/token` exchanges a registered client's credentials for a short-lived token. `GRAVESHIFT_OAUTH_ISSUER` and `GRAVESHIFT_OAUTH_AUDIENCE` set the token claims that the API checks.
 
 `GRAVESHIFT_CREDENTIAL_TTL_SECONDS` and `GRAVESHIFT_CREDENTIAL_MAX_TTL_SECONDS` bound issued credential lifetime. PostgreSQL stores credential hashes and the append-only, hash-chained audit log. Credential creation, revocation and expiry events share a transaction with the credential write. `GRAVESHIFT_EVENT_MAX_BYTES`, `GRAVESHIFT_EVENT_RATE_LIMIT` and `GRAVESHIFT_EVENT_RATE_TTL_MS` bound the event ingest route. `GRAVESHIFT_NATS_URL` enables NATS publish; without it, publish fails closed with 503. See `.env.example` for the full list.
 

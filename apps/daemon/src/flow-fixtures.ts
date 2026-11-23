@@ -12,6 +12,7 @@ import type { FixContext } from './fix-context';
 
 export const at = '2026-11-21T10:00:00.000Z';
 export const caller = { projectId: 'project-1', actor: 'person-1', commandId: 'command-1' };
+export const DEPLOYMENT_SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
 /**
  * Binds the authenticated audit scope a real Work command carries, so a test can call a fix or
@@ -30,6 +31,8 @@ export const envelope: EventEnvelope = {
   observedAt: at,
   traceId: 'trace-one',
   fingerprint: 'checkout:oom',
+  deploymentId: DEPLOYMENT_SHA,
+  environment: 'production',
   payload: { message: 'Out of memory' },
 };
 export const pr = {
@@ -130,6 +133,7 @@ export function context(): FixContext {
   return {
     diagnosis,
     category: 'code_bug',
+    deploymentId: DEPLOYMENT_SHA,
     repo,
     incident: {
       id: diagnosis.incidentId,

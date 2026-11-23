@@ -69,7 +69,10 @@ describe('HauntingRepo ownership and redelivery', () => {
         actor: 'daemon',
         type: 'haunting.recorded',
         incidentId: 'haunting-1',
-        payload: { view: HAUNTING_FIXTURE },
+        payload: {
+          view: HAUNTING_FIXTURE,
+          deploymentId: HAUNTING_FIXTURE.deploymentId,
+        },
       });
       expect(fixture.tx.haunting.upsert).toHaveBeenCalledWith({
         where: { projectId_id: { projectId: 'project-1', id: 'haunting-1' } },

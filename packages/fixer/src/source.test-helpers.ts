@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto';
 
 import type { SourceEntry } from './client';
 import type { SandboxRunner } from './sandbox';
-import { fakeClient, TEST_BASE_SHA } from './test-helpers';
+import { fakeClient } from './test-helpers';
 
 export const gitBlob = (content: string) =>
   createHash('sha1')
@@ -37,10 +37,6 @@ export function sourceClient(
     size: Buffer.byteLength(content),
   }));
   const record = (method: string, ...args: unknown[]) => calls.push({ method, args });
-  client.getBaseSha = async (...args) => {
-    record('getBaseSha', ...args);
-    return TEST_BASE_SHA;
-  };
   client.getCommitTree = async (...args) => {
     record('getCommitTree', ...args);
     return 'tree-sha';
