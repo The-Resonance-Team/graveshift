@@ -1,5 +1,3 @@
-// The API owns the durable store. Public Audit fields stay in packages/core.
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -235,7 +233,6 @@ model Haunting {
   pr                    Json?
   timeline              Json
   deploymentId          String?  @map("deployment_id")
-  // The Environment of the Event that opened this Haunting. It never changes.
   deploymentEnvironment String?  @map("deployment_environment")
   openedAt              DateTime @map("opened_at")
   updatedAt             DateTime @map("updated_at")

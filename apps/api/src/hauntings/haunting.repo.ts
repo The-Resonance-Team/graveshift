@@ -1,4 +1,5 @@
 import { prepareRecordedHaunting, type RecordedHaunting } from '@graveshift/core/recorded';
+import { redact } from '@graveshift/redactor';
 import { Injectable } from '@nestjs/common';
 
 import { AuditRepo } from '../audit/audit.repo';
@@ -31,7 +32,16 @@ export class HauntingRepo {
         actor: 'daemon',
         type: 'haunting.recorded',
         incidentId: view.incident.id,
-        payload: { view, deploymentId },
+        payload: {
+          view: {
+            ...view,
+            deploymentEnvironment:
+              view.deploymentEnvironment === null || view.deploymentEnvironment === undefined
+                ? null
+                : redact(view.deploymentEnvironment),
+          },
+          deploymentId,
+        },
       });
       const where = { projectId_id: { projectId, id: view.incident.id } };
       const row = await tx.haunting.findUnique({ where, select: HAUNTING_SELECT });
