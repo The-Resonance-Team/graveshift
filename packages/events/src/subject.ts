@@ -18,8 +18,23 @@ const safeToken = /^[A-Za-z0-9_-]+$/;
  */
 export function safeSubjectToken(service: string): string {
   if (safeToken.test(service)) return service;
-  const mapped = service.replace(/[^A-Za-z0-9_-]+/g, '_').replace(/^_+|_+$/g, '');
-  return mapped.length > 0 ? mapped : '_';
+  // One linear pass. A backtracking replace on untrusted text can be slow.
+  const kept: string[] = [];
+  let pendingUnderscore = false;
+  for (const char of service) {
+    if (safeToken.test(char)) {
+      kept.push(char);
+      pendingUnderscore = false;
+    } else if (!pendingUnderscore) {
+      kept.push('_');
+      pendingUnderscore = true;
+    }
+  }
+  let start = 0;
+  let end = kept.length;
+  while (start < end && kept[start] === '_') start += 1;
+  while (end > start && kept[end - 1] === '_') end -= 1;
+  return end > start ? kept.slice(start, end).join('') : '_';
 }
 
 export type Lane = 'telemetry' | 'detection';
