@@ -1,14 +1,19 @@
 import type { GitHubClient } from './client';
-import type { PrRef } from './types';
 
 export type PrEvent =
   | { type: 'checks'; state: 'pending' | 'success' | 'failure'; total: number }
   | { type: 'merged_externally' }
   | { type: 'closed' };
 
+/** Watching needs only the coordinates of one pull request, never its stamp. */
+export interface WatchTarget {
+  repo: string;
+  number: number;
+}
+
 export interface WatchOptions {
   client: GitHubClient;
-  pr: PrRef;
+  pr: WatchTarget;
   onEvent: (event: PrEvent) => void;
   intervalMs?: number;
   sleep?: (ms: number) => Promise<void>;

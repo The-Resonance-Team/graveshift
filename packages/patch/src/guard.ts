@@ -1,5 +1,6 @@
 import { GraveshiftError } from '@graveshift/core';
 
+import { lineDiff } from './diff';
 import type { Patch, RepoRules } from './schemas';
 
 export class PatchRejectedError extends GraveshiftError<'PATCH_REJECTED'> {
@@ -72,17 +73,9 @@ export function guardPatch(patch: Patch, rules: RepoRules): void {
   if (reasons.length > 0) throw new PatchRejectedError(reasons);
 }
 
-// ponytail: counts the span between common prefix and suffix, an upper bound on the real diff, upgrade if the cap blocks small fixes
+// One line-count implementation lives in './diff'. It is exact for files inside
+// the LCS limit and an upper bound above it, so a model can never under-report.
 export function diffStats(before: string | null, after: string | null): number {
-  const a = before === null ? [] : before.split('\n');
-  const b = after === null ? [] : after.split('\n');
-  let start = 0;
-  while (start < a.length && start < b.length && a[start] === b[start]) start++;
-  let endA = a.length;
-  let endB = b.length;
-  while (endA > start && endB > start && a[endA - 1] === b[endB - 1]) {
-    endA--;
-    endB--;
-  }
-  return endA - start + (endB - start);
+  const changed = lineDiff(before ?? '', after ?? '');
+  return changed.additions + changed.deletions;
 }

@@ -17,6 +17,31 @@ export const PatchSchema = z
   .strict();
 export type Patch = z.infer<typeof PatchSchema>;
 
+// The model contract pins every change to a base commit and to the base blob
+// of each file it changes. A change either carries a unified diff (preferred)
+// or the full file text, never both. New files name the git empty-blob SHA.
+export const GIT_EMPTY_BLOB_SHA = 'e69de29bb2d1d6434b8b29ae775ad8c2e48c5391';
+
+const proposalFileBase = {
+  path: z.string().min(1),
+  baseBlobSha: z.string().min(1),
+  linesChanged: z.number().int().min(0),
+};
+
+const PatchDiffFileSchema = z.object({ ...proposalFileBase, diff: z.string().min(1) }).strict();
+
+const PatchContentFileSchema = z
+  .object({ ...proposalFileBase, content: z.string().nullable() })
+  .strict();
+
+export const PatchProposalSchema = z
+  .object({
+    baseSha: z.string().min(1),
+    files: z.array(z.union([PatchDiffFileSchema, PatchContentFileSchema])),
+  })
+  .strict();
+export type PatchProposal = z.infer<typeof PatchProposalSchema>;
+
 const pattern = z.string().min(1);
 
 export const RepoRulesSchema = z

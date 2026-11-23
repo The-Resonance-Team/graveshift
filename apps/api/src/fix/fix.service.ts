@@ -7,7 +7,13 @@ import {
   type WorkItem,
   withDraftPr,
 } from '@graveshift/core';
-import { type Patch, type PrRef, openDraftPr } from '@graveshift/fixer';
+import {
+  type Patch,
+  type PrRef,
+  RepoNotAllowedError,
+  openDraftPr,
+  StaleBaseError,
+} from '@graveshift/fixer';
 import { generatePatch, type RepoRules } from '@graveshift/patch';
 import { redact } from '@graveshift/redactor';
 import { decide, type Effect } from '@graveshift/policy';
@@ -22,7 +28,8 @@ import {
   type FixFailureCode,
 } from './fix.types';
 
-// Every value below is request data. Wrapping keeps tags and secrets out of the PR body.
+// Every value below is request data. Wrapping keeps tags and secrets out of the
+// title, the commit subject and the branch slug, which use clean redacted text.
 function toIncidentAndDiagnosis(
   item: WorkItem,
   context: FixContext,
@@ -154,47 +161,90 @@ export class FixService {
       return blocked(decision.effect, decision.reason, 'policy_denied');
     }
 
-    const diagnosisText = item.description || item.title;
+    // The policy gate also rejects a service the config never maps for this
+    // repository, before any source read, model call or GitHub call. Today the
+    // client raises it only when the pull request is opened.
+    if (!repo.services.includes(item.service)) {
+      return blocked(
+        decision.effect,
+        `repo_not_allowed: no mapping for service ${item.service}`,
+        'policy_denied',
+      );
+    }
+
+    // The model's view of the problem. A Fix now note is a human hint for it and
+    // is wrapped as untrusted data with the rest; it never reaches the body.
+    const problem = item.description || item.title;
+    const diagnosisText = note === undefined ? problem : `${problem}\n\nFix now note: ${note}`;
+
+    // Read the real repository at the base ref. Everything the model may use
+    // comes from this snapshot: it never reaches for source itself.
+    let base;
+    try {
+      base = await this.deps.source.readBase(repo.repo, repo.baseBranch);
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : 'unknown source failure';
+      return blocked(
+        decision.effect,
+        `source_unavailable: ${redact(reason)}`,
+        'source_unavailable',
+      );
+    }
+
     const generated = await generatePatch({
       gateway,
       agent,
       system: systemFrom(this.deps, repo, diagnosisText),
       rules: rulesFrom(repo),
       diagnosis: diagnosisText,
+      base: { baseSha: base.baseSha, files: base.files },
     });
     if (!generated.ok) {
       return blocked(decision.effect, generated.error.message, 'patch_rejected');
     }
 
+    // The patch runs in a throwaway checkout with no secrets and no network
+    // before anything is pushed. A failed or timed-out check blocks the PR.
+    const verified = await this.deps.workspace.verify(base, generated.patch, this.deps.sandbox);
+    if (!verified.ok) {
+      return blocked(decision.effect, `checks_failed: ${redact(verified.reason)}`, 'checks_failed');
+    }
+
     const { incident, diagnosis } = toIncidentAndDiagnosis(item, parsed.data, note);
-    // The wrapper stays in the body. Titles, subjects and slugs use clean redacted text.
+    // Titles, subjects and slugs use clean redacted text. The body carries
+    // identifiers, check results and diff stats only.
     const headline = redact(item.description || item.title)
       .replace(/\s+/g, ' ')
       .trim();
     const patch: Patch = generated.patch;
     let pr: PrRef;
     try {
-      // openDraftPr runs guardPatch before its first client call.
+      // openDraftPr runs guardPatch and the stale-base re-check before its
+      // first mutating client call.
       const opened = await openDraftPr({
         client,
         repo,
         patch,
+        base: { sha: base.baseSha, treeSha: base.treeSha },
+        checks: verified.checks,
+        diff: generated.summary,
         incident,
         diagnosis,
         category,
         dashboardUrl: '',
         headline,
+        now: this.deps.now,
       });
-      pr = {
-        repo: opened.repo,
-        number: opened.number,
-        url: opened.url,
-        branch: opened.branch,
-        headSha: opened.headSha,
-      };
+      pr = opened;
     } catch (error) {
       const reason = error instanceof Error ? error.message : 'unknown PR failure';
-      return blocked(decision.effect, `pr_failed: ${reason}`, 'pr_failed');
+      if (error instanceof StaleBaseError) {
+        return blocked(decision.effect, redact(reason), 'stale_base');
+      }
+      if (error instanceof RepoNotAllowedError) {
+        return blocked('deny', redact(reason), 'policy_denied');
+      }
+      return blocked(decision.effect, `pr_failed: ${redact(reason)}`, 'pr_failed');
     }
     // Fix now promotes the queue only after a successful fix.
     const next = trigger === 'fix_now' ? promoteToFront(item) : item;

@@ -3,11 +3,15 @@ import type { GraveshiftConfig } from '@graveshift/config';
 import { GraveshiftError } from '@graveshift/core';
 import {
   createAppAuth,
-  createRestClient,
   type CheckRun,
+  createGitHubSourceProvider,
+  createRestClient,
+  createSandboxWorkspace,
+  type CommandRunner,
   type GitHubClient,
   type PullRequestState,
   type TreeEntry,
+  type TreeFile,
 } from '@graveshift/fixer';
 import {
   createAdapter,
@@ -20,7 +24,9 @@ import {
 import { ModeSchema } from '@graveshift/policy';
 import { z } from 'zod';
 
-import type { FixContextProvider, FixDeps } from './fix.types';
+import { createLocalFixContextProvider, type WorkItemReader } from './fix.context';
+import { SpendTracker } from './fix.spend';
+import type { FixDeps } from './fix.types';
 
 const EnvModeSchema = z.object({ GRAVESHIFT_MODE: ModeSchema.optional() });
 
@@ -31,11 +37,20 @@ export class FixConfigError extends GraveshiftError<'FIX_CONFIG_ERROR'> {
 }
 
 export interface FixDepsOptions {
+  /** The store the open-PR counter reads; the same instance the routes use. */
+  readonly store: WorkItemReader;
   // Test seams. Production never passes them; emulator URLs never enter config.
   readonly githubFetch?: typeof fetch;
   readonly aiFetch?: typeof fetch;
   readonly env?: Record<string, string | undefined>;
   readonly onAudit?: (event: AuditEvent) => unknown;
+  readonly now?: () => Date;
+  /**
+   * The process runner the sandbox uses to start a check command. Production
+   * uses the platform network jail; a test host that blocks the jail still
+   * runs the real checks through an injected runner.
+   */
+  readonly sandboxRunner?: CommandRunner;
 }
 
 const requiredEnv = (name: string, env: Record<string, string | undefined>): string => {
@@ -45,16 +60,6 @@ const requiredEnv = (name: string, env: Record<string, string | undefined>): str
   }
   return value.trim();
 };
-
-// ponytail: diagnosis context is unavailable in the API; upgrade to the #59 daemon read when that endpoint exists
-const pendingContext: FixContextProvider = {
-  async load() {
-    return { ok: false, reason: 'diagnosis_context_unavailable' };
-  },
-};
-
-// ponytail: audit events are dropped here; upgrade to the #60 audit sink when it is wired
-const dropAudit = (_event: AuditEvent): void => {};
 
 // The model key and GitHub App key are not needed by most routes. Build the real
 // collaborators on first fix use, so boot needs no secret and a fix fails closed
@@ -86,6 +91,12 @@ class LazyGitHubClient implements GitHubClient {
   getCommitTree(repo: string, commitSha: string): Promise<string> {
     return this.client.getCommitTree(repo, commitSha);
   }
+  listTree(repo: string, treeSha: string): Promise<TreeFile[]> {
+    return this.client.listTree(repo, treeSha);
+  }
+  getBlobBytes(repo: string, blobSha: string): Promise<Uint8Array> {
+    return this.client.getBlobBytes(repo, blobSha);
+  }
   createBlob(repo: string, content: string): Promise<string> {
     return this.client.createBlob(repo, content);
   }
@@ -115,8 +126,9 @@ class LazyGitHubClient implements GitHubClient {
   }
 }
 
-export function createFixDeps(config: GraveshiftConfig, options: FixDepsOptions = {}): FixDeps {
+export function createFixDeps(config: GraveshiftConfig, options: FixDepsOptions): FixDeps {
   const env = options.env ?? process.env;
+  const now = options.now ?? (() => new Date());
   const parsedEnv = EnvModeSchema.safeParse(env);
   if (!parsedEnv.success) {
     throw new FixConfigError(`GRAVESHIFT_MODE is invalid: ${parsedEnv.error.message}`);
@@ -135,6 +147,9 @@ export function createFixDeps(config: GraveshiftConfig, options: FixDepsOptions 
     throw new FixConfigError(`no GitHub App installation for ${repo.repo}`);
   }
 
+  // Every terminal model call reports its cost here; the policy gate compares
+  // it against the daily budget before it may allow the next one.
+  const spend = new SpendTracker(now);
   const gateway = new LazyGateway(() => {
     if (resolveApiKey(agent, env) === undefined) {
       throw new FixConfigError(
@@ -148,7 +163,10 @@ export function createFixDeps(config: GraveshiftConfig, options: FixDepsOptions 
     return createGateway({
       agents: [{ agent, adapter }],
       config: config.fix.gateway,
-      onAudit: options.onAudit ?? dropAudit,
+      onAudit: (event) => {
+        spend.record(event);
+        return options.onAudit?.(event);
+      },
     });
   });
 
@@ -167,10 +185,20 @@ export function createFixDeps(config: GraveshiftConfig, options: FixDepsOptions 
     repo,
     gateway,
     client,
-    context: pendingContext,
+    source: createGitHubSourceProvider(client),
+    workspace: createSandboxWorkspace(
+      options.sandboxRunner === undefined ? {} : { runner: options.sandboxRunner },
+    ),
+    sandbox: config.fix.sandbox,
+    context: createLocalFixContextProvider({
+      store: options.store,
+      spendTodayUsd: () => spend.spendTodayUsd(),
+      now,
+    }),
     agent: agent.name,
     autoFixEnabled: config.fix.enabled,
     promptTemplate: config.fix.promptTemplate,
+    now,
     agentMeta: {
       name: agent.name,
       role: agent.role,
