@@ -7,13 +7,14 @@ import {
   Post,
   ServiceUnavailableException,
   UseGuards,
+  Inject,
 } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
 
 import { InternalGuard } from '../internal/internal.guard';
 import { ProjectGrant } from '../internal/project-grant';
 import { AuditBusy, AuditConflict } from './audit.errors';
-import { AuditRepo } from './audit.repo';
+import { AUDIT_SINK, type AuditSink } from './audit.sink';
 import { AppendAuditDto } from './dto/append-audit.dto';
 
 @ApiExcludeController()
@@ -21,7 +22,7 @@ import { AppendAuditDto } from './dto/append-audit.dto';
 @Controller('internal/audit')
 export class InternalAuditController {
   constructor(
-    private readonly audit: AuditRepo,
+    @Inject(AUDIT_SINK) private readonly audit: AuditSink,
     private readonly grant: ProjectGrant,
   ) {}
 

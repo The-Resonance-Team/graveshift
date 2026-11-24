@@ -1,8 +1,10 @@
 import {
   createAppAuth,
   createRestClient,
+  FixerFault,
   planPublication,
   prepareSource,
+  PublicationError,
   publishVerified,
   recoverPublication,
   verifyPatch,
@@ -11,13 +13,19 @@ import {
   type SandboxRunner,
 } from '@graveshift/fixer';
 import type { Gateway } from '@graveshift/gateway';
+import type { FixFailure } from '@graveshift/work';
 import { wrapUntrusted } from '@graveshift/agents/untrusted';
 import { generatePatch } from '@graveshift/patch';
 import { PATCH_SYSTEM } from '@graveshift/patch/generate';
 import { z } from 'zod';
 
 import { currentAuditScope, type WriteAudit } from './audit';
-import { ExecutionFailure, type FixExecutor } from './execution';
+import {
+  FixExecutionError,
+  type ExecutionInput,
+  type FixExecutor,
+  type PreparedFix,
+} from './execution';
 import { withModelContext } from './model-context';
 import { cancellableGitHub } from './cancellable-github';
 import { parseDaemonEnv } from './env';
@@ -33,102 +41,137 @@ export interface ExecutorOptions {
 
 export const FIX_BASE_SHA_AUDIT_TYPE = 'fix.base_sha';
 
+// The adapter owns the one translation from fixer faults to work-level failures.
+function adaptFixerFault(error: unknown, phase: 'fix' | 'publication'): never {
+  if (error instanceof PublicationError) {
+    throw new FixExecutionError(
+      error.uncertain ? 'publication_uncertain' : 'pr_failed',
+      error.message,
+      error.reference,
+    );
+  }
+  if (error instanceof FixerFault) {
+    const failure: Exclude<FixFailure, 'none'> =
+      phase === 'publication'
+        ? 'pr_failed'
+        : error.code === 'CHECK_FAILED'
+          ? 'patch_rejected'
+          : 'fix_error';
+    throw new FixExecutionError(failure, error.message);
+  }
+  throw error;
+}
+
 export function createFixExecutor(options: ExecutorOptions): FixExecutor {
   return async (input) => {
-    input.signal?.throwIfAborted();
-    // Checked before the first model call: a patch call with no authenticated audit scope would
-    // spend budget on a model call whose durable entry has no chain to belong to.
-    const scope = currentAuditScope();
-    if (scope === undefined) {
-      throw new ExecutionFailure('audit_failed', 'No authenticated audit scope for the Agent');
-    }
-    const baseSha = input.context.deploymentId;
-    if (!/^[0-9a-f]{40}$/.test(baseSha)) {
-      throw new ExecutionFailure('fix_error', 'No bound Deployment for this Fix');
-    }
     try {
-      await options.audit(
-        {
-          key: `fix:${input.attempt.id}:base:${baseSha}`,
-          actor: scope.actor,
-          type: FIX_BASE_SHA_AUDIT_TYPE,
-          incidentId: input.context.incident.id,
-          payload: {
-            deploymentId: baseSha,
-            repo: input.context.repo.repo,
-            workItemId: input.snapshot.item.id,
-            attemptId: input.attempt.id,
-            service: input.context.incident.service,
-          },
-        },
-        scope,
-      );
-    } catch {
-      throw new ExecutionFailure('audit_failed', 'The base SHA audit was not persisted');
+      return await prepareFix(options, input);
+    } catch (error) {
+      adaptFixerFault(error, 'fix');
     }
-    const client = cancellableGitHub(options.client, input.signal);
-    const verification = options.verification[input.context.repo.repo];
-    if (verification === undefined)
-      throw new ExecutionFailure('fix_error', 'Repository verification is not configured');
-    const snapshot = await prepareSource(input.context.repo, client, baseSha);
-    input.signal?.throwIfAborted();
-    let auditFailed = false;
-    const generated = await generatePatch({
-      agent: input.agent.name,
-      system: PATCH_SYSTEM,
-      diagnosis: JSON.stringify(input.context.diagnosis),
-      rules: snapshot.rules,
-      gateway: {
-        async run(task) {
-          const result = await withModelContext(
-            {
-              incidentId: input.context.incident.id,
-              service: input.context.incident.service,
-              deploymentId: baseSha,
-            },
-            () =>
-              options.gateway.run({
-                ...task,
-                system: `${task.system}\nAssigned Agent instructions:\n${input.prompt}`,
-                prompt: `${task.prompt}\nSource base: ${snapshot.baseSha}\n${wrapUntrusted('repository_source', JSON.stringify(snapshot.files.map(({ path, content, blobSha }) => ({ path, blobSha, content }))))}`,
-                ...(input.signal === undefined ? {} : { signal: input.signal }),
-              }),
-          );
-          auditFailed = result.status === 'unavailable' && result.reason === 'audit_unavailable';
-          return result;
+  };
+}
+
+async function prepareFix(options: ExecutorOptions, input: ExecutionInput): Promise<PreparedFix> {
+  input.signal?.throwIfAborted();
+  // Checked before the first model call: a patch call with no authenticated audit scope would
+  // spend budget on a model call whose durable entry has no chain to belong to.
+  const scope = currentAuditScope();
+  if (scope === undefined) {
+    throw new FixExecutionError('audit_failed', 'No authenticated audit scope for the Agent');
+  }
+  const baseSha = input.context.deploymentId;
+  if (!/^[0-9a-f]{40}$/.test(baseSha)) {
+    throw new FixExecutionError('fix_error', 'No bound Deployment for this Fix');
+  }
+  try {
+    await options.audit(
+      {
+        key: `fix:${input.attempt.id}:base:${baseSha}`,
+        actor: scope.actor,
+        type: FIX_BASE_SHA_AUDIT_TYPE,
+        incidentId: input.context.incident.id,
+        payload: {
+          deploymentId: baseSha,
+          repo: input.context.repo.repo,
+          workItemId: input.snapshot.item.id,
+          attemptId: input.attempt.id,
+          service: input.context.incident.service,
         },
       },
-    });
-    if (!generated.ok)
-      throw new ExecutionFailure(
-        auditFailed ? 'audit_failed' : 'patch_rejected',
-        'Patch generation failed',
-      );
-    input.signal?.throwIfAborted();
-    const verified = await verifyPatch({
-      snapshot,
-      patch: generated.patch,
-      ...verification,
-      ...(options.runner === undefined ? {} : { runner: options.runner }),
-    });
-    const publication = {
-      client,
-      repo: input.context.repo,
-      snapshot,
-      verified,
-      incident: input.context.incident,
-      diagnosis: input.context.diagnosis,
-      category: input.context.category,
-      dashboardUrl: options.dashboardUrl,
-      headline: input.snapshot.item.title,
-    };
-    const intent = planPublication(publication);
-    return {
-      intent,
-      publish: () => publishVerified({ ...publication, plan: intent }),
-      // verifyPatch owns and removes its isolated workspace before it returns its receipt.
-      dispose: async () => {},
-    };
+      scope,
+    );
+  } catch {
+    throw new FixExecutionError('audit_failed', 'The base SHA audit was not persisted');
+  }
+  const client = cancellableGitHub(options.client, input.signal);
+  const verification = options.verification[input.context.repo.repo];
+  if (verification === undefined)
+    throw new FixExecutionError('fix_error', 'Repository verification is not configured');
+  const snapshot = await prepareSource(input.context.repo, client, baseSha);
+  input.signal?.throwIfAborted();
+  let auditFailed = false;
+  const generated = await generatePatch({
+    agent: input.agent.name,
+    system: PATCH_SYSTEM,
+    diagnosis: JSON.stringify(input.context.diagnosis),
+    rules: snapshot.rules,
+    gateway: {
+      async run(task) {
+        const result = await withModelContext(
+          {
+            incidentId: input.context.incident.id,
+            service: input.context.incident.service,
+            deploymentId: baseSha,
+          },
+          () =>
+            options.gateway.run({
+              ...task,
+              system: `${task.system}\nAssigned Agent instructions:\n${input.prompt}`,
+              prompt: `${task.prompt}\nSource base: ${snapshot.baseSha}\n${wrapUntrusted('repository_source', JSON.stringify(snapshot.files.map(({ path, content, blobSha }) => ({ path, blobSha, content }))))}`,
+              ...(input.signal === undefined ? {} : { signal: input.signal }),
+            }),
+        );
+        auditFailed = result.status === 'unavailable' && result.reason === 'audit_unavailable';
+        return result;
+      },
+    },
+  });
+  if (!generated.ok)
+    throw new FixExecutionError(
+      auditFailed ? 'audit_failed' : 'patch_rejected',
+      'Patch generation failed',
+    );
+  input.signal?.throwIfAborted();
+  const verified = await verifyPatch({
+    snapshot,
+    patch: generated.patch,
+    ...verification,
+    ...(options.runner === undefined ? {} : { runner: options.runner }),
+  });
+  const publication = {
+    client,
+    repo: input.context.repo,
+    snapshot,
+    verified,
+    incident: input.context.incident,
+    diagnosis: input.context.diagnosis,
+    category: input.context.category,
+    dashboardUrl: options.dashboardUrl,
+    headline: input.snapshot.item.title,
+  };
+  const intent = planPublication(publication);
+  return {
+    intent,
+    publish: async () => {
+      try {
+        return await publishVerified({ ...publication, plan: intent });
+      } catch (error) {
+        adaptFixerFault(error, 'publication');
+      }
+    },
+    // verifyPatch owns and removes its isolated workspace before it returns its receipt.
+    dispose: async () => {},
   };
 }
 

@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { GraveshiftConfigSchema, type GraveshiftConfig } from '@graveshift/config';
 import { Controller, Get, Inject, Req, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
@@ -12,7 +14,7 @@ import {
 } from '@nestjs/swagger';
 
 import type { Principal, PrincipalRequest } from '../auth/auth.types';
-import { AuditRepo } from '../audit/repo/audit.repo';
+import { AUDIT_SINK, type AuditSink } from '../audit/audit.sink';
 
 import { GRAVESHIFT_CONFIG } from './config.provider';
 
@@ -31,7 +33,7 @@ import { GRAVESHIFT_CONFIG } from './config.provider';
 export class ConfigController {
   constructor(
     @Inject(GRAVESHIFT_CONFIG) private readonly config: GraveshiftConfig,
-    private readonly audit: AuditRepo,
+    @Inject(AUDIT_SINK) private readonly audit: AuditSink,
   ) {}
 
   // The whole validated config in one call: boot, agents, policy and fix.
@@ -55,8 +57,8 @@ export class ConfigController {
   // enters the payload. If the append fails, the request fails closed: no config is
   // served before the entry is written.
   private recordExport(actor: Principal): Promise<unknown> {
-    return this.audit.append({
-      projectId: actor.projectId,
+    return this.audit.append(actor.projectId, {
+      key: `config:exported:${randomUUID()}`,
       actor: actor.clientId,
       type: 'config.exported',
       payload: { exported: 'config' },

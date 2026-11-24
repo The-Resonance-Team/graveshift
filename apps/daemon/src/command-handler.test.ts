@@ -4,6 +4,7 @@ import { createCommandHandler } from './command-handler';
 import { drainCommands } from './command-lifetime';
 import { caller } from './flow-fixtures';
 import { harness } from './flow-harness';
+import { createWorkCommands } from './work-flow';
 
 const token = 'local-daemon-internal-token-32-characters';
 const apiToken = 'local-api-internal-token-32-characters';
@@ -20,11 +21,13 @@ function request(
   });
 }
 
+const granted = [caller.projectId, 'project-2'];
+
 function handler() {
   const flow = harness();
   const handle = createCommandHandler({
-    commands: flow.commands(),
-    projectId: caller.projectId,
+    commands: createWorkCommands({ ...flow.options, projectIds: granted }),
+    projectIds: granted,
     token,
     maxBytes: 1024,
     timeoutMs: 1000,
@@ -46,6 +49,17 @@ describe('private Work command Request boundary', () => {
     );
     expect(foreign.status).toBe(403);
     expect(flow.runtime.calls).toEqual([]);
+  });
+
+  test('a second granted Project runs its command under its own Project', async () => {
+    const { handle, flow } = handler();
+    const second = { ...caller, projectId: 'project-2', commandId: 'command-second-project' };
+    const response = await handle(request('fix-now', { caller: second, id: 'work-1', input: {} }));
+    expect(response.status).toBe(200);
+    const receipt = [...flow.runtime.receipts.values()][0];
+    expect(receipt?.caller.projectId).toBe('project-2');
+    expect(flow.audit.length).toBeGreaterThan(0);
+    expect(flow.audit.every((entry) => entry.projectId === 'project-2')).toBe(true);
   });
 
   test('validates canonical commands, methods, content type, and unknown routes', async () => {
@@ -126,7 +140,7 @@ describe('private Work command Request boundary', () => {
     const lifetime = drainCommands(flow.commands());
     const handle = createCommandHandler({
       commands: lifetime.commands,
-      projectId: caller.projectId,
+      projectIds: [caller.projectId, 'project-2'],
       token,
       maxBytes: 1024,
       timeoutMs: 5,

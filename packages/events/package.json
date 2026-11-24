@@ -8,8 +8,12 @@
   "files": [
     "dist",
     "src/index.ts",
+    "src/consumer.ts",
     "src/http.ts",
     "src/nats.ts",
+    "src/publisher.ts",
+    "src/streams.ts",
+    "src/subject.ts",
     "src/testing.ts"
   ],
   "publishConfig": {

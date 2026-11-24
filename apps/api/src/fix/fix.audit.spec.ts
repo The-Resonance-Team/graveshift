@@ -45,7 +45,6 @@ function result(overrides: Partial<FixResult> = {}): FixResult {
 describe('fix outcome audit record', () => {
   test('is one entry for one attempt, keyed by it', () => {
     expect(fixOutcomeAudit(scope, fixOutcomeFromCommand(caller(), 'work-1', result()))).toEqual({
-      projectId: '12345',
       actor: 'client-1',
       type: FIX_OUTCOME_AUDIT_TYPE,
       key: 'fix:attempt-1:fix_now:outcome',
@@ -139,7 +138,6 @@ describe('fix outcome audit record', () => {
         }),
       ),
     ).toEqual({
-      projectId: '12345',
       actor: 'client-1',
       type: FIX_OUTCOME_AUDIT_TYPE,
       key: 'fix:attempt-1:auto_fix:outcome',

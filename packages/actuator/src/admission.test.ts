@@ -76,11 +76,11 @@ test('failed runtime attempts count in the window and cannot reuse their Blessin
   });
   const failed = await actuator.execute(signed());
   expect(failed).toMatchObject({ status: 'failed', reason: 'execution_failed' });
-  expect((await actuator.execute(signed())).reason).toBe('replay');
+  expect((await actuator.execute(signed())).reason).toBe('already_completed');
   expect((await actuator.execute(signed({ tokenId: 'next' }))).reason).toBe('policy_rate_limited');
   setNow(T0 + 10 * 60_000);
   expect((await actuator.execute(signed({ tokenId: 'next' }))).status).toBe('failed');
-  expect((await actuator.execute(signed())).reason).toBe('replay');
+  expect((await actuator.execute(signed())).reason).toBe('already_completed');
   expect(attempts).toEqual(['candy-shop/api', 'candy-shop/api']);
 });
 
@@ -91,9 +91,9 @@ test('the capacity cap never evicts an unexpired consumed token, then prunes exp
   expect((await actuator.execute(signed({ tokenId: 'next', service: 'worker' }))).reason).toBe(
     'admission_capacity',
   );
-  expect((await actuator.execute(signed())).reason).toBe('replay');
+  expect((await actuator.execute(signed())).reason).toBe('already_completed');
   setNow(T0 + 15 * 60_000);
-  expect((await actuator.execute(signed())).reason).toBe('expired');
+  expect((await actuator.execute(signed())).reason).toBe('already_completed');
   expect(
     (
       await actuator.execute(

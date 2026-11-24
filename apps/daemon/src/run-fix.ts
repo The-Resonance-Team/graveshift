@@ -4,6 +4,7 @@ import {
   type RoutingResult,
 } from '@graveshift/agents/routing';
 import type { AgentConfig } from '@graveshift/agents';
+import { agentAssignee } from '@graveshift/core';
 import { decide, type Policy } from '@graveshift/policy';
 import {
   WorkError,
@@ -18,7 +19,7 @@ import {
 
 import { currentAuditScope, type WriteAudit } from './audit';
 import { auditScopeOfCaller, fixAuditIdentity, policyDecisionAudit } from './fix-audit';
-import { ExecutionFailure, type FixExecutor } from './execution';
+import { FixExecutionError, type FixExecutor } from './execution';
 import { ContextFailure, type ResolveContext } from './fix-context';
 import { publishFix } from './publication';
 import type { RecoverFix } from './recovery';
@@ -81,7 +82,7 @@ async function runOwnedFix(
   if (currentAuditScope() === undefined) return finish(failed('audit_failed'));
   const scope = auditScopeOfCaller(caller);
   const agent = options.agents.find((entry) => entry.name === attempt.agent);
-  if (agent === undefined || snapshot.item.assignee !== `needs_agent_${attempt.agent}`) {
+  if (agent === undefined || snapshot.item.assignee !== agentAssignee(attempt.agent)) {
     return finish(failed('routing_failed', 'The assigned Agent is unavailable'));
   }
   let context;
@@ -176,8 +177,9 @@ async function runOwnedFix(
   } catch (error) {
     signal.throwIfAborted();
     if (error instanceof WorkError) throw error;
+    const adapted = error instanceof FixExecutionError ? error : undefined;
     return finish({
-      ...failed(error instanceof ExecutionFailure ? error.failure : 'fix_error'),
+      ...failed(adapted?.failure ?? 'fix_error', adapted?.message),
       routing: outcome,
     });
   }

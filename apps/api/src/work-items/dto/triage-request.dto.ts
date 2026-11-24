@@ -1,19 +1,18 @@
-import { AGENT_ASSIGNEE_PREFIX, NEEDS_HUMAN } from '@graveshift/core';
+import { AGENT_ASSIGNEE_PREFIX, AssigneeSchema, NEEDS_HUMAN } from '@graveshift/core';
 import { ApiProperty } from '@nestjs/swagger';
-import { IsString, Matches } from 'class-validator';
+import { IsString } from 'class-validator';
 
-// Anchored on both ends: parseAssignee accepts needs_human or a needs_agent_ name only.
-const ASSIGNEE_PATTERN = new RegExp(`^(?:${NEEDS_HUMAN}|${AGENT_ASSIGNEE_PREFIX}[\\s\\S]*)$`);
+import { WorkValue } from './work-value';
 
-// parseAssignee in packages/core still checks the agent name against policy.
 export class TriageRequestDto {
   @ApiProperty({
     anyOf: [
       { type: 'string', enum: [NEEDS_HUMAN] },
-      { type: 'string', pattern: '^(needs_agent_)[\\s\\S]{0,}$' },
+      { type: 'string', pattern: `^(${AGENT_ASSIGNEE_PREFIX})[\\s\\S]{1,}$` },
     ],
   })
   @IsString()
-  @Matches(ASSIGNEE_PATTERN, { message: 'assignee must be needs_human or needs_agent_<name>' })
+  // The format comes from core's one assignee seam, not a second regex in this DTO.
+  @WorkValue(AssigneeSchema)
   assignee!: string;
 }

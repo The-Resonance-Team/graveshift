@@ -8,8 +8,6 @@ const check = process.argv.includes('--check');
 // Document generation only boots the app; it never signs a token. Set an
 // ephemeral value before the imports, because ConfigModule validates at import.
 process.env.GRAVESHIFT_OAUTH_JWT_SECRET ??= randomBytes(32).toString('hex');
-// Document generation boots the app with the daemon config module. No real token is used.
-process.env.GRAVESHIFT_DAEMON_READ_TOKEN ??= 'doc-generation-only-read-token';
 // The merged boot schema needs these required values. Use ephemeral placeholders only for
 // document generation; no database or daemon connection is opened here.
 process.env.DATABASE_URL ??= 'postgresql://doc:doc@127.0.0.1:1/doc';
@@ -25,7 +23,7 @@ await app.close();
 
 // Adapter boundary: Swagger and the generator define their own OpenAPI object types.
 // openapi-typescript 6 drops Zod string patterns, so restore the assignee template literal here.
-const AGENT_ASSIGNEE_PATTERN = '^(needs_agent_)[\\s\\S]{0,}$';
+const AGENT_ASSIGNEE_PATTERN = '^(needs_agent_)[\\s\\S]{1,}$';
 const types = await openapiTS(document as OpenAPI3, {
   transform(schemaObject) {
     // The pinned generator's SchemaObject type omits type and pattern, so narrow at this boundary.

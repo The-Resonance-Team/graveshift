@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 
 import { AuditRepo } from '../../src/audit/audit.repo';
-import { verifyEntries } from '../../src/audit/chain';
+import { verifyEntries } from '@graveshift/core';
 import type { PrismaService } from '../../src/infra/prisma.service';
 import { dbTestEnabled, openTestDatabase, resetDatabase } from './fixtures';
 

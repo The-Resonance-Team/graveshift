@@ -65,9 +65,7 @@ describe('decisions', () => {
         () => T0,
         async (draft) => ({ key: draft.key }),
       ).admission,
-      policy,
       namespace: 'candy-shop',
-      now: () => T0,
       docker: { restart: async () => {} },
       kube: {
         rolloutRestart: async () => {
@@ -79,7 +77,7 @@ describe('decisions', () => {
     });
     const request = signed();
     expect((await actuator.execute(request)).status).toBe('failed');
-    expect((await actuator.execute(request)).reason).toBe('replay');
+    expect((await actuator.execute(request)).reason).toBe('already_completed');
   });
 
   test('audit events carry ids, never the secret or signature', async () => {
@@ -103,7 +101,6 @@ describe('decisions', () => {
           () => T0,
           async (draft) => ({ key: draft.key }),
         ).admission,
-        policy,
         namespace: 'n',
         docker: { restart: async () => {} },
         kube: { rolloutRestart: async () => {}, scale: async () => {} },
@@ -122,7 +119,9 @@ describe('approval token properties', () => {
           Array.from({ length: attempts }, () => actuator.execute(request)),
         );
         expect(outcomes.filter((o) => o.status === 'executed')).toHaveLength(1);
-        expect(outcomes.filter((o) => o.reason === 'replay')).toHaveLength(attempts - 1);
+        expect(outcomes.filter((o) => o.reason === 'execution_uncertain')).toHaveLength(
+          attempts - 1,
+        );
         expect(calls).toHaveLength(1);
       }),
     );

@@ -7,18 +7,18 @@ import { ProjectGrant } from '../../internal/project-grant';
 import { testProjectGrant } from '../../internal/testing/project-grant.fixture';
 import { InternalGuard } from '../../internal/internal.guard';
 import { InternalAuditController } from '../audit.controller';
-import { AuditRepo } from '../audit.repo';
+import { AUDIT_SINK, type AuditSink } from '../audit.sink';
 
 export const AUDIT_TEST_TOKEN = 'audit-test-only-internal-token-32chars';
 export const AUDIT_TEST_PROJECT = 'project-1';
 
-export async function createAuditTestApp(repo: Pick<AuditRepo, 'append'>) {
+export async function createAuditTestApp(repo: Pick<AuditSink, 'append'>) {
   const moduleRef = await Test.createTestingModule({
     controllers: [InternalAuditController],
     providers: [
       InternalGuard,
       { provide: ProjectGrant, useValue: testProjectGrant([AUDIT_TEST_PROJECT]) },
-      { provide: AuditRepo, useValue: repo },
+      { provide: AUDIT_SINK, useValue: repo },
       {
         provide: ConfigService,
         useValue: new ConfigService({

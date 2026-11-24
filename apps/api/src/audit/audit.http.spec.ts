@@ -1,12 +1,11 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test';
-import type { AuditEntry } from '@graveshift/core';
+import { GENESIS_HASH, hashEntry, type AuditEntry } from '@graveshift/core';
 import type { INestApplication } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import request from 'supertest';
 
 import { AuditBusy, AuditConflict } from './audit.errors';
-import type { AuditRepo } from './audit.repo';
-import { GENESIS_HASH, hashEntry } from './chain';
+import type { AuditSink } from './audit.sink';
 import { AUDIT_TEST_PROJECT, AUDIT_TEST_TOKEN, createAuditTestApp } from './testing/audit-http';
 
 const draft = {
@@ -22,7 +21,7 @@ const entry: AuditEntry = {
   prevHash: GENESIS_HASH,
   hash: hashEntry(facts, GENESIS_HASH),
 };
-const append = mock<AuditRepo['append']>(async () => entry);
+const append = mock<AuditSink['append']>(async () => entry);
 let app: INestApplication;
 
 describe('internal audit HTTP boundary', () => {

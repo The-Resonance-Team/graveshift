@@ -1,8 +1,13 @@
 import { describe, expect, test } from 'bun:test';
-import type { AuditEntry } from '@graveshift/core';
+import {
+  canonical,
+  GENESIS_HASH,
+  hashEntry,
+  type AuditEntry,
+  verifyEntries,
+} from '@graveshift/core';
 import fc from 'fast-check';
 
-import { GENESIS_HASH, canonical, hashEntry, verifyEntries } from './chain';
 import type { ChainDraft } from './audit.types';
 
 const at = '2026-11-21T00:00:00.000Z';

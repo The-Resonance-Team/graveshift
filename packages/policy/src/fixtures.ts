@@ -1,4 +1,5 @@
-import type { PolicyContext } from './decide';
+import type { SharedPolicyContext } from '@graveshift/core/policy-context';
+
 import { parsePolicy } from './load';
 import type { Policy } from './schema';
 
@@ -18,7 +19,7 @@ export const basePolicy: Policy = parsePolicy({
   default: 'deny',
 });
 
-export const baseContext: PolicyContext = {
+export const baseContext: SharedPolicyContext = {
   service: 'api',
   category: 'code_bug',
   signals: ['oom_killed'],

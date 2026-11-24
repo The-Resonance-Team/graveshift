@@ -1,5 +1,4 @@
 import type { PrRef } from '@graveshift/core';
-import { FixerFault, PublicationError } from '@graveshift/fixer';
 import type {
   ClaimResult,
   FixCompletion,
@@ -10,7 +9,7 @@ import type {
 } from '@graveshift/work';
 
 import { auditScopeOfCaller, fixAuditIdentity, fixPrIntentAudit } from './fix-audit';
-import type { PreparedFix } from './execution';
+import { FixExecutionError, type PreparedFix } from './execution';
 import type { FixOptions } from './run-fix';
 
 export async function publishFix(
@@ -67,7 +66,8 @@ export async function publishFix(
       outcome: { effect: 'allow', ok: true, pr: known, reason: null, failure: 'none', routing },
     });
   } catch (error) {
-    if (error instanceof PublicationError && error.reference !== undefined) known = error.reference;
+    const failure = error instanceof FixExecutionError ? error : undefined;
+    if (failure?.reference !== undefined) known = failure.reference;
     if (!begun) {
       return options.runtime.finish(caller, id, {
         ...fence(),
@@ -82,18 +82,15 @@ export async function publishFix(
         },
       });
     }
-    if (
-      known === null &&
-      ((error instanceof PublicationError && !error.uncertain) || error instanceof FixerFault)
-    ) {
+    if (known === null && failure !== undefined && failure.failure !== 'publication_uncertain') {
       return options.runtime.abortPublication(caller, id, {
         ...fence(),
         outcome: {
           effect: 'deny',
           ok: false,
           pr: null,
-          reason: error.message,
-          failure: 'pr_failed',
+          reason: failure.message,
+          failure: failure.failure,
           routing,
         },
       });
@@ -118,7 +115,7 @@ export async function publishFix(
       effect: 'allow',
       ok: false,
       pr: snapshot.item.draftPr ?? known,
-      reason: 'Publication needs reconciliation',
+      reason: failure?.message ?? 'Publication needs reconciliation',
       failure: 'publication_uncertain',
       routing,
     };

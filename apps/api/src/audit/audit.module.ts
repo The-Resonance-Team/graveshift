@@ -1,28 +1,23 @@
 import { Global, Module } from '@nestjs/common';
 
 import { InternalAuditController } from './audit.controller';
-import { PostgresAuditSink } from './audit.postgres.sink';
 import { AuditRepo } from './audit.repo';
-import { AUDIT_SINK } from './audit.sink';
-import { AuditRepo as PlatformAuditRepo } from './repo/audit.repo';
+import { AUDIT_READER, AUDIT_SINK } from './audit.sink';
 
 /**
- * The platform audit chain stays global. The durable model-audit repository and
- * its internal append endpoint are layered on top of it.
- *
- * `AUDIT_SINK` is the only seam a use case uses to write an audit entry. `PostgresAuditSink`
- * is its only implementation: it writes through `AuditRepo.append` and refuses a record with
- * no authenticated scope, so an entry can never be written outside a Project's own chain.
+ * The platform audit chain stays global. `AuditRepo` is the one Postgres implementation of
+ * both seams: `AUDIT_SINK` for every write and `AUDIT_READER` for the ordered projections.
+ * It owns the chain from `@graveshift/core`, eventKey dedup, serializable retry and the
+ * authenticated scope check. Tests replace it at the same seams with an in-memory adapter.
  */
 @Global()
 @Module({
   controllers: [InternalAuditController],
   providers: [
-    PlatformAuditRepo,
     AuditRepo,
-    PostgresAuditSink,
-    { provide: AUDIT_SINK, useExisting: PostgresAuditSink },
+    { provide: AUDIT_SINK, useExisting: AuditRepo },
+    { provide: AUDIT_READER, useExisting: AuditRepo },
   ],
-  exports: [PlatformAuditRepo, AuditRepo, AUDIT_SINK],
+  exports: [AuditRepo, AUDIT_SINK, AUDIT_READER],
 })
 export class AuditModule {}

@@ -8,7 +8,7 @@ import { EnvelopeError, prepareEnvelope } from '@graveshift/core';
 import type { Publisher } from '@graveshift/events';
 import { redact } from '@graveshift/redactor';
 
-import { AuditRepo } from '../../audit/repo/audit.repo';
+import { AUDIT_SINK, type AuditSink } from '../../audit/audit.sink';
 import { DeployRepo } from '../../deploys/deploy.repo';
 import { EVENT_PUBLISHER, type VerifiedCredential } from '../auth.types';
 import type { PublishEventDto } from '../dto/publish-event.dto';
@@ -20,7 +20,7 @@ export class EventIngestService {
   constructor(
     @Inject(EVENT_PUBLISHER) private readonly publisher: Publisher,
     private readonly deploys: DeployRepo,
-    private readonly audit: AuditRepo,
+    @Inject(AUDIT_SINK) private readonly audit: AuditSink,
   ) {}
 
   async ingest(
@@ -50,8 +50,8 @@ export class EventIngestService {
     });
     await this.publisher.publish(envelope);
     if (deployment === undefined) {
-      await this.audit.append({
-        projectId: body.projectId,
+      await this.audit.append(body.projectId, {
+        key: `event:unassigned:${envelope.id}`,
         actor: 'event-ingest',
         type: 'event.unassigned',
         payload: {

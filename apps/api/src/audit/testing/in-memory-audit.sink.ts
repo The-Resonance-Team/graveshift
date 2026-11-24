@@ -1,4 +1,11 @@
-import { isAuditScopeUsable, type AuditRecord, type AuditSink } from '../audit.sink';
+import { GENESIS_HASH, makeAuditEntry, type AuditDraft, type AuditEntry } from '@graveshift/core';
+
+import {
+  isAuditScopeUsable,
+  type AuditRecord,
+  type AuditSink,
+  type AuditTransaction,
+} from '../audit.sink';
 
 export interface InMemoryAuditSinkOptions {
   // When set, a matching append rejects with this error, so a test can exercise a sink failure.
@@ -18,37 +25,53 @@ const facts = (record: AuditRecord): string =>
   JSON.stringify([record.actor, record.type, record.incidentId ?? null, canonical(record.payload)]);
 
 /**
- * The test sink. It keeps every record in memory and makes no database call, so a test can
- * assert what was audited and in which chain. A record is cloned, so a later payload change
- * cannot edit it. One map per projectId reproduces the production rule that each Project owns
- * its own chain, so a test cannot pass on a write that leaked into another Project.
+ * The test adapter at the `AUDIT_SINK` seam. It keeps every record in memory and makes no
+ * database call, so a test can assert what was audited and in which chain. A record is cloned,
+ * so a later payload change cannot edit it. One map per projectId reproduces the production
+ * rule that each Project owns its own chain, so a test cannot pass on a write that leaked into
+ * another Project.
  */
 export class InMemoryAuditSink implements AuditSink {
   private readonly chains = new Map<string, AuditRecord[]>();
+  private readonly entriesByProject = new Map<string, AuditEntry[]>();
   private readonly seen = new Map<string, string>();
 
   constructor(private readonly options: InMemoryAuditSinkOptions = {}) {}
 
-  async append(record: AuditRecord): Promise<void> {
-    // ADR 0018: the real sink refuses a record with no authenticated scope, so the test sink
-    // refuses it too and a test cannot pass on an unscoped write.
-    if (!isAuditScopeUsable({ projectId: record.projectId, actor: record.actor })) {
+  append(projectId: string, draft: AuditDraft): Promise<AuditEntry> {
+    // ADR 0018: the real adapter refuses a record with no authenticated scope, so the test
+    // adapter refuses it too and a test cannot pass on an unscoped write.
+    if (!isAuditScopeUsable({ projectId, actor: draft.actor })) {
       throw new Error('an audit entry needs the authenticated projectId and actor');
     }
+    const record: AuditRecord = structuredClone({ ...draft, projectId });
     const { failWith, failWhen } = this.options;
     if (failWhen === undefined ? failWith !== undefined : failWhen(record)) {
       throw failWith ?? SINK_DOWN;
     }
-    const clone = structuredClone(record);
-    const key = `${clone.projectId}:${clone.key}`;
+    const key = `${record.projectId}:${record.key}`;
     const prior = this.seen.get(key);
     if (prior !== undefined) {
-      if (prior !== facts(clone)) throw new Error(`audit key ${clone.key} conflicts`);
-      return;
+      if (prior !== facts(record)) throw new Error(`audit key ${record.key} conflicts`);
+      const priorEntries = this.entriesByProject.get(record.projectId) ?? [];
+      return Promise.resolve(priorEntries[priorEntries.length - 1]!);
     }
-    const chain = this.chains.get(clone.projectId) ?? [];
-    this.seen.set(key, facts(clone));
-    this.chains.set(clone.projectId, [...chain, clone]);
+    const chain = this.chains.get(record.projectId) ?? [];
+    const entries = this.entriesByProject.get(record.projectId) ?? [];
+    const prevHash = entries.at(-1)?.hash ?? GENESIS_HASH;
+    const entry = makeAuditEntry(chain.length + 1, new Date().toISOString(), draft, prevHash);
+    this.seen.set(key, facts(record));
+    this.chains.set(record.projectId, [...chain, record]);
+    this.entriesByProject.set(record.projectId, [...entries, entry]);
+    return Promise.resolve(entry);
+  }
+
+  appendInTx(_tx: AuditTransaction, projectId: string, draft: AuditDraft): Promise<AuditEntry> {
+    return this.append(projectId, draft);
+  }
+
+  transaction<Result>(work: (tx: AuditTransaction) => Promise<Result>): Promise<Result> {
+    return work(undefined as unknown as AuditTransaction);
   }
 
   /** Every record of one audit type across every chain, in append order. */

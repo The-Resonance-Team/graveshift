@@ -2,7 +2,8 @@ import { expect, test } from 'bun:test';
 
 import { createAdmissionHttp } from './audit-http';
 import { runtimeClaim } from './claims';
-import { signed } from './test-helpers';
+import { signRequest } from './sign';
+import { SECRET, signed, unsigned } from './test-helpers';
 
 const config = {
   apiUrl: 'http://127.0.0.1:3000',
@@ -16,6 +17,35 @@ const completion = {
   requestHash: input.requestHash,
   result: { status: 'executed', reason: 'executed' } as const,
 };
+
+test('recheck denies an expired claim locally without an HTTP call', async () => {
+  const calls: string[] = [];
+  const admission = createAdmissionHttp({
+    ...config,
+    fetchFn: async (url) => {
+      calls.push(url.pathname);
+      return Response.json({});
+    },
+  });
+  const now = Date.now();
+  const draft = unsigned();
+  const current = signRequest(
+    {
+      ...draft,
+      approval: {
+        ...draft.approval,
+        issuedAt: new Date(now - 1000).toISOString(),
+        expiresAt: new Date(now + 60_000).toISOString(),
+      },
+    },
+    SECRET,
+  );
+  expect(await admission.recheck?.(runtimeClaim(current))).toBeUndefined();
+  expect(await admission.recheck?.(runtimeClaim(signed({ issuedOffset: -20 * 60_000 })))).toBe(
+    'expired',
+  );
+  expect(calls).toEqual([]);
+});
 
 test('the controlled client sends claim and completion envelopes to their dedicated routes', async () => {
   const calls: Array<{ path: string; init: RequestInit | undefined }> = [];

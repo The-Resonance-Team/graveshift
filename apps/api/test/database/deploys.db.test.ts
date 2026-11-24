@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 
-import { AuditRepo } from '../../src/audit/repo/audit.repo';
+import { AuditRepo } from '../../src/audit/audit.repo';
 import { DeployRepo } from '../../src/deploys/deploy.repo';
 import type { PrismaService } from '../../src/infra/prisma.service';
 import { dbTestEnabled, openTestDatabase, resetDatabase } from './fixtures';
@@ -233,7 +233,7 @@ describe.skipIf(!dbTestEnabled)('v3 deployment database rules', () => {
   test('an audit append failure rolls back the deploy write', async () => {
     await seed();
     const failing = {
-      appendInTransaction: async () => {
+      appendInTx: async () => {
         throw new Error('audit unavailable');
       },
     } as unknown as AuditRepo;

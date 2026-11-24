@@ -10,7 +10,7 @@ import {
 } from '@graveshift/work';
 import { Prisma } from '@prisma/client';
 
-import type { AuditRepo } from '../audit/audit.repo';
+import type { AuditSink } from '../audit/audit.sink';
 import { newLease, requireLiveLease } from './work-item.lease';
 import { safeParams, safeProgress, workAudit } from './work-item.mapper';
 import type { WorkAgents } from './work-item.policy';
@@ -27,7 +27,7 @@ import {
 
 export async function saveQuestion(
   tx: Prisma.TransactionClient,
-  audit: AuditRepo,
+  audit: AuditSink,
   agents: WorkAgents,
   caller: WorkCaller,
   id: string,
@@ -109,7 +109,7 @@ export async function saveQuestion(
 
 export async function applyAnswer(
   tx: Prisma.TransactionClient,
-  audit: AuditRepo,
+  audit: AuditSink,
   agents: WorkAgents,
   caller: WorkCaller,
   id: string,

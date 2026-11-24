@@ -6,6 +6,7 @@ import { createDockerRestarter, createKubeWriter } from './backends';
 import { createActuator } from './execute';
 import { createActionHandler, MAX_ACTION_BODY_BYTES } from './handler';
 import { admissionErrorCode } from './startup-error';
+import { createBreaker } from './guards';
 import { MIN_SECRET_LENGTH } from './sign';
 import { ActuatorError, type KubeWriter, type RequiredAudit } from './types';
 
@@ -40,16 +41,22 @@ const kube: KubeWriter = env.KUBERNETES_SERVICE_HOST
 const requiredAudit: RequiredAudit = async (draft) => ({ key: draft.key });
 const policy = (await loadGraveshiftConfig()).policy;
 
+const breaker = createBreaker({
+  page: (service, reason) => log('warn', 'runtime action circuit opened', { service, reason }),
+});
+const envMode = env.GRAVESHIFT_MODE;
+
 // Durable admission is mandatory. If the store cannot be opened, do not start.
 const stateDir = env.ACTUATOR_STATE_DIR ?? '/data/graveshift-actuator';
 let durableAdmission: RequiredAdmission;
 try {
-  durableAdmission = createDurableAdmission(
-    `${stateDir}/admission.db`,
+  durableAdmission = createDurableAdmission(`${stateDir}/admission.db`, {
     policy,
-    () => Date.now(),
-    requiredAudit,
-  );
+    now: Date.now,
+    audit: requiredAudit,
+    ...(envMode === undefined ? {} : { envMode }),
+    blocked: (service) => (breaker.isOpen(service) ? 'circuit_open' : undefined),
+  });
 } catch (error) {
   // Log only the error code. The store path is deployment-local, not log data.
   log('fatal', 'Durable admission store is unavailable; refusing to start', {
@@ -62,10 +69,7 @@ const actuator = createActuator({
   requiredAudit,
   durableAdmission,
   durableAudit: false,
-  ...(env.GRAVESHIFT_MODE === undefined ? {} : { envMode: env.GRAVESHIFT_MODE }),
-  // Boot config is the single source of truth (base convention); the durable audit
-  // controls from our architecture remain wired alongside it.
-  policy,
+  breaker,
   namespace: env.TARGET_NAMESPACE ?? 'candy-shop',
   docker: env.DOCKER_PROXY_URL
     ? createDockerRestarter(env.DOCKER_PROXY_URL)

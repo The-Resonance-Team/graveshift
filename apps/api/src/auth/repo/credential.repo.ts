@@ -1,7 +1,7 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { CredentialKind, type Credential, Prisma } from '@prisma/client';
 
-import { AuditRepo } from '../../audit/repo/audit.repo';
+import { AUDIT_SINK, type AuditSink } from '../../audit/audit.sink';
 import { PrismaService } from '../../infra/prisma.service';
 import type { CredentialRecord, Principal } from '../auth.types';
 
@@ -73,7 +73,7 @@ async function lockCredentialWrites(
 export class PrismaCredentialRepo extends CredentialRepo {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly audit: AuditRepo,
+    @Inject(AUDIT_SINK) private readonly audit: AuditSink,
   ) {
     super();
   }
@@ -113,7 +113,8 @@ export class PrismaCredentialRepo extends CredentialRepo {
         }
         throw error;
       }
-      await this.audit.appendInTransaction(tx, record.projectId, {
+      await this.audit.appendInTx(tx, record.projectId, {
+        key: `credential:created:${record.id}`,
         actor: record.clientId,
         type: 'credential.created',
         payload: {
@@ -147,7 +148,8 @@ export class PrismaCredentialRepo extends CredentialRepo {
         data: { revokedAt: new Date(at) },
       });
       if (changed.count === 0) return true;
-      await this.audit.appendInTransaction(tx, record.projectId, {
+      await this.audit.appendInTx(tx, record.projectId, {
+        key: `credential:revoked:${record.id}`,
         actor: principal.clientId,
         type: 'credential.revoked',
         payload: { credentialId: record.id, kind: record.kind, name: record.name },
@@ -179,7 +181,8 @@ export class PrismaCredentialRepo extends CredentialRepo {
         data: { expirationAuditedAt: new Date(at) },
       });
       if (changed.count === 0) return;
-      await this.audit.appendInTransaction(tx, record.projectId, {
+      await this.audit.appendInTx(tx, record.projectId, {
+        key: `credential:expired:${record.id}`,
         actor: 'system',
         type: 'credential.expired',
         payload: { credentialId: record.id, kind: record.kind, name: record.name },

@@ -118,6 +118,13 @@ describe('boot env config', () => {
       GRAVESHIFT_DAEMON_URL: 'http://10.attacker.example.test:2602',
     },
     { GRAVESHIFT_DAEMON_URL: 'http://192.168.1.1:2602' },
+    { GRAVESHIFT_DAEMON_READ_URL: 'https://remote.example.test' },
+    { GRAVESHIFT_DAEMON_READ_URL: 'http://192.168.1.1:2602' },
+    {
+      GRAVESHIFT_PRIVATE_HOST: '10.attacker.example.test',
+      GRAVESHIFT_DAEMON_READ_URL: 'http://10.attacker.example.test:2602',
+    },
+    { GRAVESHIFT_DAEMON_READ_URL: 'http://secret@127.0.0.1:2602' },
     { GRAVESHIFT_API_URL: 'http://secret@127.0.0.1:3000' },
     { GRAVESHIFT_API_URL: 'http://127.0.0.1:3000/hidden' },
   ])('rejects invalid or remote boot settings: %j', (change) => {
@@ -145,6 +152,7 @@ describe('boot env config', () => {
         ...base,
         GRAVESHIFT_PRIVATE_HOST: 'daemon',
         GRAVESHIFT_DAEMON_URL: 'http://daemon:2602',
+        GRAVESHIFT_DAEMON_READ_URL: 'http://daemon:2602',
       }).success,
     ).toBe(true);
     expect(
@@ -152,6 +160,7 @@ describe('boot env config', () => {
         ...base,
         GRAVESHIFT_PRIVATE_HOST: 'remote.example.test',
         GRAVESHIFT_DAEMON_URL: 'https://remote.example.test',
+        GRAVESHIFT_DAEMON_READ_URL: 'https://remote.example.test',
       }).success,
     ).toBe(false);
   });

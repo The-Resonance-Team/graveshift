@@ -1,8 +1,11 @@
-import type { Effect, PolicyAction, PolicyContext, PolicyDecision } from './decide';
+import type { SharedPolicyContext } from '@graveshift/core/policy-context';
+
+import { type PolicyAction, isRuntimeAction } from './action';
+import type { Effect, PolicyDecision } from './decide';
 import { resolveMode } from './mode';
 import type { Policy, Rule } from './schema';
 
-export function matches(rule: Rule, action: PolicyAction, ctx: PolicyContext): boolean {
+export function matches(rule: Rule, action: PolicyAction, ctx: SharedPolicyContext): boolean {
   const names = Array.isArray(rule.action) ? rule.action : [rule.action];
   if (!names.includes('*') && !names.includes(action.name)) return false;
   const { category, services, signals } = rule.when ?? {};
@@ -17,9 +20,13 @@ export function matches(rule: Rule, action: PolicyAction, ctx: PolicyContext): b
   return true;
 }
 
-export function gate(policy: Policy, action: PolicyAction, ctx: PolicyContext): string | undefined {
+export function gate(
+  policy: Policy,
+  action: PolicyAction,
+  ctx: SharedPolicyContext,
+): string | undefined {
   const { limits, llm } = policy;
-  const runtime = action.name !== 'open_pr';
+  const runtime = isRuntimeAction(action);
   const threshold = runtime ? llm.minConfidenceForAction : llm.minConfidenceForPr;
   if (ctx.confidence < threshold) return 'low_confidence';
   const { counters } = ctx;
@@ -36,7 +43,7 @@ export function gate(policy: Policy, action: PolicyAction, ctx: PolicyContext): 
   return undefined;
 }
 
-export function decisionFor(policy: Policy, ctx: PolicyContext) {
+export function decisionFor(policy: Policy, ctx: SharedPolicyContext) {
   const { mode, warning } = resolveMode(policy.mode, ctx.envMode);
   return {
     mode,

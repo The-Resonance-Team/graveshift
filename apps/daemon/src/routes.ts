@@ -1,11 +1,9 @@
-import { handleReadRequest, READ_BASE } from './read-routes';
-import type { DaemonReadState } from './read-state';
-
 export type FetchHandler = (request: Request) => Response | Promise<Response>;
 
 const JSON_HEADERS = { 'content-type': 'application/json', 'cache-control': 'no-store' };
 const TEXT_HEADERS = { 'content-type': 'text/plain; charset=utf-8' };
 
+/** Health stays unauthenticated and carries no daemon data. */
 export const handleRequest = (request: Request): Response => {
   const path = new URL(request.url).pathname;
   if (path === '/healthz') {
@@ -17,16 +15,10 @@ export const handleRequest = (request: Request): Response => {
   return new Response(null, { headers: TEXT_HEADERS, status: 404 });
 };
 
-/** Health stays unauthenticated; only the read surface needs a local token. */
-export const createRequestHandler = (state: DaemonReadState, readToken: string): FetchHandler => {
-  const read = handleReadRequest(state, readToken);
-  return (request: Request): Response => {
-    const path = new URL(request.url).pathname;
-    if (path === READ_BASE || path.startsWith(`${READ_BASE}/`)) return read(request);
-    return handleRequest(request);
-  };
-};
-
+/**
+ * The daemon serves only two private surfaces and health. Commands and reads
+ * both authenticate with the ADR 0020 daemon internal token in their handlers.
+ */
 export function daemonHandler(commands: FetchHandler, reads: FetchHandler): FetchHandler {
   return (request) => {
     const path = new URL(request.url).pathname;

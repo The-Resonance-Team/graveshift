@@ -9,14 +9,14 @@ import { createObservations, type ObservationOptions } from './observations';
 import { HttpFailure } from './private-http';
 import { harness } from './flow-harness';
 import { workActivation } from './work-activation';
-import { processQueued } from './nats';
-import { publishSubject } from '@graveshift/events';
+import { processQueued, publishSubject } from '@graveshift/events';
 
 function state() {
   const views = new Map<string, RecordedHaunting>();
   const receipts = new Map<string, string>();
   const work = new Set<string>();
   const activated: string[] = [];
+  const seenProjects: string[] = [];
   let modelCalls = 0;
   let loseDiagnosisAck = false;
   let rejectFirstWrite = false;
@@ -42,6 +42,7 @@ function state() {
     if (path === '/internal/hauntings/list') return [...views.values()].reverse().slice(0, 50);
     if (path === '/internal/hauntings/active') {
       const ref = z.object({ projectId: z.string(), service: z.string() }).parse(body);
+      seenProjects.push(ref.projectId);
       return (
         [...views.values()].find(
           (view) =>
@@ -60,6 +61,7 @@ function state() {
       const input = z
         .object({ projectId: z.string(), eventId: z.string(), view: RecordedHauntingSchema })
         .parse(body);
+      seenProjects.push(input.projectId);
       if (rejectFirstWrite) {
         rejectFirstWrite = false;
         throw new Error('Storage unavailable');
@@ -85,12 +87,11 @@ function state() {
     throw new Error('Unexpected API call');
   });
   const options: ObservationOptions = {
-    projectId: caller.projectId,
     api,
     gateway,
     agents: [agent({ role: 'diagnosis' })],
     logs: async () => ['Out of memory'],
-    onWork: async (_item, incidentId) => {
+    onWork: async (_item, incidentId, _projectId) => {
       activated.push(incidentId);
     },
   };
@@ -99,6 +100,7 @@ function state() {
     views,
     work,
     activated,
+    seenProjects,
     receipts,
     modelCalls: () => modelCalls,
     loseAck: () => {
@@ -157,14 +159,31 @@ describe('queued observation orchestration', () => {
     expect(fixture.receipts.size).toBe(2);
   });
 
-  test('foreign projects fail and crew output cannot re-enter detection', async () => {
+  test('scope comes from each Event, while crew output cannot re-enter detection', async () => {
     const fixture = state();
     const process = await createObservations(fixture.options);
-    await expect(process({ ...envelope, projectId: 'foreign' })).rejects.toThrow('another project');
-    await process({ ...envelope, id: 'crew-output', type: 'diagnosis.ready' });
-    expect(fixture.work.size).toBe(0);
-    expect(fixture.views.size).toBe(0);
-    expect(fixture.modelCalls()).toBe(0);
+    await process({ ...envelope, projectId: 'project-2' });
+    expect([...new Set(fixture.seenProjects)]).toEqual(['project-2']);
+    await process({
+      ...envelope,
+      projectId: 'project-2',
+      id: 'crew-output',
+      type: 'diagnosis.ready',
+    });
+    expect(fixture.work.size).toBe(1);
+    expect(fixture.views.size).toBe(1);
+    expect(fixture.modelCalls()).toBe(1);
+  });
+
+  test('onWork receives the Project carried by the Event', async () => {
+    const fixture = state();
+    const bound: string[] = [];
+    fixture.options.onWork = async (_item, _incidentId, projectId) => {
+      bound.push(projectId);
+    };
+    const process = await createObservations(fixture.options);
+    await process({ ...envelope, projectId: 'project-2' });
+    expect(bound).toEqual(['project-2']);
   });
 
   test('a queued Haunting activates its Agent assignment before acknowledgement', async () => {
@@ -178,7 +197,8 @@ describe('queued observation orchestration', () => {
       await completed.promise;
       return execute(input);
     };
-    fixture.options.onWork = workActivation(flow.commands(), caller.projectId);
+    fixture.options.onWork = (workItem, incidentId, projectId) =>
+      workActivation(flow.commands(), projectId)(workItem, incidentId);
     const process = await createObservations(fixture.options);
     const acknowledgements: string[] = [];
     const queued = processQueued(
@@ -193,8 +213,8 @@ describe('queued observation orchestration', () => {
           return true;
         },
       },
-      caller.projectId,
       process,
+      { grantedProjectIds: [caller.projectId] },
     );
     await entered.promise;
     expect(acknowledgements).toEqual([]);

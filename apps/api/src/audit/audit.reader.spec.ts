@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test';
 import { GENESIS_HASH, makeAuditEntry, type AuditEntry } from '@graveshift/core';
 import type { AuditEntry as PrismaAuditEntry } from '@prisma/client';
 
-import type { PrismaService } from '../../infra/prisma.service';
+import type { PrismaService } from '../infra/prisma.service';
 import { AuditRepo } from './audit.repo';
 
 const PROJECT = 'project-1';

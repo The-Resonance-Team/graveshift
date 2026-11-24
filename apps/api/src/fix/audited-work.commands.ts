@@ -76,7 +76,7 @@ export class AuditedWorkCommands implements WorkCommands {
   /** The one audit event for one attempt, written only after the daemon call returned. */
   private async record(scope: AuditScope, outcome: FixAuditOutcome): Promise<void> {
     try {
-      await this.sink.append(fixOutcomeAudit(scope, outcome));
+      await this.sink.append(scope.projectId, fixOutcomeAudit(scope, outcome));
     } catch {
       throw new ServiceUnavailableException(AUDIT_FAILED);
     }

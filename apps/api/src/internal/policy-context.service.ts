@@ -1,7 +1,7 @@
 import { SharedPolicyContextSchema } from '@graveshift/core/policy-context';
 import { Inject, Injectable, ServiceUnavailableException } from '@nestjs/common';
 
-import { AuditRepo } from '../audit/audit.repo';
+import { AUDIT_READER, type AuditReader } from '../audit/audit.sink';
 import { BOOT_CONFIG, type RootBootConfig } from '../config/boot.config';
 import { HauntingRepo } from '../hauntings/haunting.repo';
 import { ProjectGrant } from './project-grant';
@@ -14,7 +14,7 @@ export class PolicyContextService {
     @Inject(BOOT_CONFIG) private readonly config: RootBootConfig,
     private readonly hauntings: HauntingRepo,
     private readonly workItems: WorkItemRepo,
-    private readonly audit: AuditRepo,
+    @Inject(AUDIT_READER) private readonly audit: AuditReader,
     private readonly grant: ProjectGrant,
   ) {}
 

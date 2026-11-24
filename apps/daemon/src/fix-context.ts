@@ -1,8 +1,11 @@
 import { DiagnosisSchema, type Diagnosis, type Incident } from '@graveshift/core';
 import { RecordedHauntingSchema, type HauntingCategory } from '@graveshift/core/recorded';
-import { SharedPolicyContextSchema } from '@graveshift/core/policy-context';
+import {
+  SharedPolicyContextSchema,
+  type SharedPolicyContext,
+} from '@graveshift/core/policy-context';
 import type { RepoPolicy } from '@graveshift/fixer';
-import type { Policy, PolicyContext } from '@graveshift/policy';
+import type { Policy } from '@graveshift/policy';
 import type { WorkCaller, WorkSnapshot } from '@graveshift/work';
 
 import type { PrivateApi } from './api-client';
@@ -14,7 +17,7 @@ export interface FixContext {
   /** The deployed commit SHA inherited from the Event that opened the Haunting. */
   deploymentId: string;
   repo: RepoPolicy;
-  policy: PolicyContext;
+  policy: SharedPolicyContext;
 }
 
 const COMMIT_SHA = /^[0-9a-f]{40}$/;
@@ -75,11 +78,7 @@ export function contextClient(api: PrivateApi, policy: Policy, envMode?: string)
         deploymentId: view.deploymentId,
         repo,
         policy: {
-          service: facts.service,
-          category: view.category,
-          signals: facts.signals,
-          confidence: facts.confidence,
-          counters: facts.counters,
+          ...facts,
           ...(mode === undefined ? {} : { envMode: mode }),
         },
       };

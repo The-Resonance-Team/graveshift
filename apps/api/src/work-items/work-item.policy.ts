@@ -1,12 +1,10 @@
 import { mergeAgentTemplates, type AgentConfig } from '@graveshift/agents';
 import type { GraveshiftConfig } from '@graveshift/config';
-import { WorkItemClientConfigSchema, type WorkItemClientConfig } from '@graveshift/core';
 
 export const WORK_ITEM_POLICY = Symbol('WORK_ITEM_POLICY');
 
 export interface WorkItemPolicy {
   readonly agentNames: readonly string[];
-  readonly clientConfig: WorkItemClientConfig;
   readonly autoFixEnabled: boolean;
 }
 
@@ -18,7 +16,6 @@ export function createWorkItemPolicy(config: GraveshiftConfig): WorkItemPolicy {
   );
   return {
     agentNames,
-    clientConfig: WorkItemClientConfigSchema.parse({}),
     autoFixEnabled: config.fix.enabled,
   };
 }

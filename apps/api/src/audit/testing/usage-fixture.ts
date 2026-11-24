@@ -1,10 +1,9 @@
-import type { AuditDraft } from '@graveshift/core';
+import { GENESIS_HASH, hashEntry, type AuditDraft } from '@graveshift/core';
 import { Prisma } from '@prisma/client';
 
 import type { PrismaService } from '../../infra/prisma.service';
 import { normalizeDraft } from '../audit.mapper';
 import { AUDIT_SELECT } from '../audit.select';
-import { GENESIS_HASH, hashEntry } from '../chain';
 
 export const DATABASE_NOW = Prisma.sql`statement_timestamp() AT TIME ZONE 'UTC'`;
 export const UTC_DAY = Prisma.sql`date_trunc('day', ${DATABASE_NOW})`;

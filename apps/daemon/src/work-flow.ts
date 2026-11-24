@@ -17,7 +17,8 @@ import { runFix, type FixOptions } from './run-fix';
 import { replayWork } from './recovery';
 
 export interface WorkFlowOptions extends FixOptions {
-  projectId: string;
+  /** The granted set. A command carries its own Project; the boot Project is not a fallback. */
+  projectIds: readonly string[];
   agents: readonly AgentConfig[];
   runtime: WorkRuntime;
   workerId?: string;
@@ -32,7 +33,7 @@ export function createWorkCommands(options: WorkFlowOptions): WorkCommands {
   const { runtime, agents } = options;
   const workerId = options.workerId ?? crypto.randomUUID();
   const verify = (caller: WorkCaller) => {
-    if (caller.projectId !== options.projectId) {
+    if (caller.projectId.length === 0 || !options.projectIds.includes(caller.projectId)) {
       throw new WorkError('PROJECT_FORBIDDEN', 'Work item belongs to another project');
     }
   };

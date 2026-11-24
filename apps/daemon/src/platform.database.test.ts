@@ -1,12 +1,11 @@
 import { FixResultSchema, WorkRoutingSchema, CreatedWorkResultSchema } from '@graveshift/work';
-import { publishSubject } from '@graveshift/events';
+import { processQueued, publishSubject } from '@graveshift/events';
 import { afterEach, beforeEach, describe, expect, spyOn, test } from 'bun:test';
 import request from 'supertest';
 
 import type { PrismaService } from '../../api/src/infra/prisma.service';
 import { dbTestEnabled, openTestDatabase, resetDatabase } from '../../api/test/database/fixtures';
 import { caller, envelope } from './flow-fixtures';
-import { processQueued } from './nats';
 import { createPlatform, TEST_BASE_SHA } from './platform.fixture';
 import { publicCommand } from './platform-http.fixture';
 import { workActivation } from './work-activation';
@@ -194,7 +193,7 @@ describe.skipIf(!dbTestEnabled)('Postgres API and daemon composition over privat
         return true;
       },
     };
-    await processQueued(delivery, caller.projectId, observe);
+    await processQueued(delivery, observe, { grantedProjectIds: [caller.projectId] });
     expect(acknowledgements).toEqual(['ack']);
     expect(await db.workItem.count()).toBe(1);
     expect(await db.fixAttempt.count()).toBe(1);
@@ -205,7 +204,7 @@ describe.skipIf(!dbTestEnabled)('Postgres API and daemon composition over privat
       closedAt: expect.any(Date),
     });
     const restarted = await platform.observe();
-    await processQueued(delivery, caller.projectId, restarted);
+    await processQueued(delivery, restarted, { grantedProjectIds: [caller.projectId] });
     expect(acknowledgements).toEqual(['ack', 'ack']);
     expect(await db.fixAttempt.count()).toBe(1);
     expect(platform.models).toHaveLength(2);

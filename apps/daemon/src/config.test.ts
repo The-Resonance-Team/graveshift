@@ -1,7 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 import { Effect } from 'effect';
 
-import { DEFAULT_PORT, parsePort, parseReadToken } from './config';
+import { DEFAULT_PORT, parsePort } from './config';
 
 describe('PORT validation', () => {
   test('missing PORT uses the default', async () => {
@@ -18,20 +18,5 @@ describe('PORT validation', () => {
       values.map((value) => Effect.runPromise(Effect.flip(parsePort(value)))),
     );
     for (const error of errors) expect(error._tag).toBe('InvalidPort');
-  });
-});
-
-describe('daemon read token', () => {
-  test('the token has no default and boot fails closed when it is missing', async () => {
-    expect(await Effect.runPromise(Effect.flip(parseReadToken(undefined)))).toMatchObject({
-      _tag: 'MissingReadToken',
-    });
-    expect(await Effect.runPromise(Effect.flip(parseReadToken('')))).toMatchObject({
-      _tag: 'MissingReadToken',
-    });
-  });
-
-  test('a provided token is accepted', async () => {
-    expect(await Effect.runPromise(parseReadToken('a-read-token'))).toBe('a-read-token');
   });
 });

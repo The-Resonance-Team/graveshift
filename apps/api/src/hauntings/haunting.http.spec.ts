@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test';
 import request from 'supertest';
 
 import { AuditConflict } from '../audit/audit.errors';
+import { DeploymentClosure } from '../deploys/deployment-closure';
 import { DeployRepo } from '../deploys/deploy.repo';
 import { ProjectGrant } from '../internal/project-grant';
 import { testProjectGrant } from '../internal/testing/project-grant.fixture';
@@ -26,6 +27,7 @@ const list = mock<HauntingRepo['list']>(async () => [HAUNTING_FIXTURE]);
 const get = mock<HauntingRepo['get']>(async () => HAUNTING_FIXTURE);
 const context = mock<HauntingRepo['context']>(async () => HAUNTING_FIXTURE);
 const closeFirst = mock<DeployRepo['closeFirst']>(async () => true);
+const deploys = { closeFirst } as unknown as DeployRepo;
 let app: INestApplication;
 
 describe('private Haunting boundary', () => {
@@ -43,7 +45,7 @@ describe('private Haunting boundary', () => {
           }),
         },
         { provide: HauntingRepo, useValue: { upsert, list, get, context } },
-        { provide: DeployRepo, useValue: { closeFirst } },
+        { provide: DeploymentClosure, useValue: new DeploymentClosure(deploys) },
       ],
     }).compile();
     app = moduleRef.createNestApplication();

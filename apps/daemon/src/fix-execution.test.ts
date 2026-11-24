@@ -191,8 +191,58 @@ describe('concrete daemon fix executor', () => {
     });
     const request = await input();
     await expect(withFixAuditScope(() => executor(request))).rejects.toMatchObject({
-      code: 'CHECK_FAILED',
+      failure: 'patch_rejected',
     });
     expect(recording.writes).toEqual([]);
+  });
+
+  test('a fixer fault is adapted to a work-level failure at the executor seam', async () => {
+    const recording = recorded();
+    const model = configured();
+    const client = {
+      ...recording.client,
+      createBlob: async () => {
+        throw new Error('blob write failed');
+      },
+    };
+    const executor = createFixExecutor({
+      client,
+      gateway: model.gateway,
+      verification: { 'team/grave': { commands: [['git', 'diff', '--check']], timeoutMs: 10_000 } },
+      dashboardUrl: '',
+      audit: async () => {},
+      runner: gitChecks,
+    });
+    const request = await input();
+    const prepared = await withFixAuditScope(() => executor(request));
+    await expect(prepared.publish()).rejects.toMatchObject({
+      failure: 'pr_failed',
+      message: 'draft publication failed during blob',
+    });
+  });
+
+  test('an uncertain publication phase keeps its detail in the work-level failure', async () => {
+    const recording = recorded();
+    const model = configured();
+    const client = {
+      ...recording.client,
+      createRef: async () => {
+        throw new Error('branch write failed');
+      },
+    };
+    const executor = createFixExecutor({
+      client,
+      gateway: model.gateway,
+      verification: { 'team/grave': { commands: [['git', 'diff', '--check']], timeoutMs: 10_000 } },
+      dashboardUrl: '',
+      audit: async () => {},
+      runner: gitChecks,
+    });
+    const request = await input();
+    const prepared = await withFixAuditScope(() => executor(request));
+    await expect(prepared.publish()).rejects.toMatchObject({
+      failure: 'publication_uncertain',
+      message: 'draft publication failed during branch',
+    });
   });
 });

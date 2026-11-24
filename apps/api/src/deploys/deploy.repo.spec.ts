@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'bun:test';
 
-import type { AuditRepo } from '../audit/repo/audit.repo';
+import type { AuditRepo } from '../audit/audit.repo';
 import type { PrismaService } from '../infra/prisma.service';
 import { DeployRepo } from './deploy.repo';
 import { AppendOnlyDeployError } from './deploy.types';

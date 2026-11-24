@@ -91,7 +91,7 @@ test('terminal audit failure retains the executed outcome without retrying eithe
   expect(result).toMatchObject({ status: 'executed', reason: 'executed', auditStatus: 'pending' });
   expect(calls).toHaveLength(1);
   expect(audits.map((draft) => draft.type)).toEqual(['actuator.admitted', 'actuator.executed']);
-  expect((await actuator.execute(signed())).reason).toBe('replay');
+  expect((await actuator.execute(signed())).reason).toBe('execution_uncertain');
   expect(calls).toHaveLength(1);
   expect(audits.filter((draft) => draft.type === 'actuator.executed')).toHaveLength(1);
   expect(JSON.stringify([result, audits])).not.toContain('private-audit-secret');

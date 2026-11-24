@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 
 import { AuditRepo } from '../../src/audit/audit.repo';
-import { GENESIS_HASH } from '../../src/audit/chain';
+import { GENESIS_HASH } from '@graveshift/core';
 import type { PrismaService } from '../../src/infra/prisma.service';
 import { dbTestEnabled, modelCounts, openTestDatabase, resetDatabase } from './fixtures';
 

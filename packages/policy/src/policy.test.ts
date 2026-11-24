@@ -1,13 +1,8 @@
+import type { SharedPolicyContext } from '@graveshift/core/policy-context';
 import { describe, expect, test } from 'bun:test';
 import fc from 'fast-check';
 
-import {
-  decide,
-  isRuntimeAction,
-  type PolicyAction,
-  type PolicyContext,
-  toAuditEvent,
-} from './decide';
+import { decide, isRuntimeAction, type PolicyAction, toAuditEvent } from './decide';
 import { baseContext, basePolicy } from './fixtures';
 import { loadPolicy, parsePolicy, PolicyError } from './load';
 import { type Mode, MODES, type Policy, type Rule } from './schema';
@@ -55,7 +50,7 @@ const policyArb: fc.Arbitrary<Policy> = fc
     },
   }));
 
-const ctxArb: fc.Arbitrary<PolicyContext> = fc.record(
+const ctxArb: fc.Arbitrary<SharedPolicyContext> = fc.record(
   {
     service: fc.constantFrom(...SERVICES),
     category: fc.constantFrom('code_bug', 'other'),
@@ -70,14 +65,14 @@ const ctxArb: fc.Arbitrary<PolicyContext> = fc.record(
     }),
   },
   { requiredKeys: ['service', 'signals', 'confidence', 'counters'] },
-) as fc.Arbitrary<PolicyContext>;
+) as fc.Arbitrary<SharedPolicyContext>;
 
 const actionArb: fc.Arbitrary<PolicyAction> = fc.record({
   name: fc.constantFrom(...ACTIONS),
   params: fc.record({ replicas: fc.nat(5) }),
 });
 
-const run = (check: (policy: Policy, ctx: PolicyContext, action: PolicyAction) => void) =>
+const run = (check: (policy: Policy, ctx: SharedPolicyContext, action: PolicyAction) => void) =>
   fc.assert(fc.property(policyArb, ctxArb, actionArb, check), { numRuns: 500 });
 
 describe('decide properties', () => {

@@ -69,9 +69,6 @@ export function mergeRecorded(prior: RecordedHaunting | undefined, next: Recorde
   return prepareRecordedHaunting({
     ...prior,
     ...next,
-    // The opening Event owns the Deployment pair; later observations cannot move it.
-    deploymentId: prior?.deploymentId ?? next.deploymentId ?? null,
-    deploymentEnvironment: prior?.deploymentEnvironment ?? next.deploymentEnvironment ?? null,
     incident: {
       ...next.incident,
       ...(diagnosis ? { diagnosis } : {}),

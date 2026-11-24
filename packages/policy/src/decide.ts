@@ -1,26 +1,13 @@
+import type { SharedPolicyContext } from '@graveshift/core/policy-context';
+
+import { type PolicyAction, isRuntimeAction } from './action';
 import { decisionFor, gate, matches } from './evaluation';
 import type { Mode, Policy } from './schema';
 
+export type { PolicyAction } from './action';
+export { isRuntimeAction } from './action';
+
 export type Effect = 'allow' | 'deny' | 'require_approval' | 'dry_run';
-
-export interface PolicyAction {
-  name: string;
-  params?: { replicas?: number };
-}
-
-export interface PolicyContext {
-  service: string;
-  category?: string;
-  signals: string[];
-  confidence: number;
-  envMode?: string;
-  counters: {
-    openPrsLastHour: number;
-    actionsLast10Min: number;
-    diagnosisLoops: number;
-    llmSpentTodayUsd: number;
-  };
-}
 
 export interface PolicyDecision {
   effect: Effect;
@@ -31,9 +18,22 @@ export interface PolicyDecision {
   warnings: string[];
 }
 
-export const isRuntimeAction = (action: PolicyAction): boolean => action.name !== 'open_pr';
+/** The three facts that differ between a proposal and a runtime execution. */
+export interface DecisionFacts {
+  mode: Mode;
+  allowlist: readonly string[] | undefined;
+  scale: { min: number; max: number } | undefined;
+}
 
-export function decide(policy: Policy, ctx: PolicyContext, action: PolicyAction): PolicyDecision {
+/**
+ * The one policy decision seam. The fact interface lives in core; the action
+ * descriptor and the mode, allowlist and scale facts are explicit here.
+ */
+export function decide(
+  policy: Policy,
+  ctx: SharedPolicyContext,
+  action: PolicyAction,
+): PolicyDecision {
   const { mode, done } = decisionFor(policy, ctx);
 
   const denied = policy.rules.find((rule) => rule.effect === 'deny' && matches(rule, action, ctx));
@@ -42,18 +42,41 @@ export function decide(policy: Policy, ctx: PolicyContext, action: PolicyAction)
   const rule = policy.rules.find((candidate) => matches(candidate, action, ctx));
   if (!rule) return done('deny', 'no_matching_rule', null);
 
+  const facts: DecisionFacts = {
+    mode,
+    allowlist: rule.when?.services,
+    scale: rule.params?.replicas,
+  };
+  if (isRuntimeAction(action)) {
+    if (ctx.service === '*' || !facts.allowlist?.includes(ctx.service))
+      return done('deny', 'target_not_allowlisted', rule.id);
+    if (action.name === 'scale') {
+      if (!facts.scale || facts.scale.min > facts.scale.max)
+        return done('deny', 'unbounded_scale', rule.id);
+      if (!Number.isSafeInteger(action.params?.replicas))
+        return done('deny', 'invalid_replicas', rule.id);
+    }
+  }
+
   const gated = gate(policy, action, ctx);
   if (gated) return done('deny', gated, rule.id);
 
-  if (mode === 'dry-run') return done('dry_run', 'mode_dry_run', rule.id, [`rule:${rule.id}`]);
-  // runtime actions always need a human approval, even in act mode (safety invariant 1)
-  if (isRuntimeAction(action) && rule.effect === 'allow') {
+  if (isRuntimeAction(action)) {
+    if (facts.mode !== 'act')
+      return done('deny', `mode_${facts.mode === 'dry-run' ? 'dry_run' : facts.mode}`, rule.id);
+    // Runtime actions always need a human approval, even in act mode.
     return done('require_approval', 'runtime_needs_approval', rule.id, [`rule:${rule.id}`]);
   }
+  if (facts.mode === 'dry-run')
+    return done('dry_run', 'mode_dry_run', rule.id, [`rule:${rule.id}`]);
   return done(rule.effect === 'deny' ? 'deny' : rule.effect, `rule:${rule.id}`, rule.id);
 }
 
-export function toAuditEvent(decision: PolicyDecision, ctx: PolicyContext, action: PolicyAction) {
+export function toAuditEvent(
+  decision: PolicyDecision,
+  ctx: SharedPolicyContext,
+  action: PolicyAction,
+) {
   return {
     actor: 'policy',
     type: 'policy.decision',

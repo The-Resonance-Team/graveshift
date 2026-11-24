@@ -1,4 +1,5 @@
 import { parseGraveshiftConfig } from '@graveshift/config';
+import type { AuditDraft, AuditEntry } from '@graveshift/core';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { mkdtemp, rm } from 'node:fs/promises';
@@ -10,7 +11,12 @@ import request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.factory';
 import { CREDENTIAL_CONFIG, type AuthConfig } from '../src/auth/auth.types';
-import { AuditRepo, type AuditAppendInput } from '../src/audit/repo/audit.repo';
+import {
+  AUDIT_SINK,
+  type AuditRecord,
+  type AuditSink,
+  type AuditTransaction,
+} from '../src/audit/audit.sink';
 import { IDENTITY_REPO } from '../src/identity/identity.types';
 import { TEST_CONFIG } from './fakes/auth-test-config';
 import { testIdentityRepo } from './fakes/auth-test-helpers';
@@ -58,15 +64,35 @@ export function restoreEnv(): void {
   for (const name of Object.keys(FAKE_ENV_VALUES)) delete process.env[name];
 }
 
-/** Records every audit append instead of writing to PostgreSQL. */
-export class FakeAuditRepo {
-  readonly appended: AuditAppendInput[] = [];
+/** The in-memory adapter at the `AUDIT_SINK` seam. Records every append without PostgreSQL. */
+export class FakeAuditRepo implements AuditSink {
+  readonly appended: AuditRecord[] = [];
   failure: Error | undefined;
 
-  append(input: AuditAppendInput): Promise<unknown> {
+  append(projectId: string, draft: AuditDraft): Promise<AuditEntry> {
     if (this.failure) return Promise.reject(this.failure);
-    this.appended.push(input);
-    return Promise.resolve({ seq: this.appended.length });
+    this.appended.push({ ...structuredClone(draft), projectId });
+    return Promise.resolve(this.entry());
+  }
+
+  appendInTx(_tx: AuditTransaction, projectId: string, draft: AuditDraft): Promise<AuditEntry> {
+    return this.append(projectId, draft);
+  }
+
+  transaction<Result>(work: (tx: AuditTransaction) => Promise<Result>): Promise<Result> {
+    return work(undefined as unknown as AuditTransaction);
+  }
+
+  private entry(): AuditEntry {
+    return {
+      seq: this.appended.length,
+      at: new Date().toISOString(),
+      actor: 'fixture',
+      type: 'fixture',
+      payload: {},
+      prevHash: '0'.repeat(64),
+      hash: '0'.repeat(64),
+    };
   }
 }
 
@@ -88,7 +114,7 @@ export async function appFromConfigFile(
     ...credential,
   };
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
-    .overrideProvider(AuditRepo)
+    .overrideProvider(AUDIT_SINK)
     .useValue(audit)
     .overrideProvider(CREDENTIAL_CONFIG)
     .useValue(credentialConfig)

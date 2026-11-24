@@ -3,7 +3,7 @@ import { Inject, Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { subMinutes } from 'date-fns';
 
-import { AuditRepo } from '../audit/audit.repo';
+import { AUDIT_SINK, type AuditSink } from '../audit/audit.sink';
 import * as config from '../config/boot.config';
 import { PrismaService } from '../infra/prisma.service';
 import { ProjectGrant } from '../internal/project-grant';
@@ -16,7 +16,7 @@ import type { CompleteActionDto } from './dto/complete-action.dto';
 export class ActionRepo {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly audit: AuditRepo,
+    @Inject(AUDIT_SINK) private readonly audit: AuditSink,
     @Inject(config.BOOT_CONFIG) private readonly boot: Pick<
       config.RootBootConfig,
       'policy' | 'mode'

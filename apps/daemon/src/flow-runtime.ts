@@ -1,4 +1,5 @@
 import type { AgentConfig } from '@graveshift/agents';
+import { agentAssignee } from '@graveshift/core';
 import {
   decideTriage,
   triageResult,
@@ -111,7 +112,10 @@ export class FlowRuntime implements WorkRuntime {
       commandId: caller.commandId,
       workerId: caller.workerId ?? null,
       leaseUntil: caller.workerId === undefined ? null : '2099-01-01T00:00:00.000Z',
-      agent: this.snapshot.item.assignee.slice('needs_agent_'.length),
+      agent:
+        this.agents.find(
+          (configured) => agentAssignee(configured.name) === this.snapshot.item.assignee,
+        )?.name ?? '',
       trigger: input.command.kind === 'triage' ? 'auto_fix' : 'fix_now',
       state: 'claimed',
       routingProgress: null,

@@ -4,7 +4,7 @@ import { createGateway, type ModelAdapter } from '@graveshift/gateway';
 import { PatchSchema } from '@graveshift/patch';
 
 import { currentAuditScope, gatewayAudit, type AuditScope } from './audit';
-import { ExecutionFailure } from './execution';
+import { FixExecutionError } from './execution';
 import { agent, caller, context, policy, pr } from './flow-fixtures';
 import { FlowRuntime } from './flow-runtime';
 import { routingModel } from './routing-model';
@@ -69,7 +69,7 @@ export function harness(agents: AgentConfig[] = [agent()]) {
     onAudit: gatewayAudit(write),
   });
   const options: WorkFlowOptions = {
-    projectId: caller.projectId,
+    projectIds: [caller.projectId],
     runtime,
     agents,
     policy,
@@ -92,7 +92,7 @@ export function harness(agents: AgentConfig[] = [agent()]) {
         validate: () => undefined,
       });
       if (patch.status !== 'ok')
-        throw new ExecutionFailure(
+        throw new FixExecutionError(
           patch.status === 'unavailable' && patch.reason === 'audit_unavailable'
             ? 'audit_failed'
             : 'patch_rejected',

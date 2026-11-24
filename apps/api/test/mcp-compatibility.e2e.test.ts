@@ -4,19 +4,15 @@ import { McpModule } from '@nestjs/mcp';
 import { connectMcpClient } from '@nestjs/mcp/testing';
 import { Test, type TestingModule } from '@nestjs/testing';
 import type { AuditDraft } from '@graveshift/core';
-import { ConfigService } from '@nestjs/config';
-import { getHttpClientToken } from '@nestjs/http-client';
 import { parsePolicy } from '@graveshift/policy';
 import { afterAll, beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
 
-import { AuditRepo } from '../src/audit/audit.repo';
-import { DaemonMcpBackend, HttpMcpBackend } from '../src/mcp/mcp.backend';
-import { McpProjectContext } from '../src/mcp/mcp-project-context';
+import { HttpMcpBackend } from '../src/mcp/mcp.backend';
 import { writeAutopsy } from '../src/mcp/mcp.postmortem';
 import { McpPrompts } from '../src/mcp/mcp.prompts';
 import { McpResources } from '../src/mcp/mcp.resources';
 import { McpTools } from '../src/mcp/mcp.tools';
-import { MCP_BACKEND, MCP_ENV_MODE, MCP_POLICY } from '../src/mcp/mcp.types';
+import { MCP_AUDIT_WRITER, MCP_BACKEND, MCP_ENV_MODE, MCP_POLICY } from '../src/mcp/mcp.types';
 import { FakeMcpBackend, RECORDED_FIXTURE, SECRET } from './fakes/fake-mcp-backend';
 
 const REQUIRED_TOOLS = [
@@ -66,6 +62,7 @@ describe('MCP server (in-memory client)', () => {
         McpPrompts,
         McpResources,
         { provide: MCP_BACKEND, useValue: backend },
+        { provide: MCP_AUDIT_WRITER, useValue: backend },
         { provide: MCP_POLICY, useValue: policy },
         { provide: MCP_ENV_MODE, useValue: undefined },
       ],
@@ -214,71 +211,26 @@ describe('MCP server (in-memory client)', () => {
   });
 });
 
-describe('production MCP backend', () => {
-  test('reads and verifies the configured project Audit chain through its owner', async () => {
-    const list = mock<AuditRepo['list']>(async () => []);
-    const verifyChain = mock<AuditRepo['verifyChain']>(async () => ({ ok: true, length: 4 }));
-    let daemonData: unknown = [RECORDED_FIXTURE];
-    const post = mock(async (_path: string, _options: object) => ({ data: daemonData }));
-    const moduleRef = await Test.createTestingModule({
-      providers: [
-        DaemonMcpBackend,
-        { provide: AuditRepo, useValue: { list, verifyChain, append: async () => ({}) } },
-        {
-          provide: McpProjectContext,
-          useValue: { projectId: 'project-1', require: () => 'project-1' },
-        },
-        {
-          provide: ConfigService,
-          useValue: new ConfigService({
-            GRAVESHIFT_DAEMON_INTERNAL_TOKEN: 'fixture-only-token',
-          }),
-        },
-        { provide: getHttpClientToken('daemon'), useValue: { post } },
-      ],
-    }).compile();
-    try {
-      const backend = moduleRef.get(DaemonMcpBackend);
-      expect(await backend.listAudit({ afterSeq: 2, limit: 3 })).toEqual([]);
-      expect(await backend.verifyChain()).toEqual({ ok: true, length: 4 });
-      expect(list).toHaveBeenCalledWith('project-1', { afterSeq: 2, limit: 3 });
-      expect(verifyChain).toHaveBeenCalledWith('project-1');
-      expect(await backend.listIncidents()).toHaveLength(1);
-      daemonData = RECORDED_FIXTURE;
-      expect((await backend.getIncident('inc1'))?.incident.id).toBe('inc1');
-      expect(post).toHaveBeenLastCalledWith('/internal/read/incident', {
-        headers: { authorization: 'Bearer fixture-only-token' },
-        json: { projectId: 'project-1', id: 'inc1' },
-      });
-      daemonData = null;
-      expect(await backend.getIncident('missing')).toBeUndefined();
-      daemonData = [{ name: 'api', runtime: 'docker' }];
-      expect(await backend.listServices()).toEqual([{ name: 'api', runtime: 'docker' }]);
-      daemonData = ['line'];
-      expect(await backend.tailLogs('api', 1)).toEqual(['line']);
-      daemonData = 2;
-      expect(await backend.queryMetric('up')).toBe(2);
-      const context = await new FakeMcpBackend().policyContext('inc1');
-      daemonData = context;
-      expect(await backend.policyContext('inc1')).toEqual(context);
-      daemonData = { counters: {} };
-      await expect(backend.policyContext('inc1')).rejects.toThrow('Complete policy facts');
-    } finally {
-      await moduleRef.close();
-    }
-  });
-
+describe('MCP audit acknowledgement and postmortem', () => {
   test('audit append uses the authenticated Project of the caller', async () => {
     const append = mock(async (_projectId: string, _draft: AuditDraft) => ({ key: 'ack' }));
     const context = { projectId: '12346', require: () => '12346' };
-    const backend = new HttpMcpBackend({} as never, { append } as never, context as never);
+    const backend = new HttpMcpBackend(
+      {} as never,
+      { append } as never,
+      context as never,
+      {} as never,
+    );
     const draft = {
       actor: 'policy',
       type: 'policy.decision',
       payload: { effect: 'allow' },
       key: 'mcp:test',
     } as AuditDraft;
-    expect(await backend.auditDecision(draft)).toEqual({ key: 'mcp:test' });
+    expect(await backend.auditDecision(draft)).toEqual({
+      acknowledged: true,
+      key: 'mcp:test',
+    });
     expect(append).toHaveBeenCalledTimes(1);
     expect(append).toHaveBeenCalledWith('12346', draft);
   });

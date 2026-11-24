@@ -1,4 +1,4 @@
-import type { AuditInput } from '@graveshift/core';
+import type { AuditDraft } from '@graveshift/core';
 import type { Prisma } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 
@@ -9,7 +9,7 @@ import {
   resetDatabase,
 } from '../../../test/database/fixtures';
 import { TEST_CONFIG } from '../../../test/fakes/auth-test-config';
-import { AuditRepo } from '../../audit/repo/audit.repo';
+import { AuditRepo } from '../../audit/audit.repo';
 import type { PrismaService } from '../../infra/prisma.service';
 import type { Principal } from '../auth.types';
 import { CredentialService } from '../services/credential.service';
@@ -24,12 +24,12 @@ const issue = (service: CredentialService) =>
   service.issue({ kind: 'mcp', name: 'reader', scopes: ['incidents:read'] }, principal);
 
 class FailingAudit extends AuditRepo {
-  override async appendInTransaction(
+  override async appendInTx(
     tx: Prisma.TransactionClient,
     projectId: string,
-    input: AuditInput,
+    input: AuditDraft,
   ): Promise<never> {
-    await super.appendInTransaction(tx, projectId, input);
+    await super.appendInTx(tx, projectId, input);
     throw new Error('abort after audit append');
   }
 }

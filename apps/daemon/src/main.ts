@@ -1,4 +1,5 @@
 import { BunRuntime, BunServices } from '@effect/platform-bun';
+import { connectEventsConsumer } from '@graveshift/events';
 import { Effect } from 'effect';
 
 import { createPrivateApi } from './api-client';
@@ -11,12 +12,10 @@ import { parsePort, readDaemonConfig } from './config';
 import { bunEdge, startListener } from './edge';
 import { contextClient } from './fix-context';
 import { executorFromEnv } from './fix-execution';
-import { connectConsumer } from './nats';
 import { createObservations } from './observations';
 import { createReadHandler } from './read-handler';
 import { createReadRuntime } from './reads';
-import { createReadState } from './read-state';
-import { createRequestHandler, daemonHandler, type FetchHandler } from './routes';
+import { daemonHandler, type FetchHandler } from './routes';
 import { routingModel } from './routing-model';
 import { createWorkClient } from './work-client';
 import { createWorkCommands } from './work-flow';
@@ -43,9 +42,12 @@ export const program = Effect.scoped(
       () => loadBootConfig(api),
       'Daemon boot configuration is unavailable',
     );
-    // ponytail: serve the first granted Project; upgrade when per-Project daemon
-    // routing lands so one daemon can serve every Project in the deployment.
-    const projectId = boot.projectIds[0] ?? '';
+    if (boot.projectIds.length === 0) {
+      yield* Effect.fail(new Error('No Project is granted to this daemon'));
+    }
+    // This value is only a host bootstrap for Collectors and Work commands. Event
+    // scope is taken from each envelope at intake (ADR 0023).
+    const bootstrapProjectId = boot.projectIds[0] ?? '';
     // The audit writer holds no Project of its own: every entry is appended to the chain of the
     // scope bound for the authenticated command or Collector event that asked for it.
     const audit = createAudit(api);
@@ -64,10 +66,9 @@ export const program = Effect.scoped(
     const events = yield* Effect.acquireRelease(
       asynchronous(
         () =>
-          connectConsumer({
+          connectEventsConsumer({
             servers: config.GRAVESHIFT_NATS_URL,
-            stream: boot.natsStream,
-            projectId,
+            grantedProjectIds: boot.projectIds,
           }),
         'NATS consumer is unavailable',
       ),
@@ -75,14 +76,13 @@ export const program = Effect.scoped(
     );
     yield* Effect.acquireRelease(
       asynchronous(async () => {
-        await collectors.start(projectId, events.publisher);
+        await collectors.start(bootstrapProjectId, events.publisher);
         return collectors;
       }, 'Collector startup failed'),
       (resource) =>
         asynchronous(() => resource.stop(), 'Collector drain failed').pipe(Effect.orDie),
     );
     const reads = createReadRuntime({
-      projectId,
       api,
       sources: collectors.reads,
       metricJobs: collectors.metricJobs,
@@ -92,7 +92,7 @@ export const program = Effect.scoped(
       Effect.sync(() =>
         drainCommands(
           createWorkCommands({
-            projectId,
+            projectIds: boot.projectIds,
             agents: boot.agents,
             policy: boot.policy,
             runtime: createWorkClient(api),
@@ -107,7 +107,7 @@ export const program = Effect.scoped(
       (resource) => asynchronous(() => resource.stop(), 'Command drain failed').pipe(Effect.orDie),
     );
     const privateEdge = {
-      projectId,
+      projectIds: boot.projectIds,
       token: config.GRAVESHIFT_DAEMON_INTERNAL_TOKEN,
       maxBytes: config.GRAVESHIFT_BODY_MAX_BYTES,
       timeoutMs: config.GRAVESHIFT_COMMAND_TIMEOUT_MS,
@@ -115,30 +115,27 @@ export const program = Effect.scoped(
     const observe = yield* asynchronous(
       () =>
         createObservations({
-          projectId,
           api,
           gateway,
           agents: boot.agents,
-          logs: (service, lines) => reads.logs(service, lines),
-          onWork: workActivation(lifetime.commands, projectId),
+          logs: (service, lines, projectId) => reads.logs(projectId, service, lines),
+          onWork: (item, incidentId, eventProjectId) =>
+            workActivation(lifetime.commands, eventProjectId)(item, incidentId),
         }),
       'Observation state is unavailable',
     );
     const privateHandler = daemonHandler(
       createCommandHandler({ ...privateEdge, commands: lifetime.commands }),
-      createReadHandler({ ...privateEdge, timeoutMs: config.GRAVESHIFT_API_TIMEOUT_MS, reads }),
+      createReadHandler({
+        token: privateEdge.token,
+        maxBytes: privateEdge.maxBytes,
+        projectIds: boot.projectIds,
+        timeoutMs: config.GRAVESHIFT_API_TIMEOUT_MS,
+        reads,
+      }),
     );
-    // Keep the base read surface. It needs no third credential: the daemon's
-    // internal token authenticates it just like the private command/read routes.
-    const readHandler = createRequestHandler(
-      createReadState(),
-      config.GRAVESHIFT_DAEMON_INTERNAL_TOKEN,
-    );
-    const handler: FetchHandler = (request) => {
-      const path = new URL(request.url).pathname;
-      if (path.startsWith('/internal/')) return privateHandler(request);
-      return readHandler(request);
-    };
+    // One private handler carries every command and read; health alone is public.
+    const handler: FetchHandler = privateHandler;
     const address = new URL(config.GRAVESHIFT_DAEMON_URL);
     const port = yield* parsePort(process.env.PORT || address.port || undefined);
     const listener = yield* Effect.acquireRelease(

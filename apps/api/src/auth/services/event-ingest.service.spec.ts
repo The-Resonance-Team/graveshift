@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from 'bun:test';
 
 import { validEnvelope } from '../../../test/fakes/auth-test-helpers';
-import { AuditRepo } from '../../audit/repo/audit.repo';
+import type { AuditSink } from '../../audit/audit.sink';
 import { DeployRepo } from '../../deploys/deploy.repo';
 import type { VerifiedCredential } from '../auth.types';
 import type { PublishEventDto } from '../dto/publish-event.dto';
@@ -29,15 +29,15 @@ function setup() {
   const findByDeployment = mock<DeployRepo['findByDeployment']>(async () => undefined);
   const appended: Array<{ type: string; projectId: string; payload: unknown }> = [];
   const audit = {
-    append: async (input: { type: string; projectId: string; payload: unknown }) => {
-      appended.push(input);
+    append: async (projectId: string, input: { type: string; payload: unknown }) => {
+      appended.push({ ...input, projectId });
       return { seq: appended.length };
     },
   };
   const service = new EventIngestService(
     publisher as never,
     { findByDeployment } as unknown as DeployRepo,
-    audit as unknown as AuditRepo,
+    audit as unknown as AuditSink,
   );
   return { service, published, findByDeployment, appended };
 }
@@ -101,7 +101,7 @@ describe('EventIngestService deployment binding', () => {
     const findByDeployment = mock<DeployRepo['findByDeployment']>(async () => undefined);
     const appended: unknown[] = [];
     const audit = {
-      append: async (input: unknown) => {
+      append: async (_projectId: string, input: unknown) => {
         appended.push(input);
       },
     };
@@ -112,7 +112,7 @@ describe('EventIngestService deployment binding', () => {
         },
       } as never,
       { findByDeployment } as unknown as DeployRepo,
-      audit as unknown as AuditRepo,
+      audit as unknown as AuditSink,
     );
     await expect(service.ingest(body(), principal)).rejects.toThrow('publish failed');
     expect(appended).toEqual([]);

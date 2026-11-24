@@ -22,7 +22,7 @@ export type AuditInput = Pick<AuditEntry, 'actor' | 'type' | 'payload'> &
 export type VerifyResult = ChainResult;
 
 /** One canonical byte string for every audit entry. The API and the daemon both use it. */
-function canonical(value: unknown): string {
+export function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
   if (value !== null && typeof value === 'object') {
     const entries = Object.entries(value).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));

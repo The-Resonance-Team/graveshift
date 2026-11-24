@@ -3,9 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, describe, expect, test } from 'bun:test';
 import { ConfigService } from '@nestjs/config';
 import { Prisma } from '@prisma/client';
-import type { AuditInput } from '@graveshift/core';
+import type { AuditDraft } from '@graveshift/core';
 
-import { AuditRepo } from '../../src/audit/repo/audit.repo';
+import { AuditRepo } from '../../src/audit/audit.repo';
 import { PrismaCredentialRepo } from '../../src/auth/repo/credential.repo';
 import { CredentialService } from '../../src/auth/services/credential.service';
 import { CreateCredentialDto } from '../../src/auth/dto/create-credential.dto';
@@ -72,10 +72,10 @@ describe('PostgreSQL credential and audit persistence', () => {
 
   test('audit failure rolls back a credential write', async () => {
     class FailingAudit extends AuditRepo {
-      override async appendInTransaction(
+      override async appendInTx(
         _tx: Prisma.TransactionClient,
         _projectId: string,
-        _input: AuditInput,
+        _input: AuditDraft,
       ): Promise<never> {
         throw new Error('test audit write failed');
       }
@@ -137,8 +137,8 @@ describe('PostgreSQL credential and audit persistence', () => {
 
   test('an audit entry survives an API restart', async () => {
     const owner = principal();
-    const appended = await audit.append({
-      projectId: owner.projectId,
+    const appended = await audit.append(owner.projectId, {
+      key: 'restart:probe',
       actor: owner.clientId,
       type: 'restart.probe',
       payload: { note: 'before restart' },
@@ -151,8 +151,8 @@ describe('PostgreSQL credential and audit persistence', () => {
       const reborn = new AuditRepo(restarted);
       expect(await reborn.list(owner.projectId)).toEqual([appended]);
       expect(await reborn.verifyChain(owner.projectId)).toEqual({ ok: true, length: 1 });
-      const next = await reborn.append({
-        projectId: owner.projectId,
+      const next = await reborn.append(owner.projectId, {
+        key: 'restart:after',
         actor: owner.clientId,
         type: 'restart.after',
         payload: {},
@@ -168,8 +168,8 @@ describe('PostgreSQL credential and audit persistence', () => {
     const owner = principal();
     await Promise.all(
       Array.from({ length: 8 }, (_, index) =>
-        (index % 2 ? audit : otherAudit).append({
-          projectId: owner.projectId,
+        (index % 2 ? audit : otherAudit).append(owner.projectId, {
+          key: `concurrent:${index}`,
           actor: owner.clientId,
           type: 'test',
           payload: JSON.parse('{"__proto__":{"safe":true},"value":1}'),

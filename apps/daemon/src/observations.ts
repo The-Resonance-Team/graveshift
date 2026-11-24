@@ -20,12 +20,12 @@ import { withModelContext } from './model-context';
 const DAEMON_ACTOR = 'daemon';
 
 export interface ObservationOptions {
-  projectId: string;
   api: PrivateApi;
   gateway: Pick<Gateway, 'run'>;
   agents: readonly AgentConfig[];
-  logs(service: string, lines: number): Promise<string[]>;
-  onWork(item: WorkItem, incidentId: string): Promise<void>;
+  logs(service: string, lines: number, projectId: string): Promise<string[]>;
+  /** The scope is carried on each Event and passed through to the Work caller. */
+  onWork(item: WorkItem, incidentId: string, projectId: string): Promise<void>;
 }
 
 function stableId(value: string): string {
@@ -37,7 +37,7 @@ function stableId(value: string): string {
 }
 
 export async function createObservations(options: ObservationOptions) {
-  const { projectId, api } = options;
+  const { api } = options;
   const views = new Map<string, RecordedHaunting>();
   const byService = new Map<string, string>();
   const medium =
@@ -47,10 +47,10 @@ export async function createObservations(options: ObservationOptions) {
   let current: EventEnvelope;
   const watcher = createWatcher({
     newId: () =>
-      byService.get(current.service) ?? stableId(JSON.stringify([projectId, current.id])),
+      byService.get(current.service) ?? stableId(JSON.stringify([current.projectId, current.id])),
   });
   const pending = new Map<string, WatcherOutcome[]>();
-  const write = async (eventId: string, input: RecordedHaunting) => {
+  const write = async (eventId: string, input: RecordedHaunting, projectId: string) => {
     const view = prepareRecordedHaunting(input);
     const persisted = await api.post(
       '/internal/hauntings',
@@ -70,7 +70,9 @@ export async function createObservations(options: ObservationOptions) {
     return persisted;
   };
   const observe = async (event: EventEnvelope): Promise<void> => {
-    if (event.projectId !== projectId) throw new Error('Observation belongs to another project');
+    // ADR 0023: scope comes from the Event envelope at intake. The boot Project
+    // is a host bootstrap for Collectors, not the scope of an observation.
+    const projectId = event.projectId;
     current = event;
     let outcomes = pending.get(event.id);
     if (outcomes === undefined) {
@@ -115,24 +117,28 @@ export async function createObservations(options: ObservationOptions) {
       );
       const view = prior?.detections.some((entry) => entry.id === outcome.detection.id)
         ? prior
-        : await write(`${event.id}:detected:${outcome.detection.rule}`, {
-            ...prior,
-            incident: {
-              ...change.incident,
-              ...(prior?.incident ?? {}),
-              updatedAt: change.incident.updatedAt,
-              signalIds: [
-                ...new Set([...(prior?.incident.signalIds ?? []), ...change.incident.signalIds]),
-              ],
+        : await write(
+            `${event.id}:detected:${outcome.detection.rule}`,
+            {
+              ...prior,
+              incident: {
+                ...change.incident,
+                ...(prior?.incident ?? {}),
+                updatedAt: change.incident.updatedAt,
+                signalIds: [
+                  ...new Set([...(prior?.incident.signalIds ?? []), ...change.incident.signalIds]),
+                ],
+              },
+              severity: prior?.severity === 'critical' ? 'critical' : change.severity,
+              detections: [...detections.values()],
             },
-            severity: prior?.severity === 'critical' ? 'critical' : change.severity,
-            detections: [...detections.values()],
-          });
+            projectId,
+          );
       let diagnosed = view;
       if (view.incident.diagnosis === undefined) {
         let logs: string[] = [];
         try {
-          logs = await options.logs(view.incident.service, 300);
+          logs = await options.logs(view.incident.service, 300, projectId);
         } catch {
           /* Detections are sufficient evidence when Collector logs are unavailable. */
         }
@@ -155,24 +161,32 @@ export async function createObservations(options: ObservationOptions) {
             ),
         );
         if (result.status === 'needs_human') {
-          await write(`${event.id}:diagnosis:${outcome.detection.rule}`, {
-            ...view,
-            timeline: [
-              ...(view.timeline ?? []),
-              {
-                at: event.observedAt,
-                type: 'diagnosis.needs_human',
-                detail: result.reason,
-              },
-            ],
-          });
+          await write(
+            `${event.id}:diagnosis:${outcome.detection.rule}`,
+            {
+              ...view,
+              timeline: [
+                ...(view.timeline ?? []),
+                {
+                  at: event.observedAt,
+                  type: 'diagnosis.needs_human',
+                  detail: result.reason,
+                },
+              ],
+            },
+            projectId,
+          );
           return;
         }
-        diagnosed = await write(`${event.id}:diagnosis:${outcome.detection.rule}`, {
-          ...view,
-          category: result.category,
-          incident: { ...view.incident, state: 'diagnosed', diagnosis: result.diagnosis },
-        });
+        diagnosed = await write(
+          `${event.id}:diagnosis:${outcome.detection.rule}`,
+          {
+            ...view,
+            category: result.category,
+            incident: { ...view.incident, state: 'diagnosed', diagnosis: result.diagnosis },
+          },
+          projectId,
+        );
       }
       const created = await api.post(
         '/internal/work-items/from-haunting',
@@ -183,7 +197,7 @@ export async function createObservations(options: ObservationOptions) {
         },
         CreatedWorkResultSchema,
       );
-      await options.onWork(created.item, diagnosed.incident.id);
+      await options.onWork(created.item, diagnosed.incident.id, projectId);
     };
     await outcomes.reduce(
       (chain, outcome) => chain.then(() => processOutcome(outcome)),
@@ -192,8 +206,8 @@ export async function createObservations(options: ObservationOptions) {
     pending.delete(event.id);
   };
   // A Collector event carries no OAuth principal. The daemon acts on it as itself, inside the
-  // one Project its grant covers and the check above confirms. A model call outside this
-  // binding has no chain, so the durable sink refuses it and the gateway withholds the result.
+  // Project carried by that Event; the transport has already checked the grant. A model call
+  // outside an authenticated scope has no chain, so the sink refuses it and the gateway withholds.
   return (event: EventEnvelope) =>
-    withAuditScope({ projectId, actor: DAEMON_ACTOR }, () => observe(event));
+    withAuditScope({ projectId: event.projectId, actor: DAEMON_ACTOR }, () => observe(event));
 }

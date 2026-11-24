@@ -3,7 +3,7 @@ import { Test } from '@nestjs/testing';
 import { describe, expect, mock, test } from 'bun:test';
 
 import { AuditConflict } from '../audit/audit.errors';
-import { AuditRepo } from '../audit/audit.repo';
+import { AUDIT_SINK } from '../audit/audit.sink';
 import { PrismaService } from '../infra/prisma.service';
 import { HauntingConflict } from './haunting.errors';
 import { hauntingData } from './haunting.mapper';
@@ -31,7 +31,7 @@ async function setup() {
     providers: [
       HauntingRepo,
       { provide: PrismaService, useValue: { ...tx, $transaction: transaction } },
-      { provide: AuditRepo, useValue: { appendInTx } },
+      { provide: AUDIT_SINK, useValue: { appendInTx } },
     ],
   }).compile();
   return { moduleRef, repo: moduleRef.get(HauntingRepo), tx, transaction, appendInTx };

@@ -1,10 +1,9 @@
-import type { AuditDraft, AuditEntry, CounterSnapshot } from '@graveshift/core';
+import type { AuditDraft, AuditEntry, CounterSnapshot, ServiceView } from '@graveshift/core';
 import type { SharedPolicyContext } from '@graveshift/core/policy-context';
 import { RecordedHauntingSchema } from '@graveshift/core/recorded';
-import type { GraveInfo } from '@graveshift/integrations';
 
 import type { VerifyResult } from '../../src/audit/audit.types';
-import type { McpBackend } from '../../src/mcp/mcp.types';
+import type { McpAuditWriter, McpBackend } from '../../src/mcp/mcp.types';
 
 export const SECRET = 'AKIAIOSFODNN7EXAMPLE';
 const at = '2026-01-01T00:00:00.000Z';
@@ -46,18 +45,19 @@ export const RECORDED_FIXTURE = RecordedHauntingSchema.parse({
 });
 
 /** Execution is a trap. Proposal decisions must only read facts and append audit. */
-export class FakeMcpBackend implements McpBackend {
+export class FakeMcpBackend implements McpBackend, McpAuditWriter {
   readonly decisions: AuditDraft[] = [];
   contextAvailable = true;
   auditAvailable = true;
+  auditAcknowledged = true;
   counters = { openPrsLastHour: 0, actionsLast10Min: 0, diagnosisLoops: 0, llmSpentTodayUsd: 0 };
 
   readonly execute = async (_action: string): Promise<void> => {
     throw new Error('propose_fix must never execute an action');
   };
 
-  async listServices(): Promise<GraveInfo[]> {
-    return [{ name: 'api', runtime: 'docker' }];
+  async listServices(): Promise<ServiceView[]> {
+    return [{ name: 'api', status: 'healthy' }];
   }
 
   async listIncidents() {
@@ -97,8 +97,9 @@ export class FakeMcpBackend implements McpBackend {
 
   async auditDecision(draft: AuditDraft) {
     if (!this.auditAvailable) throw new Error('Audit unavailable');
+    if (!this.auditAcknowledged) return { acknowledged: false, reason: 'no_project' } as const;
     this.decisions.push(draft);
-    return { key: draft.key };
+    return { acknowledged: true, key: draft.key } as const;
   }
 
   getCounters(): Promise<CounterSnapshot> {

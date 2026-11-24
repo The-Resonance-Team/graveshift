@@ -138,7 +138,6 @@ describe('MCP client SDK against the real API endpoint (in-memory)', () => {
       'GRAVESHIFT_API_INTERNAL_TOKEN',
       'GRAVESHIFT_DAEMON_INTERNAL_TOKEN',
       'GRAVESHIFT_OAUTH_JWT_SECRET',
-      'GRAVESHIFT_DAEMON_READ_TOKEN',
     ] as const) {
       const value = process.env[name];
       if (value !== undefined) env[name] = value;

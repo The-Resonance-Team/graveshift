@@ -1,7 +1,3 @@
-import { prepareEnvelope, type EventEnvelope } from '@graveshift/core';
-
-import { publishSubject } from './subject';
-
 export type { EventEnvelope } from '@graveshift/core';
 
 export {
@@ -28,27 +24,18 @@ export {
   type EnvelopeDeduplicator,
 } from './streams';
 
-export interface Publisher {
-  publish(envelope: EventEnvelope): Promise<void>;
-}
-
-/**
- * The part of a NATS JetStream client that the publisher uses. A real client
- * from `jetstream(nc)` satisfies this shape, and tests can supply a fake.
- */
-export interface PublishTarget {
-  publish(subject: string, payload: Uint8Array, options: { msgID: string }): Promise<unknown>;
-}
-
 export { createHttpPublisher, type HttpPublisherOptions } from './http';
 
-/** Publish each envelope to JetStream with its id as the deduplication key. */
-export function createNatsPublisher(js: PublishTarget): Publisher {
-  return {
-    async publish(envelope) {
-      const prepared = prepareEnvelope(envelope);
-      const payload = new TextEncoder().encode(JSON.stringify(prepared));
-      await js.publish(publishSubject(prepared), payload, { msgID: prepared.id });
-    },
-  };
-}
+export { createNatsPublisher, type Publisher, type PublishTarget } from './publisher';
+
+/** The one process port: the daemon receives decoded Events, never NATS messages. */
+export {
+  connectEventsConsumer,
+  createEventsConsumer,
+  decodeQueuedEvent,
+  processQueued,
+  type EventsConsumer,
+  type EventsTransport,
+  type QueuedEvent,
+  type DeliveryOptions,
+} from './consumer';

@@ -88,6 +88,7 @@ export const rootEnvSchema = z
     ),
     GRAVESHIFT_API_URL: setting(internalUrl.default('http://127.0.0.1:3000')),
     GRAVESHIFT_DAEMON_URL: setting(internalUrl.default('http://127.0.0.1:2602')),
+    GRAVESHIFT_DAEMON_READ_URL: setting(internalUrl.default('http://127.0.0.1:2602')),
     GRAVESHIFT_PRIVATE_HOST: setting(host.optional()),
     GRAVESHIFT_NATS_URL: setting(
       z
@@ -148,7 +149,11 @@ export const rootEnvSchema = z
         message: 'The API and daemon internal tokens must differ',
       });
     }
-    for (const key of ['GRAVESHIFT_API_URL', 'GRAVESHIFT_DAEMON_URL'] as const) {
+    for (const key of [
+      'GRAVESHIFT_API_URL',
+      'GRAVESHIFT_DAEMON_URL',
+      'GRAVESHIFT_DAEMON_READ_URL',
+    ] as const) {
       const hostname = URL.parse(env[key])?.hostname;
       if (hostname === undefined) continue;
       if (

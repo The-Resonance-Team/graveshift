@@ -10,7 +10,7 @@ import request from 'supertest';
 
 import { InternalAuditController } from '../../api/src/audit/audit.controller';
 import { AuditRepo } from '../../api/src/audit/audit.repo';
-import { AuditRepo as PlatformAuditRepo } from '../../api/src/audit/repo/audit.repo';
+import { AUDIT_READER, AUDIT_SINK } from '../../api/src/audit/audit.sink';
 import { DeployRepo } from '../../api/src/deploys/deploy.repo';
 import { BOOT_CONFIG } from '../../api/src/config/boot.config';
 import { ProjectGrant } from '../../api/src/internal/project-grant';
@@ -55,8 +55,7 @@ function fetchAdapter(reply: (incoming: Request) => Promise<Response>): typeof f
 export async function platformHttp(db: PrismaService, agents: readonly AgentConfig[]) {
   const audit = new AuditRepo(db);
   const work = new WorkItemRepo(db, audit, agents, testProjectGrant([caller.projectId]));
-  const platformAudit = new PlatformAuditRepo(db);
-  const deploys = new DeployRepo(db, platformAudit);
+  const deploys = new DeployRepo(db, audit);
   const hauntings = new HauntingRepo(db, audit);
   const captured: HttpCapture[] = [];
   const responses: Array<{ side: 'api' | 'daemon'; path: string; status: number; bytes: number }> =
@@ -105,6 +104,8 @@ export async function platformHttp(db: PrismaService, agents: readonly AgentConf
       DaemonWorkClient,
       { provide: WORK_COMMANDS, useExisting: DaemonWorkClient },
       { provide: AuditRepo, useValue: audit },
+      { provide: AUDIT_SINK, useValue: audit },
+      { provide: AUDIT_READER, useValue: audit },
       { provide: WorkItemRepo, useValue: work },
       { provide: HauntingRepo, useValue: hauntings },
       { provide: DeployRepo, useValue: deploys },

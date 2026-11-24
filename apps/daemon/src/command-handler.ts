@@ -12,7 +12,8 @@ import type { FetchHandler } from './routes';
 
 export interface CommandOptions {
   commands: WorkCommands;
-  projectId: string;
+  /** A command's caller Project must be in the granted set; no boot fallback. */
+  projectIds: readonly string[];
   token: string;
   maxBytes: number;
   timeoutMs: number;
@@ -43,7 +44,7 @@ export function createCommandHandler(options: CommandOptions): FetchHandler {
             : AnswerCommandSchema;
       const checked = schema.safeParse(raw);
       if (!checked.success) throw new HttpFailure(400, 'Invalid Work command');
-      if (checked.data.caller.projectId !== options.projectId) {
+      if (!options.projectIds.includes(checked.data.caller.projectId)) {
         throw new WorkError('PROJECT_FORBIDDEN', 'Work item belongs to another project');
       }
       let result: Promise<unknown>;

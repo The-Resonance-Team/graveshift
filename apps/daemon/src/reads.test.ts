@@ -48,7 +48,6 @@ function makeFixture() {
   });
   const reads = createReadRuntime({
     api,
-    projectId: caller.projectId,
     sources: [source],
     metricJobs: ['checkout'],
     metrics: {
@@ -61,7 +60,7 @@ function makeFixture() {
   });
   const handle = createReadHandler({
     reads,
-    projectId: caller.projectId,
+    projectIds: [caller.projectId, 'project-2'],
     token,
     maxBytes: 1024,
     timeoutMs: 1000,
@@ -81,7 +80,7 @@ describe('daemon private reads', () => {
   test('maps Collector inventory and durable Hauntings to the MCP contract', async () => {
     const fixture = makeFixture();
     expect(await (await fixture.request('services')).json()).toEqual([
-      { name: 'checkout', runtime: 'docker' },
+      { name: 'checkout', status: 'diagnosed' },
     ]);
     expect(await (await fixture.request('incidents')).json()).toEqual([fixture.view]);
     expect(
@@ -113,6 +112,44 @@ describe('daemon private reads', () => {
     expect((await fixture.request('unknown')).status).toBe(404);
   });
 
+  test('a second granted Project reads its own Hauntings and policy facts', async () => {
+    const fixture = makeFixture();
+    const incidents = await fixture.request('incidents', { projectId: 'project-2' });
+    expect(incidents.status).toBe(200);
+    expect(fixture.calls).toContainEqual({
+      path: '/internal/hauntings/list',
+      body: { projectId: 'project-2' },
+    });
+    expect((await fixture.request('incidents', { projectId: 'ungranted' })).status).toBe(403);
+
+    const incident = await fixture.request('incident', {
+      projectId: 'project-2',
+      id: fixture.view.incident.id,
+    });
+    expect(incident.status).toBe(200);
+    expect(fixture.calls).toContainEqual({
+      path: '/internal/hauntings/get',
+      body: { projectId: 'project-2', id: fixture.view.incident.id },
+    });
+  });
+
+  test('policy facts must agree with the Project of the read, not the boot Project', async () => {
+    const fixture = makeFixture();
+    const incidentId = fixture.view.incident.id;
+    const mismatch = await fixture.request('context', { projectId: 'project-2', incidentId });
+    expect(mismatch.status).toBe(503);
+
+    const detection = fixture.view.detections[0];
+    if (detection === undefined) throw new Error('Expected a recorded detection');
+    fixture.view.detections = [{ ...detection, projectId: 'project-2' }];
+    const accepted = await fixture.request('context', { projectId: 'project-2', incidentId });
+    expect(accepted.status).toBe(200);
+    expect(fixture.calls).toContainEqual({
+      path: '/internal/context',
+      body: { projectId: 'project-2', service: 'checkout', incidentId },
+    });
+  });
+
   test('bounds and redacts logs, and rejects unknown Graves', async () => {
     const fixture = makeFixture();
     const response = await fixture.request('logs', { service: 'checkout', lines: 2 });
@@ -130,6 +167,19 @@ describe('daemon private reads', () => {
     });
     expect(await response.json()).toBe(0.2);
     expect(fixture.queries()).toBe(1);
+  });
+
+  test('serves real audited counters from the same Haunting facts', async () => {
+    const fixture = makeFixture();
+    const response = await fixture.request('counters', {
+      incidentId: fixture.view.incident.id,
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      source: 'wired',
+      counters: fixture.facts.policy.counters,
+    });
+    expect((await fixture.request('counters', { id: 'wrong-field' })).status).toBe(400);
   });
 
   test('accepts repeated recorded rule signals while keeping the durable counters', async () => {

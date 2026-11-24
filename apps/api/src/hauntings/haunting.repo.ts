@@ -1,9 +1,10 @@
 import { prepareRecordedHaunting, type RecordedHaunting } from '@graveshift/core/recorded';
 import { redact } from '@graveshift/redactor';
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 
-import { AuditRepo } from '../audit/audit.repo';
+import { AUDIT_SINK, type AuditSink } from '../audit/audit.sink';
 import { inAuditTransaction } from '../audit/audit.transaction';
+import { openingDeploymentPair } from '../deploys/deployment-closure';
 import { PrismaService } from '../infra/prisma.service';
 import { HauntingConflict } from './haunting.errors';
 import { appliedSeq, hauntingData, mergeRecorded, toRecordedHaunting } from './haunting.mapper';
@@ -13,7 +14,7 @@ import { HAUNTING_SELECT } from './haunting.select';
 export class HauntingRepo {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly audit: AuditRepo,
+    @Inject(AUDIT_SINK) private readonly audit: AuditSink,
   ) {}
 
   async upsert(
@@ -55,10 +56,8 @@ export class HauntingRepo {
       )
         throw new HauntingConflict();
       const recorded = mergeRecorded(prior, view);
-      // A later Event cannot change the opening pair. The first Event supplies the
-      // Environment; every later row keeps the one already stored on the Haunting.
-      const deploymentEnvironment = recorded.deploymentEnvironment ?? eventEnvironment ?? null;
-      const data = hauntingData({ ...recorded, deploymentEnvironment }, entry.seq);
+      const pair = openingDeploymentPair(prior, view, eventEnvironment);
+      const data = hauntingData({ ...recorded, ...pair }, entry.seq);
       const saved = await tx.haunting.upsert({
         where,
         create: { projectId, ...data },

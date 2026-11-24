@@ -2,15 +2,11 @@ import { describe, expect, test } from 'bun:test';
 
 import {
   agentAssignee,
-  assertTriageAllowed,
   AssigneeSchema,
   createSubtasks,
   NEEDS_HUMAN,
   parseAssignee,
   promoteToFront,
-  triageToAgent,
-  triageToHuman,
-  WorkItemClientConfigSchema,
   WorkItemSchema,
   type WorkItem,
 } from './index';
@@ -42,8 +38,6 @@ const workItem: WorkItem = {
   draftPr: null,
 };
 
-const clientConfig = WorkItemClientConfigSchema.parse({});
-
 describe('work item schema', () => {
   test('accepts a complete work item and rejects a wrong subtask count', () => {
     expect(WorkItemSchema.parse(workItem)).toEqual(workItem);
@@ -70,34 +64,27 @@ describe('work item schema', () => {
   });
 });
 
-describe('triage helpers', () => {
-  test('assigns to needs_human without changing the work item flag set', () => {
-    const next = triageToHuman(workItem, clientConfig);
-    expect(next.assignee).toBe(NEEDS_HUMAN);
-    expect(workItem.assignee).toBe(agentAssignee('SRE Bot'));
+describe('the one assignee seam', () => {
+  test('agentAssignee formats what parseAssignee accepts', () => {
+    const names = ['SRE Bot'];
+    for (const name of names) {
+      const formatted = agentAssignee(name);
+      expect(AssigneeSchema.parse(formatted)).toBe(formatted);
+      const parsed = parseAssignee(formatted, names);
+      expect(parsed.ok).toBe(true);
+      if (parsed.ok) expect(parsed.value).toBe(formatted);
+    }
+    const human = parseAssignee(NEEDS_HUMAN, names);
+    expect(human.ok).toBe(true);
+    if (human.ok) expect(human.value).toBe(NEEDS_HUMAN);
   });
 
-  test('assigns to a known agent and rejects an unknown agent', () => {
+  test('rejects an unknown agent, a bare prefix and a foreign format', () => {
     const names = ['SRE Bot'];
-    const next = triageToAgent(workItem, 'SRE Bot', names, clientConfig);
-    expect(next.ok).toBe(true);
-    if (next.ok) expect(next.value.assignee).toBe(agentAssignee('SRE Bot'));
-    expect(triageToAgent(workItem, 'Missing Bot', names, clientConfig).ok).toBe(false);
-  });
-
-  test('parses assignees without a model call or a side effect', () => {
-    const names = ['SRE Bot'];
-    expect(parseAssignee(NEEDS_HUMAN, names).ok).toBe(true);
-    expect(parseAssignee(agentAssignee('SRE Bot'), names).ok).toBe(true);
     expect(parseAssignee(agentAssignee('Missing Bot'), names).ok).toBe(false);
+    expect(() => agentAssignee('')).toThrow();
+    expect(parseAssignee('needs_agent_', names).ok).toBe(false);
     expect(parseAssignee('human', names).ok).toBe(false);
-  });
-
-  test('blocks triage when the work item is done', () => {
-    const done = { ...workItem, status: 'done' as const };
-    expect(assertTriageAllowed(workItem).ok).toBe(true);
-    const blocked = assertTriageAllowed(done);
-    expect(blocked.ok).toBe(false);
-    if (!blocked.ok) expect(blocked.error.code).toBe('TERMINAL_STATUS');
+    expect(AssigneeSchema.safeParse('needs_agent_').success).toBe(false);
   });
 });

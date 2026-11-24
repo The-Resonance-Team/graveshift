@@ -25,7 +25,14 @@ import { PolicyContextMismatchError } from './mcp.errors';
 import { McpScopeGuard } from './mcp-scope.guard';
 import { deepRedact } from './mcp.redact';
 import { PromqlSchema } from './mcp.promql';
-import { MCP_BACKEND, MCP_ENV_MODE, MCP_POLICY, type McpBackend } from './mcp.types';
+import {
+  MCP_AUDIT_WRITER,
+  MCP_BACKEND,
+  MCP_ENV_MODE,
+  MCP_POLICY,
+  type McpAuditWriter,
+  type McpBackend,
+} from './mcp.types';
 
 const idSchema = z.string().min(1).max(128);
 
@@ -60,6 +67,7 @@ function verifyContext(view: IncidentFacts, input: unknown): SharedPolicyContext
 export class McpTools {
   constructor(
     @Inject(MCP_BACKEND) private readonly backend: McpBackend,
+    @Inject(MCP_AUDIT_WRITER) private readonly writer: McpAuditWriter,
     @Inject(MCP_POLICY) private readonly policy: Policy,
     @Inject(MCP_ENV_MODE) private readonly envMode: string | undefined,
   ) {}
@@ -140,7 +148,7 @@ export class McpTools {
     };
 
     // A daemon failure or malformed counters reject the tool call. Zero counters are never assumed.
-    const snapshot = await this.backend.getCounters();
+    const snapshot = await this.backend.getCounters(args.incidentId);
     const counters = snapshot.counters;
     const enforced = snapshot.source === 'wired';
 
@@ -189,8 +197,12 @@ export class McpTools {
       incidentId: args.incidentId,
     };
     try {
-      const ack = await this.backend.auditDecision(draft);
-      if (ack.key !== draft.key) throw new Error('Audit acknowledgement does not match');
+      const ack = await this.writer.auditDecision(draft);
+      // ADR 0022: a result whose audit was not durably acknowledged is withheld. An
+      // unauthenticated stdio call has no Project, so it can never pass this check.
+      if (!ack.acknowledged || ack.key !== draft.key) {
+        throw new Error('Policy audit was not acknowledged');
+      }
     } catch {
       throw new ServiceUnavailableException('Policy audit was not acknowledged');
     }

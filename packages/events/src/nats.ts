@@ -1,7 +1,7 @@
 import { jetstream, type JetStreamClient } from '@nats-io/jetstream';
 import { connect, type NatsConnection } from '@nats-io/transport-node';
 
-import { createNatsPublisher, type Publisher } from './index';
+import { createNatsPublisher, type Publisher } from './publisher';
 
 export interface NatsPublisherHandle {
   publisher: Publisher;

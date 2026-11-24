@@ -1,8 +1,7 @@
-import { AuditDraftSchema, AuditEntrySchema } from '@graveshift/core';
+import { AuditDraftSchema, AuditEntrySchema, canonical } from '@graveshift/core';
 import { z } from 'zod';
 
 import type { AuditRow } from './audit.select';
-import { canonical } from './chain';
 
 const payloadSchema = z.record(z.string(), z.json());
 

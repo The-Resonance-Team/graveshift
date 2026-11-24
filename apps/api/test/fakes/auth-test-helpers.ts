@@ -1,12 +1,17 @@
 import type { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
-import type { EventEnvelope } from '@graveshift/core';
+import type { AuditDraft, AuditEntry, EventEnvelope } from '@graveshift/core';
 import { createInMemoryPublisher, type InMemoryPublisher } from '@graveshift/events/testing';
 
 import { configureApp } from '../../src/app.factory';
 import { AppModule } from '../../src/app.module';
-import { AuditRepo, type AuditAppendInput } from '../../src/audit/repo/audit.repo';
+import {
+  AUDIT_SINK,
+  type AuditRecord,
+  type AuditSink,
+  type AuditTransaction,
+} from '../../src/audit/audit.sink';
 import { DeployRepo } from '../../src/deploys/deploy.repo';
 import { FakeDeployRepo } from '../../src/deploys/testing/deploy-repo.fakes';
 import {
@@ -25,13 +30,33 @@ import { FakeCredentialRepo } from './fake-credential-repo';
 
 export { TEST_CONFIG };
 
-/** Records audit appends without touching PostgreSQL. No network call is made. */
-export class FakeAuditRepo {
-  readonly appended: AuditAppendInput[] = [];
+/** The in-memory adapter at the `AUDIT_SINK` seam. No network or database call is made. */
+export class FakeAuditRepo implements AuditSink {
+  readonly appended: AuditRecord[] = [];
 
-  append(input: AuditAppendInput): Promise<{ seq: number }> {
-    this.appended.push(input);
-    return Promise.resolve({ seq: this.appended.length });
+  append(projectId: string, draft: AuditDraft): Promise<AuditEntry> {
+    this.appended.push({ ...structuredClone(draft), projectId });
+    return Promise.resolve(this.entry());
+  }
+
+  appendInTx(_tx: AuditTransaction, projectId: string, draft: AuditDraft): Promise<AuditEntry> {
+    return this.append(projectId, draft);
+  }
+
+  transaction<Result>(work: (tx: AuditTransaction) => Promise<Result>): Promise<Result> {
+    return work(undefined as unknown as AuditTransaction);
+  }
+
+  private entry(): AuditEntry {
+    return {
+      seq: this.appended.length,
+      at: new Date().toISOString(),
+      actor: 'fixture',
+      type: 'fixture',
+      payload: {},
+      prevHash: '0'.repeat(64),
+      hash: '0'.repeat(64),
+    };
   }
 }
 
@@ -78,7 +103,7 @@ export async function buildAuthApp(
     .useValue(repo)
     .overrideProvider(IDENTITY_REPO)
     .useValue(identity)
-    .overrideProvider(AuditRepo)
+    .overrideProvider(AUDIT_SINK)
     .useValue(audit)
     .overrideProvider(DeployRepo)
     .useValue(deploys)

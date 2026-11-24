@@ -12,7 +12,7 @@ import {
 } from '@graveshift/work';
 import type { Prisma } from '@prisma/client';
 
-import type { AuditRepo } from '../audit/audit.repo';
+import type { AuditSink } from '../audit/audit.sink';
 import { newLease } from './work-item.lease';
 import { toAttempt, workAudit } from './work-item.mapper';
 import type { WorkAgents } from './work-item.policy';
@@ -29,7 +29,7 @@ import {
 
 export async function saveTriage(
   tx: Prisma.TransactionClient,
-  audit: AuditRepo,
+  audit: AuditSink,
   agents: WorkAgents,
   caller: WorkCaller,
   id: string,
@@ -74,7 +74,7 @@ export async function saveTriage(
 
 export async function claimFix(
   tx: Prisma.TransactionClient,
-  audit: AuditRepo,
+  audit: AuditSink,
   agents: WorkAgents,
   caller: WorkCaller,
   id: string,

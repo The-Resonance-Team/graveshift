@@ -1,5 +1,4 @@
 import * as core from '@graveshift/core';
-import * as policyEngine from '@graveshift/policy';
 
 import { actionAudit } from './audit';
 import * as claims from './claims';
@@ -9,7 +8,6 @@ import * as types from './types';
 
 export interface ActuatorOptions {
   secret: string;
-  policy: policyEngine.Policy;
   docker: types.DockerRestarter;
   kube: types.KubeWriter;
   namespace: string;
@@ -17,21 +15,11 @@ export interface ActuatorOptions {
   durableAdmission: claims.RequiredAdmission;
   /** False when the audit sink acknowledges but does not persist a record. */
   durableAudit?: boolean;
-  envMode?: string;
-  now?: () => number;
-  maxTrackedActions?: number;
   breaker?: guards.Breaker;
 }
 
-interface Admission {
-  service: string;
-  at: number;
-  expiresAt: number;
-  state: 'reserved' | 'executing' | 'complete';
-}
-
 export function createActuator(options: ActuatorOptions) {
-  const { secret, docker, kube, namespace, requiredAudit, durableAdmission, envMode } = options;
+  const { secret, docker, kube, namespace, requiredAudit, durableAdmission } = options;
   const durableAudit = options.durableAudit ?? true;
   if (secret.length < MIN_SECRET_LENGTH)
     throw new types.ActuatorError('ACTUATOR_CONFIG', 'HMAC secret is too short');
@@ -42,16 +30,7 @@ export function createActuator(options: ActuatorOptions) {
     typeof durableAdmission.complete !== 'function'
   )
     throw new types.ActuatorError('ACTUATOR_CONFIG', 'Durable runtime admission is required');
-  const maxTracked = options.maxTrackedActions ?? 10_000;
-  if (!Number.isSafeInteger(maxTracked) || maxTracked < 1)
-    throw new types.ActuatorError(
-      'ACTUATOR_CONFIG',
-      'Admission capacity must be a positive integer',
-    );
-  const policy = structuredClone(options.policy);
-  const now = options.now ?? Date.now;
   const breaker = options.breaker ?? guards.createBreaker({ page: () => {} });
-  const admissions = new Map<string, Admission>();
 
   async function acknowledge(draft: core.AuditDraft): Promise<boolean> {
     try {
@@ -73,38 +52,6 @@ export function createActuator(options: ActuatorOptions) {
     return { status, reason, audit, auditStatus: acknowledged ? 'acknowledged' : 'pending' };
   }
 
-  function approvalReason(request: types.ActionRequest, at: number) {
-    return (
-      claims.approvalReason(request, policy, at) ??
-      (breaker.isOpen(request.action.service) ? 'circuit_open' : undefined)
-    );
-  }
-
-  function reserve(request: types.ActionRequest): string | Admission {
-    const { action, approval } = request;
-    const at = now();
-    let actionsLast10Min = 0;
-    for (const [tokenId, entry] of admissions) {
-      const active = entry.state !== 'complete' || entry.at > at - core.BREAKER_WINDOW_MS;
-      if (!active && entry.expiresAt <= at) admissions.delete(tokenId);
-      if (active && entry.service === action.service) actionsLast10Min++;
-    }
-    const invalid = approvalReason(request, at);
-    if (invalid) return invalid;
-    if (admissions.has(approval.tokenId)) return 'replay';
-    const denied = claims.runtimeDecision(policy, request, actionsLast10Min, envMode);
-    if (denied) return denied;
-    if (admissions.size >= maxTracked) return 'admission_capacity';
-    const entry: Admission = {
-      service: action.service,
-      at,
-      expiresAt: Date.parse(approval.expiresAt),
-      state: 'reserved',
-    };
-    admissions.set(approval.tokenId, entry);
-    return entry;
-  }
-
   async function run(action: types.Action): Promise<void> {
     if (action.runtime === 'docker') return docker.restart(action.service);
     if (action.kind === 'scale') return kube.scale(namespace, action.service, action.replicas ?? 0);
@@ -113,10 +60,8 @@ export function createActuator(options: ActuatorOptions) {
 
   async function complete(
     request: types.ActionRequest,
-    entry: Admission,
     result: types.RuntimeOutcome,
   ): Promise<types.ActuationResult> {
-    entry.state = 'complete';
     const completion: claims.RuntimeCompletion = {
       tokenId: request.approval.tokenId,
       actionId: request.action.id,
@@ -151,14 +96,11 @@ export function createActuator(options: ActuatorOptions) {
       if (!parsed.success) return terminal('denied', 'malformed_request');
       const request = parsed.data;
       if (!verifyHmac(request, secret)) return terminal('denied', 'bad_signature');
-      const admission = reserve(request);
-      if (typeof admission === 'string') return terminal('denied', admission, request);
       const input = claims.runtimeClaim(request);
       let claimed: claims.ClaimResult;
       try {
         claimed = await durableAdmission.claim(structuredClone(input));
       } catch {
-        admissions.delete(request.approval.tokenId);
         return {
           status: 'failed',
           reason: 'admission_unavailable',
@@ -167,7 +109,6 @@ export function createActuator(options: ActuatorOptions) {
         };
       }
       if (claimed.kind !== 'claimed') {
-        admissions.delete(request.approval.tokenId);
         const reason =
           claimed.kind === 'known'
             ? 'already_completed'
@@ -177,13 +118,9 @@ export function createActuator(options: ActuatorOptions) {
         const result = await terminal('denied', reason, request);
         return claimed.kind === 'known' ? { ...result, knownResult: claimed.result } : result;
       }
-      const invalid = approvalReason(request, now());
-      if (invalid) {
-        return complete(request, admission, { status: 'denied', reason: invalid });
-      }
-      admission.at = now();
-      admission.state = 'executing';
-      breaker.recordAction(request.action.service, admission.at);
+      const late = await durableAdmission.recheck?.(input);
+      if (late) return complete(request, { status: 'denied', reason: late });
+      breaker.recordAction(request.action.service);
       let status: 'executed' | 'failed' = 'executed';
       try {
         await run(request.action);
@@ -192,7 +129,6 @@ export function createActuator(options: ActuatorOptions) {
       }
       return complete(
         request,
-        admission,
         status === 'executed'
           ? { status, reason: 'executed' }
           : { status, reason: 'execution_failed' },

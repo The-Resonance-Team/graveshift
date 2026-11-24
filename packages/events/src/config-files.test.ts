@@ -75,7 +75,7 @@ describe('NATS server config', () => {
     expect(publisher).toContain('publish: ["graveshift.>"]');
   });
 
-  test('gives the read user only the request, pull, ack and dead-letter publish subjects', () => {
+  test('gives the read user only the request, bind, pull, ack and dead-letter publish subjects', () => {
     const readUser = conf.match(/user: \$NATS_READ_USER([\s\S]*?)\n    \}/)?.[1] ?? '';
     expect(readUser).not.toBe('');
     const publish = (readUser.match(/publish: \[([\s\S]*?)\]/)?.[1] ?? '').replace(/\s/g, '');
@@ -84,6 +84,7 @@ describe('NATS server config', () => {
     for (const subject of [
       '$JS.API.STREAM.INFO.GRAVESHIFT_EVENTS',
       '$JS.API.DIRECT.GET.GRAVESHIFT_EVENTS.>',
+      '$JS.API.CONSUMER.INFO.GRAVESHIFT_EVENTS.graveshift-watcher',
       '$JS.API.CONSUMER.MSG.NEXT.GRAVESHIFT_EVENTS.graveshift-watcher',
       '$JS.ACK.GRAVESHIFT_EVENTS.>',
       'graveshift.*.dlq.*',
@@ -93,7 +94,7 @@ describe('NATS server config', () => {
     expect(subscribe).toBe('"_INBOX.>"');
     expect(publish).not.toContain('$JS.API.*');
     expect(publish).not.toContain('graveshift.>');
-    expect(publish).not.toContain('$JS.API.CONSUMER.INFO.');
+    expect(publish).not.toContain('$JS.API.CONSUMER.INFO.>');
   });
 
   test('opens no MQTT, leafnode or WebSocket listener', () => {

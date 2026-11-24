@@ -48,7 +48,8 @@ export interface Collectors {
   reads: readonly CollectorReads[];
   metrics?: MetricsClient;
   metricJobs: readonly string[];
-  start(projectId: string, publisher: Publisher): Promise<void>;
+  /** The Project is a host bootstrap for Collector notices; it is not an Event scope. */
+  start(bootstrapProjectId: string, publisher: Publisher): Promise<void>;
   stop(): Promise<void>;
 }
 
@@ -96,14 +97,14 @@ export function createCollectors(env: Record<string, string | undefined>): Colle
     reads,
     ...(metrics === undefined ? {} : { metrics }),
     metricJobs: config.GRAVESHIFT_METRIC_TARGETS.map((target) => target.job),
-    async start(projectId, publisher) {
+    async start(bootstrapProjectId, publisher) {
       try {
         await integrations.reduce(
           (chain, integration) =>
             chain.then(async () => {
               started.add(integration);
               await integration.start({
-                projectId,
+                projectId: bootstrapProjectId,
                 service: config.GRAVESHIFT_COLLECTOR_SERVICE,
                 publisher,
               });

@@ -2,14 +2,15 @@ import { BREAKER_WINDOW_MS } from '@graveshift/core';
 
 export interface BreakerOptions {
   page: (service: string, reason: string) => void;
+  now?: () => number;
 }
 
-export function createBreaker({ page }: BreakerOptions) {
+export function createBreaker({ page, now = Date.now }: BreakerOptions) {
   const lastAction = new Map<string, number>();
   const open = new Set<string>();
   return {
-    recordAction(service: string, atMs: number): void {
-      lastAction.set(service, atMs);
+    recordAction(service: string): void {
+      lastAction.set(service, now());
     },
     // SEC-11: a reopen within 10 min of our own action disables auto-actions for that service and pages humans
     reopened(service: string, atMs: number): boolean {

@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 
-import { AuditRepo } from '../../src/audit/repo/audit.repo';
+import { AuditRepo } from '../../src/audit/audit.repo';
 import { DeployRepo } from '../../src/deploys/deploy.repo';
 import type { PrismaService } from '../../src/infra/prisma.service';
 import { dbTestEnabled, openTestDatabase, resetDatabase } from './fixtures';

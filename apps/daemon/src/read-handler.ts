@@ -34,11 +34,18 @@ const ReadCommandSchema = z.discriminatedUnion('action', [
       body: z.object({ ...project, promql: z.string().min(1).max(2000) }).strict(),
     })
     .strict(),
+  z
+    .object({
+      action: z.literal('counters'),
+      body: z.object({ ...project, incidentId: z.string().min(1).max(200) }).strict(),
+    })
+    .strict(),
 ]);
 
 export interface ReadHandlerOptions {
   reads: ReadRuntime;
-  projectId: string;
+  /** ADR 0023: every granted Project may be read; the boot Project is not a scope floor. */
+  projectIds: readonly string[];
   token: string;
   timeoutMs: number;
   maxBytes: number;
@@ -62,27 +69,31 @@ export function createReadHandler(options: ReadHandlerOptions): FetchHandler {
       const checked = ReadCommandSchema.safeParse({ action, body });
       if (!checked.success) throw new HttpFailure(400, 'Invalid read command');
       const command = checked.data;
-      if (command.body.projectId !== options.projectId)
+      if (!options.projectIds.includes(command.body.projectId))
         throw new HttpFailure(403, 'Project is unavailable');
+      const projectId = command.body.projectId;
       let result: Promise<unknown>;
       switch (command.action) {
         case 'services':
-          result = options.reads.services();
+          result = options.reads.services(projectId);
           break;
         case 'incidents':
-          result = options.reads.incidents();
+          result = options.reads.incidents(projectId);
           break;
         case 'incident':
-          result = options.reads.incident(command.body.id);
+          result = options.reads.incident(projectId, command.body.id);
           break;
         case 'context':
-          result = options.reads.context(command.body.incidentId);
+          result = options.reads.context(projectId, command.body.incidentId);
           break;
         case 'logs':
-          result = options.reads.logs(command.body.service, command.body.lines);
+          result = options.reads.logs(projectId, command.body.service, command.body.lines);
           break;
         case 'metric':
-          result = options.reads.metric(command.body.promql);
+          result = options.reads.metric(projectId, command.body.promql);
+          break;
+        case 'counters':
+          result = options.reads.counters(projectId, command.body.incidentId);
           break;
       }
       return jsonResponse(await within(result, options.timeoutMs));

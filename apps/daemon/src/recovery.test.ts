@@ -1,6 +1,6 @@
-import { PublicationError } from '@graveshift/fixer';
 import { describe, expect, test } from 'bun:test';
 
+import { FixExecutionError } from './execution';
 import { caller, pr } from './flow-fixtures';
 import { harness } from './flow-harness';
 import { createWorkCommands } from './work-flow';
@@ -15,7 +15,10 @@ describe('publication recovery', () => {
       publish: async () => {
         publications++;
         await publish.promise;
-        throw new PublicationError('draft', true);
+        throw new FixExecutionError(
+          'publication_uncertain',
+          'draft publication failed during draft',
+        );
       },
       dispose: async () => {},
     });
@@ -41,7 +44,10 @@ describe('publication recovery', () => {
     flow.options.execute = async () => ({
       intent: { repo: pr.repo, branch: pr.branch, baseSha: 'base-1' },
       publish: async () => {
-        throw new PublicationError('draft', true);
+        throw new FixExecutionError(
+          'publication_uncertain',
+          'draft publication failed during draft',
+        );
       },
       dispose: async () => {},
     });
@@ -68,7 +74,11 @@ describe('publication recovery', () => {
     flow.options.execute = async () => ({
       intent: { repo: pr.repo, branch: pr.branch, baseSha: 'base-1' },
       publish: async () => {
-        throw new PublicationError('draft', true, pr);
+        throw new FixExecutionError(
+          'publication_uncertain',
+          'draft publication failed during draft',
+          pr,
+        );
       },
       dispose: async () => {},
     });
@@ -83,7 +93,10 @@ describe('publication recovery', () => {
       intent: { repo: pr.repo, branch: pr.branch, baseSha: 'base-1' },
       publish: async () => {
         published++;
-        throw new PublicationError('draft', true);
+        throw new FixExecutionError(
+          'publication_uncertain',
+          'draft publication failed during draft',
+        );
       },
       dispose: async () => {},
     });
@@ -109,7 +122,10 @@ describe('publication recovery', () => {
       intent: { repo: pr.repo, branch: pr.branch, baseSha: 'base-1' },
       publish: async () => {
         published++;
-        throw new PublicationError('draft', true);
+        throw new FixExecutionError(
+          'publication_uncertain',
+          'draft publication failed during draft',
+        );
       },
       dispose: async () => {},
     });

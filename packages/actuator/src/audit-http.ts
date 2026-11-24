@@ -94,6 +94,13 @@ export function createAdmissionHttp(options: AuditHttpOptions): claims.RequiredA
         'Runtime claim acknowledgement is invalid',
       );
     },
+    recheck: async (input) => {
+      const claim = claims.RuntimeClaimSchema.safeParse(input);
+      if (!claim.success)
+        throw new AuditTransportError('AUDIT_REJECTED', 'Runtime claim is invalid');
+      // The remote claim checked the approver list; time and binding can still change.
+      return claims.approvalTimeReason(claim.data.request, Date.now());
+    },
     async complete(input) {
       const completion = claims.RuntimeCompletionSchema.safeParse(input);
       if (!completion.success)

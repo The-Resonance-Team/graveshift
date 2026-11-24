@@ -90,7 +90,7 @@ export async function createPlatform(db: PrismaService) {
     onAudit: gatewayAudit(audit),
   });
   const commands = createWorkCommands({
-    projectId: caller.projectId,
+    projectIds: [caller.projectId],
     agents: PLATFORM_AGENTS,
     runtime: createWorkClient(http.api),
     policy,
@@ -108,13 +108,12 @@ export async function createPlatform(db: PrismaService) {
     recover: (intent) => recoverPublication(recording.client, intent),
   });
   const reads = createReadRuntime({
-    projectId: caller.projectId,
     api: http.api,
     sources: [],
     metricJobs: [],
   });
   const edge = {
-    projectId: caller.projectId,
+    projectIds: [caller.projectId],
     token: http.token,
     timeoutMs: 30_000,
     maxBytes: 65_536,
@@ -149,7 +148,7 @@ export async function createPlatform(db: PrismaService) {
   http.attach(
     daemonHandler(
       createCommandHandler({ ...edge, commands }),
-      createReadHandler({ ...edge, reads }),
+      createReadHandler({ ...edge, projectIds: [caller.projectId], reads }),
     ),
   );
   return {
@@ -172,13 +171,12 @@ export async function createPlatform(db: PrismaService) {
       return saved;
     },
     async observe(
-      onWork: (item: WorkItem, incidentId: string) => Promise<void> = workActivation(
-        commands,
-        caller.projectId,
-      ),
+      onWork: (item: WorkItem, incidentId: string, projectId: string) => Promise<void> = (
+        item,
+        incidentId,
+      ) => workActivation(commands, caller.projectId)(item, incidentId),
     ) {
       return createObservations({
-        projectId: caller.projectId,
         api: http.api,
         gateway,
         agents: PLATFORM_AGENTS,

@@ -1,10 +1,6 @@
 import type { AuditDraft, WorkItem } from '@graveshift/core';
-import {
-  type PolicyAction,
-  type PolicyContext,
-  type PolicyDecision,
-  toAuditEvent,
-} from '@graveshift/policy';
+import type { SharedPolicyContext } from '@graveshift/core/policy-context';
+import { type PolicyAction, type PolicyDecision, toAuditEvent } from '@graveshift/policy';
 import type { FixAttempt, PublicationIntent, WorkCaller } from '@graveshift/work';
 
 import type { AuditScope } from './audit';
@@ -86,7 +82,7 @@ const scopeOf = (identity: FixAuditIdentity) => ({
  */
 export function policyDecisionAudit(
   decision: PolicyDecision,
-  context: PolicyContext,
+  context: SharedPolicyContext,
   action: PolicyAction,
   identity: FixAuditIdentity,
 ): AuditDraft {

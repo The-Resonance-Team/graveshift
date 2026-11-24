@@ -13,7 +13,6 @@ describe('createWorkItemPolicy', () => {
     expect(policy.agentNames).toContain('Exorcist');
     expect(policy.agentNames).toContain('SRE Agent');
     expect(policy.autoFixEnabled).toBe(config.fix.enabled);
-    expect(policy.clientConfig).toEqual({});
   });
 
   test('applies a client Agent block by name without a merge', async () => {

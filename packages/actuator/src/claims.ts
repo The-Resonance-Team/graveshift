@@ -38,8 +38,54 @@ export const CompletionResultSchema = z.discriminatedUnion('kind', [
 ]);
 export type CompletionResult = z.infer<typeof CompletionResultSchema>;
 export interface RequiredAdmission {
+  /** Replay, rate count, eligibility and token reservation in one transition. */
   claim(input: RuntimeClaim): Promise<ClaimResult>;
+  /** Eligibility recheck after the claim commits. A reason denies the effect. */
+  recheck?(input: RuntimeClaim): Promise<DenyReason | undefined>;
+  /** Terminal handoff for one claimed token. */
   complete(input: RuntimeCompletion): Promise<CompletionResult>;
+}
+
+export type DenyReason = Extract<types.RuntimeOutcome, { status: 'denied' }>['reason'];
+
+/** The facts the admission owner needs. The actuator owns none of them. */
+export interface AdmissionRules {
+  policy: policyEngine.Policy;
+  now: () => number;
+  audit: types.RequiredAudit;
+  envMode?: string;
+  maxTrackedActions?: number;
+  blocked?: (service: string) => DenyReason | undefined;
+}
+
+/** Approval and policy eligibility before a claim commits. */
+export function admissionDecision(
+  request: types.ActionRequest,
+  rules: AdmissionRules,
+  actionsLast10Min: number,
+): string | undefined {
+  return (
+    rules.blocked?.(request.action.service) ??
+    approvalReason(request, rules.policy, rules.now()) ??
+    runtimeDecision(rules.policy, request, actionsLast10Min, rules.envMode)
+  );
+}
+
+/** Eligibility recheck after the claim commits: only time and breaker state can change. */
+export function lateEligibilityReason(
+  request: types.ActionRequest,
+  rules: AdmissionRules,
+): DenyReason | undefined {
+  return (
+    rules.blocked?.(request.action.service) ?? approvalReason(request, rules.policy, rules.now())
+  );
+}
+
+export function checkCapacity(maxTrackedActions: number | undefined): number {
+  const maxTracked = maxTrackedActions ?? 10_000;
+  if (!Number.isSafeInteger(maxTracked) || maxTracked < 1)
+    throw new Error('Admission capacity must be a positive integer');
+  return maxTracked;
 }
 
 export function runtimeClaim(request: types.ActionRequest): RuntimeClaim {
@@ -60,11 +106,11 @@ export function completionAudit(input: RuntimeCompletion, service: string, incid
   };
 }
 
-export function approvalReason(
+/** The approval checks that need no policy. Shared with the HTTP adapter's late recheck. */
+export function approvalTimeReason(
   request: types.ActionRequest,
-  policy: policyEngine.Policy,
   at: number,
-) {
+): DenyReason | undefined {
   const { approval, action } = request;
   const issued = Date.parse(approval.issuedAt);
   const expires = Date.parse(approval.expiresAt);
@@ -73,8 +119,20 @@ export function approvalReason(
   if (at >= expires) return 'expired';
   if (approval.actionId !== action.id || approval.incidentId !== action.incidentId)
     return 'approval_mismatch';
-  if (!policy.approvers.discordUserIds.includes(approval.approvedBy)) return 'not_an_approver';
   return undefined;
+}
+
+export function approvalReason(
+  request: types.ActionRequest,
+  policy: policyEngine.Policy,
+  at: number,
+): DenyReason | undefined {
+  return (
+    approvalTimeReason(request, at) ??
+    (policy.approvers.discordUserIds.includes(request.approval.approvedBy)
+      ? undefined
+      : 'not_an_approver')
+  );
 }
 
 export function runtimeDecision(
@@ -84,7 +142,7 @@ export function runtimeDecision(
   envMode?: string,
 ) {
   const { action, context } = request;
-  const decision = policyEngine.decideRuntime(
+  const decision = policyEngine.decide(
     policy,
     {
       service: action.service,

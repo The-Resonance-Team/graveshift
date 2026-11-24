@@ -11,13 +11,16 @@ export interface DaemonReadConfig {
 
 const DEFAULT_BASE_URL = 'http://127.0.0.1:2602';
 
-/** The read token has no default: both services fail closed when it is absent. */
+/**
+ * ADR 0020: the named read client presents the same daemon internal token the
+ * command hop uses. There is no separate read token and no default value.
+ */
 export const buildDaemonReadConfig = (
   env: Record<string, string | undefined>,
 ): DaemonReadConfig => {
-  const token = env.GRAVESHIFT_DAEMON_READ_TOKEN;
+  const token = env.GRAVESHIFT_DAEMON_INTERNAL_TOKEN;
   if (token === undefined || token.length === 0) {
-    throw new Error('GRAVESHIFT_DAEMON_READ_TOKEN must be set');
+    throw new Error('GRAVESHIFT_DAEMON_INTERNAL_TOKEN must be set');
   }
   const baseUrl = env.GRAVESHIFT_DAEMON_READ_URL || DEFAULT_BASE_URL;
   const parsed = new URL(baseUrl);
@@ -36,7 +39,7 @@ export const buildDaemonReadConfig = (
       useFactory: (config: ConfigService): DaemonReadConfig =>
         buildDaemonReadConfig({
           GRAVESHIFT_DAEMON_READ_URL: config.get<string>('GRAVESHIFT_DAEMON_READ_URL'),
-          GRAVESHIFT_DAEMON_READ_TOKEN: config.get<string>('GRAVESHIFT_DAEMON_READ_TOKEN'),
+          GRAVESHIFT_DAEMON_INTERNAL_TOKEN: config.get<string>('GRAVESHIFT_DAEMON_INTERNAL_TOKEN'),
         }),
     },
   ],

@@ -27,7 +27,7 @@ import { Prisma } from '@prisma/client';
 import { subHours } from 'date-fns';
 import type { WorkItem } from '@graveshift/core';
 
-import { AuditRepo } from '../audit/audit.repo';
+import { AUDIT_SINK, type AuditSink } from '../audit/audit.sink';
 import { inAuditTransaction } from '../audit/audit.transaction';
 import { PrismaService } from '../infra/prisma.service';
 import { ProjectGrant } from '../internal/project-grant';
@@ -46,7 +46,7 @@ import type { WorkItemListResponse, WorkListQuery, WorkStateCall } from './work-
 export class WorkItemRepo {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly audit: AuditRepo,
+    @Inject(AUDIT_SINK) private readonly audit: AuditSink,
     @Inject(WORK_AGENTS) private readonly agents: WorkAgents,
     private readonly grant: ProjectGrant,
   ) {}

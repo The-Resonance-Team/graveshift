@@ -5,14 +5,12 @@ import { dbTestEnabled, openTestDatabase } from '../../test/database/fixtures';
 import { AuditRepo } from '../audit/audit.repo';
 import type { ActionRepo } from './action.repo';
 import { actionRepo, setupActionsDatabase } from './testing/action-db.fixture';
-import { ACTION_TEST_POLICY } from './testing/action.fixture';
 
 function runtime(repo: ActionRepo, audit: AuditRepo, complete = true) {
   const calls: string[] = [];
   const executor = actuator.createActuator({
     secret: 'fixture-signing-secret-32-characters',
     namespace: 'fixture',
-    policy: ACTION_TEST_POLICY,
     docker: { restart: async (service) => void calls.push(`docker:${service}`) },
     kube: {
       rolloutRestart: async (namespace, service) => void calls.push(`k8s:${namespace}/${service}`),

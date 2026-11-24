@@ -14,7 +14,7 @@ import {
 import { Prisma } from '@prisma/client';
 import { addMilliseconds } from 'date-fns';
 
-import type { AuditRepo } from '../audit/audit.repo';
+import type { AuditSink } from '../audit/audit.sink';
 import { assertWorker, databaseNow } from './work-item.lease';
 import { workAudit } from './work-item.mapper';
 import { recordResult, requireCommand } from './work-item.receipts';
@@ -61,7 +61,7 @@ export async function heartbeat(
 
 export async function abandon(
   tx: Prisma.TransactionClient,
-  audit: AuditRepo,
+  audit: AuditSink,
   caller: WorkCaller,
   id: string,
   input: Abandon,
@@ -113,7 +113,7 @@ export async function abandon(
 
 export async function abortPublication(
   tx: Prisma.TransactionClient,
-  audit: AuditRepo,
+  audit: AuditSink,
   caller: WorkCaller,
   id: string,
   input: AbortPublication,

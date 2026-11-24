@@ -62,7 +62,7 @@ export function createSubtasks(items: readonly Subtask[]): Subtasks {
 // The template literal keeps the generated contract distinct from a generic string.
 export const AgentAssigneeSchema = z.templateLiteral([
   z.literal(AGENT_ASSIGNEE_PREFIX),
-  z.string(),
+  z.string().min(1),
 ]);
 export type AgentAssignee = z.infer<typeof AgentAssigneeSchema>;
 
@@ -70,8 +70,8 @@ export const AssigneeSchema = z.union([z.literal(NEEDS_HUMAN), AgentAssigneeSche
 export type Assignee = z.infer<typeof AssigneeSchema>;
 
 export function agentAssignee(agentName: string): AgentAssignee {
-  // The prefix is fixed above; TypeScript does not infer template literal types from interpolation.
-  return `${AGENT_ASSIGNEE_PREFIX}${agentName}` as AgentAssignee;
+  // The seam only formats a value its own parser accepts. An empty name fails closed here.
+  return AgentAssigneeSchema.parse(`${AGENT_ASSIGNEE_PREFIX}${agentName}`);
 }
 
 export const WorkItemSchema = z.object({
@@ -112,31 +112,7 @@ export function withDraftPr(item: WorkItem, pr: PrRef): WorkItem {
   return { ...item, draftPr: pr };
 }
 
-// Auto-fix is a per-Agent trigger setting in client config, not a work-item field.
-export const WorkItemClientConfigSchema = z.object({}).strict();
-export type WorkItemClientConfig = z.infer<typeof WorkItemClientConfigSchema>;
-
-export function applyClientConfig(item: WorkItem, _clientConfig: WorkItemClientConfig): WorkItem {
-  return item;
-}
-
-// Assignees stay strings on the wire. Neither helper calls a model or changes shared state.
-export function triageToHuman(item: WorkItem, clientConfig: WorkItemClientConfig): WorkItem {
-  return applyClientConfig({ ...item, assignee: NEEDS_HUMAN }, clientConfig);
-}
-
-export function triageToAgent(
-  item: WorkItem,
-  agentName: string,
-  agentNames: readonly string[],
-  clientConfig: WorkItemClientConfig,
-): Result<WorkItem, TriageError> {
-  if (!agentNames.includes(agentName)) {
-    return err(new TriageError('UNKNOWN_AGENT', `Unknown agent: ${agentName}`));
-  }
-  return ok(applyClientConfig({ ...item, assignee: agentAssignee(agentName) }, clientConfig));
-}
-
+// The one assignee seam: agentAssignee formats it, parseAssignee parses and checks it.
 // A triage request carries the full assignee, not a bare agent name.
 export function parseAssignee(
   assignee: string,
@@ -151,11 +127,4 @@ export function parseAssignee(
     return err(new TriageError('UNKNOWN_AGENT', `Unknown agent assignee: ${assignee}`));
   }
   return ok(agentAssignee(agentName));
-}
-
-export function assertTriageAllowed(item: WorkItem): Result<WorkItem, TriageError> {
-  if (TERMINAL_WORK_ITEM_STATUSES.some((status) => status === item.status)) {
-    return err(new TriageError('TERMINAL_STATUS', `Cannot triage a ${item.status} work item`));
-  }
-  return ok(item);
 }

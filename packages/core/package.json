@@ -9,6 +9,7 @@
     "dist",
     "src/index.ts",
     "src/contract.ts",
+    "src/policy-context.ts",
     "src/errors.ts",
     "src/rules.ts",
     "src/runtime-source.ts",

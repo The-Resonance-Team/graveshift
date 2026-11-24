@@ -38,21 +38,4 @@ describe('recorded Haunting projection', () => {
     ]);
     expect(mergeRecorded(HAUNTING_FIXTURE, next)).toEqual(merged);
   });
-
-  test('keeps the opening Deployment pair when a later observation changes both fields', () => {
-    const prior = {
-      ...HAUNTING_FIXTURE,
-      deploymentId: 'a'.repeat(40),
-      deploymentEnvironment: 'production',
-    };
-    const next = {
-      ...HAUNTING_FIXTURE,
-      deploymentId: 'b'.repeat(40),
-      deploymentEnvironment: 'staging',
-      incident: { ...HAUNTING_FIXTURE.incident, updatedAt: '2026-11-21T00:02:00.000Z' },
-    };
-    const merged = mergeRecorded(prior, next);
-    expect(merged.deploymentId).toBe('a'.repeat(40));
-    expect(merged.deploymentEnvironment).toBe('production');
-  });
 });

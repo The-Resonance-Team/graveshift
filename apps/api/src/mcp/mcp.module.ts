@@ -22,7 +22,7 @@ import { McpResources } from './mcp.resources';
 import { McpHttpScopeGuard } from './mcp-http-scope.guard';
 import { McpBearerGuard, McpTokenVerifierService } from './mcp-token.verifier';
 import { McpProjectContext } from './mcp-project-context';
-import { MCP_BACKEND, MCP_ENV_MODE, MCP_POLICY } from './mcp.types';
+import { MCP_AUDIT_WRITER, MCP_BACKEND, MCP_ENV_MODE, MCP_POLICY } from './mcp.types';
 import { McpTools } from './mcp.tools';
 
 /** The authenticated Project is shared by the feature module and the MCP module guards. */
@@ -52,6 +52,7 @@ export class McpProjectContextModule {}
     { provide: MCP_EVENT_SOURCE, useClass: NatsEventSource },
     { provide: CLOSED_DEPLOYMENTS, useExisting: DeployRepo },
     { provide: MCP_BACKEND, useClass: HttpMcpBackend },
+    { provide: MCP_AUDIT_WRITER, useExisting: MCP_BACKEND },
     {
       provide: MCP_POLICY,
       useFactory: (config: GraveshiftConfig): Policy => config.policy,
@@ -63,7 +64,14 @@ export class McpProjectContextModule {}
       useFactory: (config: RootBootConfig) => config.mode,
     },
   ],
-  exports: [MCP_BACKEND, MCP_POLICY, MCP_ENV_MODE, McpTokenVerifierService, McpBearerGuard],
+  exports: [
+    MCP_BACKEND,
+    MCP_AUDIT_WRITER,
+    MCP_POLICY,
+    MCP_ENV_MODE,
+    McpTokenVerifierService,
+    McpBearerGuard,
+  ],
 })
 export class McpFeatureModule {}
 

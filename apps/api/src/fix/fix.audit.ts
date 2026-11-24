@@ -1,7 +1,8 @@
+import type { AuditDraft } from '@graveshift/core';
 import type { FixResult, FixTrigger, TriageResult, WorkCaller } from '@graveshift/work';
 import { ForbiddenException } from '@nestjs/common';
 
-import { isAuditScopeUsable, type AuditRecord, type AuditScope } from '../audit/audit.sink';
+import { isAuditScopeUsable, type AuditScope } from '../audit/audit.sink';
 
 /**
  * The one audit event that records how a Fix attempt ended. It is written after the daemon
@@ -50,9 +51,8 @@ export function requireFixAuditScope(
   return scope;
 }
 
-function outcomeRecord(scope: AuditScope, outcome: FixAuditOutcome): AuditRecord {
+function outcomeRecord(scope: AuditScope, outcome: FixAuditOutcome): AuditDraft {
   return {
-    projectId: scope.projectId,
     actor: scope.actor,
     type: FIX_OUTCOME_AUDIT_TYPE,
     // One entry per attempt: a replayed command that returns the recorded result appends the
@@ -134,6 +134,6 @@ export function fixOutcomeFromTriage(
  * model output and a secret never enter this shape: the payload holds identifiers and the
  * contract's failure code only.
  */
-export function fixOutcomeAudit(scope: AuditScope, outcome: FixAuditOutcome): AuditRecord {
+export function fixOutcomeAudit(scope: AuditScope, outcome: FixAuditOutcome): AuditDraft {
   return outcomeRecord(scope, outcome);
 }

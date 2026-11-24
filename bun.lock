@@ -92,8 +92,6 @@
         "@graveshift/sources-k8s": "workspace:*",
         "@graveshift/watcher": "workspace:*",
         "@graveshift/work": "workspace:*",
-        "@nats-io/jetstream": "3.5.0",
-        "@nats-io/transport-node": "3.5.0",
         "effect": "4.1.5",
         "zod": "4.6.7",
       },
@@ -132,19 +130,6 @@
       "version": "0.1.0",
       "devDependencies": {
         "openapi-typescript": "6.7.6",
-      },
-    },
-    "packages/collectors": {
-      "name": "@graveshift/collectors",
-      "version": "0.1.0",
-      "dependencies": {
-        "@graveshift/core": "workspace:*",
-        "@graveshift/events": "workspace:*",
-        "@graveshift/integrations": "workspace:*",
-        "@graveshift/metrics": "workspace:*",
-        "@graveshift/redactor": "workspace:*",
-        "@graveshift/sources-docker": "workspace:*",
-        "@graveshift/sources-k8s": "workspace:*",
       },
     },
     "packages/config": {
@@ -489,8 +474,6 @@
     "@graveshift/api": ["@graveshift/api@workspace:apps/api"],
 
     "@graveshift/api-contract": ["@graveshift/api-contract@workspace:packages/api-contract"],
-
-    "@graveshift/collectors": ["@graveshift/collectors@workspace:packages/collectors"],
 
     "@graveshift/config": ["@graveshift/config@workspace:packages/config"],
 

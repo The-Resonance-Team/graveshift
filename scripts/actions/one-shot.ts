@@ -9,7 +9,7 @@ import {
   PatchSchema,
   type RepoRules,
 } from '@graveshift/patch';
-import { type Policy, type PolicyContext, type PolicyDecision, decide } from '@graveshift/policy';
+import { type Policy, type PolicyDecision, decide } from '@graveshift/policy';
 import { redact } from '@graveshift/redactor';
 
 import { type DecisionBinding, verifyPolicySignature } from './policy-signature';
@@ -94,13 +94,15 @@ export function assertPolicyAllow(raw: string | undefined): RecordedDecision {
   return recorded;
 }
 
-export function parsePolicyContext(raw: unknown): PolicyContext {
+type PolicyFacts = Parameters<typeof decide>[1];
+
+export function parsePolicyContext(raw: unknown): PolicyFacts {
   const context = asObject(raw);
   const signals = context.signals;
   if (!Array.isArray(signals) || !signals.every((signal) => typeof signal === 'string'))
     throw new Error('context.signals must be an array of strings');
   const counters = asObject(context.counters);
-  const base: PolicyContext = {
+  const base: PolicyFacts = {
     service: asString(context.service, 'context.service'),
     signals,
     confidence: asNumber(context.confidence, 'context.confidence'),

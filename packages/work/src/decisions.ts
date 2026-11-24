@@ -1,9 +1,9 @@
 import type { AgentConfig } from '@graveshift/agents';
 import {
-  AGENT_ASSIGNEE_PREFIX,
   NEEDS_HUMAN,
   TERMINAL_WORK_ITEM_STATUSES,
   agentAssignee,
+  parseAssignee,
   type WorkItem,
 } from '@graveshift/core';
 
@@ -31,16 +31,20 @@ export function assignedAgent(
   assignee: string,
   agents: readonly AgentTrigger[],
 ): AgentTrigger | null {
-  if (assignee === NEEDS_HUMAN) return null;
-  if (!assignee.startsWith(AGENT_ASSIGNEE_PREFIX)) {
-    throw new WorkError('INVALID_ASSIGNEE', 'Use needs_human or needs_agent_<name>');
+  const parsed = parseAssignee(
+    assignee,
+    agents.map((entry) => entry.name),
+  );
+  if (!parsed.ok) {
+    throw new WorkError(
+      parsed.error.code,
+      parsed.error.code === 'INVALID_ASSIGNEE'
+        ? 'Use needs_human or needs_agent_<name>'
+        : 'The assigned Agent is unavailable',
+    );
   }
-  const name = assignee.slice(AGENT_ASSIGNEE_PREFIX.length);
-  const agent = agents.find((entry) => entry.name === name);
-  if (agent === undefined) {
-    throw new WorkError('UNKNOWN_AGENT', 'The assigned Agent is unavailable');
-  }
-  return agent;
+  if (parsed.value === NEEDS_HUMAN) return null;
+  return agents.find((entry) => agentAssignee(entry.name) === parsed.value) ?? null;
 }
 
 export function decideTriage(

@@ -6,9 +6,8 @@ import { PrismaInfraModule } from '../infra/prisma.module';
 import { PrismaService } from '../infra/prisma.service';
 import { InternalAccessModule } from '../internal/internal.module';
 import { ProjectGrant } from '../internal/project-grant';
-import { PostgresAuditSink } from './audit.postgres.sink';
 import { AuditRepo } from './audit.repo';
-import { AUDIT_SINK } from './audit.sink';
+import { AUDIT_READER, AUDIT_SINK } from './audit.sink';
 import { AuditModule } from './audit.module';
 
 const build = async () => {
@@ -31,15 +30,15 @@ const build = async () => {
 };
 
 describe('AuditModule', () => {
-  test('binds the sink token to the one PostgreSQL sink and needs no Project of its own', async () => {
+  test('binds both seams to one Postgres owner and needs no Project of its own', async () => {
     // Built from an empty boot surface: no environment key names a Project, so the module cannot
     // write an entry into a chain nobody owns.
     const app = await build();
     try {
       await app.init();
-      expect(app.get(AUDIT_SINK)).toBeInstanceOf(PostgresAuditSink);
-      expect(app.get(AUDIT_SINK)).toBe(app.get(PostgresAuditSink));
-      expect(app.get(AuditRepo)).toBeInstanceOf(AuditRepo);
+      const sink = app.get(AUDIT_SINK);
+      expect(sink).toBeInstanceOf(AuditRepo);
+      expect(app.get(AUDIT_READER)).toBe(sink);
     } finally {
       await app.close();
     }

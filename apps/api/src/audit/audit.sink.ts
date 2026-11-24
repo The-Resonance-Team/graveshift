@@ -1,6 +1,12 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 
-import type { AuditDraft } from '@graveshift/core';
+import type { AuditDraft, AuditEntry } from '@graveshift/core';
+import type { Prisma } from '@prisma/client';
+
+import type { AuditPage, PolicyUsage, VerifyResult } from './audit.types';
+
+/** The caller-owned database unit an audit write can join. The in-memory adapter ignores it. */
+export type AuditTransaction = Prisma.TransactionClient;
 
 /**
  * One audit write request. `projectId` is the scope from ADR 0018: every audit entry
@@ -11,15 +17,29 @@ export interface AuditRecord extends AuditDraft {
 }
 
 /**
- * The only seam for an audit write from a use case. The real sink writes through
- * `AuditRepo.append`, which owns the PostgreSQL append-only chain. It adds no store of its
- * own. Tests inject `InMemoryAuditSink` from `./testing/in-memory-audit.sink`.
+ * The one append seam for an audit write from a use case. `AUDIT_SINK` is its token.
+ * `AuditRepo` is the Postgres adapter in production; `InMemoryAuditSink` is the adapter in
+ * tests. Both own no chain of their own: the adapter behind the seam owns the chain, the
+ * eventKey dedup, the serializable retry and the authenticated scope check.
  */
 export interface AuditSink {
-  append(record: AuditRecord): Promise<void>;
+  /** Append one entry in its own serializable, retryable transaction. */
+  append(projectId: string, draft: AuditDraft): Promise<AuditEntry>;
+  /** Append one entry inside the caller's transaction, so the entry commits with its facts. */
+  appendInTx(tx: AuditTransaction, projectId: string, draft: AuditDraft): Promise<AuditEntry>;
+  /** Run one serializable, retryable write unit owned by the adapter. */
+  transaction<Result>(work: (tx: AuditTransaction) => Promise<Result>): Promise<Result>;
+}
+
+/** The read side of the same owner. `AUDIT_READER` is its token. */
+export interface AuditReader {
+  list(projectId: string, page?: AuditPage): Promise<AuditEntry[]>;
+  verifyChain(projectId: string): Promise<VerifyResult>;
+  policyUsage(projectId: string, service: string, incidentId: string): Promise<PolicyUsage>;
 }
 
 export const AUDIT_SINK = Symbol('AUDIT_SINK');
+export const AUDIT_READER = Symbol('AUDIT_READER');
 
 /**
  * The authenticated caller's audit scope (ADR 0018). A route handler copies it from the

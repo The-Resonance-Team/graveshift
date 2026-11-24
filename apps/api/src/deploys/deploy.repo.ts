@@ -1,8 +1,9 @@
-import { Injectable } from '@nestjs/common';
+import { randomUUID } from 'node:crypto';
+import { Inject, Injectable } from '@nestjs/common';
 import { redact } from '@graveshift/redactor';
 
 import { inAuditTransaction } from '../audit/audit.transaction';
-import { AuditRepo } from '../audit/repo/audit.repo';
+import { AUDIT_SINK, type AuditSink } from '../audit/audit.sink';
 import { PrismaService } from '../infra/prisma.service';
 import { AppendOnlyDeployError, type DeployRecord } from './deploy.types';
 
@@ -41,7 +42,7 @@ export interface DeployListFilter {
 export class DeployRepo {
   constructor(
     private readonly db: PrismaService,
-    private readonly audit: AuditRepo,
+    @Inject(AUDIT_SINK) private readonly audit: AuditSink,
   ) {}
 
   /** Idempotency and event binding share one lookup: Project, SHA and Environment name. */
@@ -78,7 +79,8 @@ export class DeployRepo {
           url: input.url ?? null,
         },
       });
-      await this.audit.appendInTransaction(tx, input.projectId, {
+      await this.audit.appendInTx(tx, input.projectId, {
+        key: `deploy:created:${randomUUID()}`,
         actor: input.actor,
         type: 'deploy.created',
         payload: {
@@ -115,7 +117,8 @@ export class DeployRepo {
         data: { closedAt: new Date() },
       });
       if (closed.count === 0) return false;
-      await this.audit.appendInTransaction(tx, projectId, {
+      await this.audit.appendInTx(tx, projectId, {
+        key: `deployment:closed:${randomUUID()}`,
         actor: 'daemon',
         type: 'deployment.closed',
         payload: { deploymentId, projectId, environment: redact(environment) },

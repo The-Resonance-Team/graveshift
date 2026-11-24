@@ -13,7 +13,7 @@ import {
 } from '@graveshift/work';
 import type { Prisma } from '@prisma/client';
 
-import type { AuditRepo } from '../audit/audit.repo';
+import type { AuditSink } from '../audit/audit.sink';
 import { assertWorker, publicationOwner, requireLiveLease } from './work-item.lease';
 import { workAudit } from './work-item.mapper';
 import { recordResult, requireCommand } from './work-item.receipts';
@@ -21,7 +21,7 @@ import { activeAttempt, fenceAttempt, fenceWork, loadWork } from './work-item.st
 
 export async function beginPublication(
   tx: Prisma.TransactionClient,
-  audit: AuditRepo,
+  audit: AuditSink,
   caller: WorkCaller,
   id: string,
   input: BeginPublication,
@@ -93,7 +93,7 @@ export async function recordPublication(
 
 export async function finishAttempt(
   tx: Prisma.TransactionClient,
-  audit: AuditRepo,
+  audit: AuditSink,
   caller: WorkCaller,
   id: string,
   input: FinishAttempt,
