@@ -2,7 +2,8 @@ import type { SharedPolicyContext } from '@graveshift/core/policy-context';
 import { describe, expect, test } from 'bun:test';
 import fc from 'fast-check';
 
-import { decide, isRuntimeAction, type PolicyAction, toAuditEvent } from './decide';
+import { isRuntimeAction, type PolicyAction } from './action';
+import { decide, toAuditEvent } from './decide';
 import { baseContext, basePolicy } from './fixtures';
 import { loadPolicy, parsePolicy, PolicyError } from './load';
 import { type Mode, MODES, type Policy, type Rule } from './schema';

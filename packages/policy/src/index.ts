@@ -1,5 +1,7 @@
-export { decide, isRuntimeAction, toAuditEvent } from './decide';
-export type { DecisionFacts, Effect, PolicyAction, PolicyDecision } from './decide';
+export { isRuntimeAction } from './action';
+export type { PolicyAction } from './action';
+export { decide, toAuditEvent } from './decide';
+export type { DecisionFacts, Effect, PolicyDecision } from './decide';
 export { loadPolicy, parsePolicy, PolicyError } from './load';
 export { resolveMode, saferMode } from './mode';
 export { MODES, ModeSchema, PolicySchema, RuleSchema } from './schema';

@@ -118,7 +118,7 @@ export function createActuator(options: ActuatorOptions) {
         const result = await terminal('denied', reason, request);
         return claimed.kind === 'known' ? { ...result, knownResult: claimed.result } : result;
       }
-      const late = await durableAdmission.recheck?.(input);
+      const late = await durableAdmission.recheck(input);
       if (late) return complete(request, { status: 'denied', reason: late });
       breaker.recordAction(request.action.service);
       let status: 'executed' | 'failed' = 'executed';

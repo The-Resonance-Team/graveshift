@@ -64,6 +64,7 @@ test('a committed claim with a lost response stays uncertain after a restart', a
         await owner.store.admission.claim(input);
         throw new Error('Bearer lost-response-secret');
       },
+      recheck: owner.store.admission.recheck,
       complete: owner.store.admission.complete,
     },
   });
@@ -86,6 +87,7 @@ test('a crash after the runtime effect but before completion never permits anoth
   const first = setup(T0, {
     durableAdmission: {
       claim: owner.store.admission.claim,
+      recheck: owner.store.admission.recheck,
       complete: async () => {
         throw new Error('Bearer process-lost-secret');
       },

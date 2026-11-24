@@ -1,5 +1,4 @@
 import {
-  AuditEntrySchema,
   GENESIS_HASH,
   makeAuditEntry,
   type AuditDraft,
@@ -8,12 +7,12 @@ import {
   verifyEntries,
 } from '@graveshift/core';
 import { Injectable } from '@nestjs/common';
-import type { Prisma, AuditEntry as PrismaAuditEntry } from '@prisma/client';
+import type { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../infra/prisma.service';
 import { AuditConflict } from './audit.errors';
-import { auditFacts, normalizeDraft } from './audit.mapper';
-import { AUDIT_SELECT, type AuditRow } from './audit.select';
+import { auditFacts, normalizeDraft, toAuditEntry } from './audit.mapper';
+import { AUDIT_SELECT } from './audit.select';
 import {
   isAuditScopeUsable,
   type AuditReader,
@@ -23,20 +22,6 @@ import {
 import { inAuditTransaction } from './audit.transaction';
 import type { AuditPage, PolicyUsage, UsageRow } from './audit.types';
 import { parsePolicyUsage, usageQuery } from './audit.usage';
-
-const toEntry = (row: AuditRow | PrismaAuditEntry): AuditEntry =>
-  AuditEntrySchema.parse({
-    seq: row.seq,
-    at: row.at.toISOString(),
-    actor: row.actor,
-    type: row.type,
-    ...(row.incidentId === null || row.incidentId === undefined
-      ? {}
-      : { incidentId: row.incidentId }),
-    payload: row.payload,
-    prevHash: row.prevHash,
-    hash: row.hash,
-  });
 
 /**
  * The one Postgres implementation of the audit seams. It owns the hash chain from
@@ -78,7 +63,7 @@ export class AuditRepo implements AuditSink, AuditReader {
       select: AUDIT_SELECT,
     });
     if (prior) {
-      const entry = toEntry(prior);
+      const entry = toAuditEntry(prior);
       if (auditFacts(entry) !== auditFacts(draft)) throw new AuditConflict();
       return entry;
     }
@@ -96,11 +81,12 @@ export class AuditRepo implements AuditSink, AuditReader {
         projectId,
         eventKey: draft.key,
         incidentId: entry.incidentId ?? null,
+        // Adapter boundary: the validated Zod JSON value is the Prisma JSONB input.
         payload: entry.payload as Prisma.InputJsonValue,
       },
       select: AUDIT_SELECT,
     });
-    return toEntry(row);
+    return toAuditEntry(row);
   }
 
   transaction<Result>(work: (tx: AuditTransaction) => Promise<Result>): Promise<Result> {
@@ -117,7 +103,7 @@ export class AuditRepo implements AuditSink, AuditReader {
       take: limit,
       select: AUDIT_SELECT,
     });
-    return rows.map(toEntry);
+    return rows.map(toAuditEntry);
   }
 
   async verifyChain(projectId: string): Promise<VerifyResult> {
@@ -126,7 +112,7 @@ export class AuditRepo implements AuditSink, AuditReader {
       orderBy: { seq: 'asc' },
       select: AUDIT_SELECT,
     });
-    return verifyEntries(rows.map(toEntry));
+    return verifyEntries(rows.map(toAuditEntry));
   }
 
   async policyUsage(projectId: string, service: string, incidentId: string): Promise<PolicyUsage> {

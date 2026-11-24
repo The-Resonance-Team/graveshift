@@ -4,9 +4,6 @@ import { type PolicyAction, isRuntimeAction } from './action';
 import { decisionFor, gate, matches } from './evaluation';
 import type { Mode, Policy } from './schema';
 
-export type { PolicyAction } from './action';
-export { isRuntimeAction } from './action';
-
 export type Effect = 'allow' | 'deny' | 'require_approval' | 'dry_run';
 
 export interface PolicyDecision {

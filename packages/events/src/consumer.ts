@@ -11,6 +11,11 @@ import {
   GRAVESHIFT_EVENTS_STREAM,
 } from './streams';
 
+/** The dead-letter body keeps the Event and the reason it was refused. */
+export function deadLetterMessage(envelope: EventEnvelope, reason: string): Uint8Array {
+  return new TextEncoder().encode(JSON.stringify({ ...envelope, deadLetterReason: reason }));
+}
+
 /** The whole JetStream message surface the process port needs. */
 export interface QueuedEvent {
   readonly data: Uint8Array;
@@ -190,10 +195,10 @@ export function natsEventsTransport(
         return {
           messages,
           publisher: createNatsPublisher(client),
-          deadLetter: async (envelope) => {
+          deadLetter: async (envelope, reason) => {
             await client.publish(
               deadLetterSubject(envelope.projectId, envelope.service),
-              new TextEncoder().encode(JSON.stringify(envelope)),
+              deadLetterMessage(envelope, reason),
             );
           },
           close: () => session.drain(),

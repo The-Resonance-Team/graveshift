@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 
-import { decide, type PolicyAction, type PolicyDecision } from './decide';
+import type { PolicyAction } from './action';
+import { decide, type PolicyDecision } from './decide';
 import { baseContext, basePolicy } from './fixtures';
 import type { Mode, Policy, Rule } from './schema';
 

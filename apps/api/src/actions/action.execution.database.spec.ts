@@ -23,6 +23,7 @@ function runtime(repo: ActionRepo, audit: AuditRepo, complete = true) {
     },
     durableAdmission: {
       claim: (claim) => repo.claim({ projectId: 'project-1', claim }),
+      recheck: async () => undefined,
       complete: (completion) => {
         if (!complete) return Promise.reject(new Error('The process stopped before completion'));
         return repo.complete({ projectId: 'project-1', completion });

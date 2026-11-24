@@ -41,7 +41,7 @@ export interface RequiredAdmission {
   /** Replay, rate count, eligibility and token reservation in one transition. */
   claim(input: RuntimeClaim): Promise<ClaimResult>;
   /** Eligibility recheck after the claim commits. A reason denies the effect. */
-  recheck?(input: RuntimeClaim): Promise<DenyReason | undefined>;
+  recheck(input: RuntimeClaim): Promise<DenyReason | undefined>;
   /** Terminal handoff for one claimed token. */
   complete(input: RuntimeCompletion): Promise<CompletionResult>;
 }

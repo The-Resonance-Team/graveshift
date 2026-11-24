@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test';
 
 import {
   createEventsConsumer,
+  deadLetterMessage,
   decodeQueuedEvent,
   natsEventsTransport,
   processQueued,
@@ -199,6 +200,14 @@ describe('the Events process port', () => {
       { subject: deadLetterSubject(envelope.projectId, envelope.service), envelope },
     ]);
     expect(queued.calls).toEqual([`term:Project is not granted`]);
+  });
+
+  test('the dead-letter body keeps the refusal reason', () => {
+    const body = JSON.parse(
+      new TextDecoder().decode(deadLetterMessage(envelope, 'Project is not granted')),
+    );
+    expect(body.id).toBe(envelope.id);
+    expect(body.deadLetterReason).toBe('Project is not granted');
   });
 
   test('requests redelivery when a dead-letter write fails', async () => {

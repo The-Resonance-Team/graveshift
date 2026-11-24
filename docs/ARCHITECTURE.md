@@ -14,9 +14,9 @@ The daemon at `apps/daemon` is an Effect v4 skeleton on Bun. ADR 0009 removed th
 | API contract | `packages/api-contract` | Publishes generated TypeScript types and a version marker from the OpenAPI document. |
 | Daemon | `apps/daemon` | Effect v4 skeleton on Bun. Serves `GET /healthz` only. |
 | Core | `packages/core` | Zod schemas, event envelope, incident state machine, circuit-breaker helper, `RuntimeSource` contract and pure rule engine. |
-| Events | `packages/events` | `Publisher` interface, NATS JetStream publisher, an HTTP publisher that posts to the API, and an in-memory fake. No consumer is wired yet. |
+| Events | `packages/events` | `Publisher` interface, NATS JetStream publisher, an HTTP publisher that posts to the API, an in-memory fake, and one consumer adapter that binds the declared durable and exposes one process port. |
 | Integrations | `packages/integrations` | Plugin and Collector contract: `Integration`, `Context` and a pure envelope builder. No NATS client import. |
-| Audit | `apps/api/src/audit` | Pure hash-chain functions, a PostgreSQL repository, and one `AuditSink` seam for a use-case write. `PostgresAuditSink` is the only sink a use case can reach and appends through `AuditRepo.append`; it refuses a record with no authenticated scope. Database triggers reject audit row updates and deletes. The old SQLite audit store (`packages/store`, Drizzle and `bun:sqlite`) is removed; PostgreSQL is the only audit store. |
+| Audit | `apps/api/src/audit` | Chain functions from `@graveshift/core`, one PostgreSQL adapter and two seams: `AUDIT_SINK` for a use-case write and `AUDIT_READER` for reads. Tests replace both with one in-memory adapter. The adapter refuses a record with no authenticated scope. Database triggers reject audit row updates and deletes. The old SQLite audit store (`packages/store`, Drizzle and `bun:sqlite`) is removed; PostgreSQL is the only audit store. |
 | Policy | `packages/policy` | YAML loader and `decide()`. Pure and deterministic. |
 | Redactor | `packages/redactor` | Twelve ordered detectors, idempotent. |
 | Sources | `packages/sources-docker`, `packages/sources-k8s` | `RuntimeSource` implementations. Docker through the socket proxy; Kubernetes through `@kubernetes/client-node`, read-only. |
