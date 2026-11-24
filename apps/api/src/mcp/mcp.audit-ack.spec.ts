@@ -13,6 +13,7 @@ import {
   MCP_ENV_MODE,
   MCP_POLICY,
   type McpAuditWriter,
+  type McpBackend,
 } from './mcp.types';
 import { FakeMcpBackend } from '../../test/fakes/fake-mcp-backend';
 
@@ -65,6 +66,7 @@ describe('MCP audit acknowledgement', () => {
 
   test('propose_fix withholds its result when the audit is not acknowledged', async () => {
     const writer: McpAuditWriter = {
+      requireProject: () => {},
       auditDecision: async () => ({ acknowledged: false, reason: 'no_project' }),
     };
     const moduleRef = await Test.createTestingModule({
@@ -81,6 +83,43 @@ describe('MCP audit acknowledgement', () => {
       await expect(tools.proposeFix({ incidentId: 'inc1', action: 'open_pr' })).rejects.toThrow(
         'Policy audit was not acknowledged',
       );
+    } finally {
+      await moduleRef.close();
+    }
+  });
+
+  test('an unbound Project refuses propose_fix at the guard before any read or write', async () => {
+    const append = mock(async () => ({}) as never);
+    const sink = { append } as unknown as ConstructorParameters<typeof HttpMcpBackend>[1];
+    const writer = new HttpMcpBackend({} as never, sink, new McpProjectContext(), {} as never);
+    const getIncident = mock(async () => {
+      throw new Error('backend read must not happen');
+    });
+    const getCounters = mock(async () => {
+      throw new Error('backend read must not happen');
+    });
+    const policyContext = mock(async () => {
+      throw new Error('backend read must not happen');
+    });
+    const backend = { getIncident, getCounters, policyContext } as unknown as McpBackend;
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        McpTools,
+        { provide: MCP_BACKEND, useValue: backend },
+        { provide: MCP_AUDIT_WRITER, useValue: writer },
+        { provide: MCP_POLICY, useValue: policy },
+        { provide: MCP_ENV_MODE, useValue: undefined },
+      ],
+    }).compile();
+    try {
+      const tools = moduleRef.get(McpTools);
+      await expect(tools.proposeFix({ incidentId: 'inc1', action: 'open_pr' })).rejects.toThrow(
+        'An authenticated Project is required',
+      );
+      expect(getIncident).not.toHaveBeenCalled();
+      expect(getCounters).not.toHaveBeenCalled();
+      expect(policyContext).not.toHaveBeenCalled();
+      expect(append).not.toHaveBeenCalled();
     } finally {
       await moduleRef.close();
     }

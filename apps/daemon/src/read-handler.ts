@@ -87,10 +87,10 @@ export function createReadHandler(options: ReadHandlerOptions): FetchHandler {
           result = options.reads.context(projectId, command.body.incidentId);
           break;
         case 'logs':
-          result = options.reads.logs(projectId, command.body.service, command.body.lines);
+          result = options.reads.logs(command.body.service, command.body.lines);
           break;
         case 'metric':
-          result = options.reads.metric(projectId, command.body.promql);
+          result = options.reads.metric(command.body.promql);
           break;
         case 'counters':
           result = options.reads.counters(projectId, command.body.incidentId);

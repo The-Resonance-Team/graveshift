@@ -118,7 +118,7 @@ export const program = Effect.scoped(
           api,
           gateway,
           agents: boot.agents,
-          logs: (service, lines, projectId) => reads.logs(projectId, service, lines),
+          logs: (service, lines) => reads.logs(service, lines),
           onWork: (item, incidentId, eventProjectId) =>
             workActivation(lifetime.commands, eventProjectId)(item, incidentId),
         }),

@@ -67,7 +67,7 @@ stays the only external surface.
 | Hop | Network boundary | Auth |
 | --- | --- | --- |
 | Client to API `/mcp` (Streamable HTTP) | The only external surface. Bind `127.0.0.1:3000` by default. Put TLS at the ingress when the route is exposed. | Bearer MCP read token issued by `POST /api/credentials` with kind `mcp`. `CredentialService.verify(token, 'mcp')` checks it. A scope floor checks every MCP method. The stdio launcher has no auth by design. |
-| API to daemon read API | Loopback only on `127.0.0.1:2602`. Do not publish the port. No client calls the daemon. | A deployment-local read token is set in the env of both services. It has no default and both services fail closed when it is missing. The API sends it as `Authorization: Bearer`. |
+| API to daemon read API | Loopback only on `127.0.0.1:2602`. Do not publish the port. No client calls the daemon. | The daemon internal token `GRAVESHIFT_DAEMON_INTERNAL_TOKEN` (ADR 0020) is set in the env of both services. It has no default and both services fail closed when it is missing. The API sends it as `Authorization: Bearer`. |
 | API to daemon `/healthz` | Loopback only on the same port. | No token. This route returns liveness only and carries no data. |
 | Plugin or Collector to API `/api/events` | External HTTP surface on the API. Clients hold no NATS credentials. | Bearer plugin publish key with scope `events:publish`. The route checks the tenant and the service binding, bounds bytes and rate, redacts strings, then returns 202. |
 | API to NATS JetStream | Private network. Client port 4222 is not published. | NATS credentials are held only by the API and come from the env or a secret store. No credential value is in the repo. |

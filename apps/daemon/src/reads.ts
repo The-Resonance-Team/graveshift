@@ -13,15 +13,18 @@ import type { PrivateApi } from './api-client';
 import { HttpFailure } from './private-http';
 
 /**
- * Every read is bound to the Project of its caller. The runtime holds no boot
- * Project: the read handler supplies the validated Project on each call.
+ * Project-scoped reads are bound to the Project of their caller. The runtime
+ * holds no boot Project: the read handler supplies the validated Project on
+ * each such call. Collector evidence reads (logs, metrics) take no Project
+ * because their source is host-wide; the read handler still checks the granted
+ * set before it calls them.
  */
 export interface ReadRuntime {
   services(projectId: string): Promise<ServiceView[]>;
   incidents(projectId: string): Promise<RecordedHaunting[]>;
   incident(projectId: string, id: string): Promise<RecordedHaunting | null>;
-  logs(projectId: string, service: string, lines: number): Promise<string[]>;
-  metric(projectId: string, promql: string): Promise<number | null>;
+  logs(service: string, lines: number): Promise<string[]>;
+  metric(promql: string): Promise<number | null>;
   context(projectId: string, id: string): Promise<SharedPolicyContext>;
   counters(projectId: string, incidentId: string): Promise<CounterSnapshot>;
 }
@@ -98,9 +101,7 @@ export function createReadRuntime(options: ReadOptions): ReadRuntime {
       const facts = await context(projectId, incidentId);
       return { source: 'wired', counters: facts.counters };
     },
-    // Collector evidence is host-wide; the Project is validated at the seam and
-    // is part of this uniform read port for callers that do scope their sources.
-    async logs(_projectId, service, lines) {
+    async logs(service, lines) {
       const matches = (await inventory()).filter(({ info }) => info.name === service);
       const found = matches[0];
       if (matches.length !== 1 || found === undefined)
@@ -109,7 +110,7 @@ export function createReadRuntime(options: ReadOptions): ReadRuntime {
         .split('\n')
         .slice(-lines);
     },
-    async metric(_projectId, promql) {
+    async metric(promql) {
       if (options.metrics === undefined) throw new HttpFailure(503, 'Metrics are unavailable');
       const allowed = options.metricJobs.flatMap((job) =>
         Object.values(WATCHER_QUERIES).map((query) => query(job)),

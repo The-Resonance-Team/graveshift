@@ -59,13 +59,13 @@ describe('audit chain', () => {
     ).toBe(false);
   });
 
-  test('verifies a retained window against an evicted-head anchor', () => {
+  test('rejects a chain whose first entry does not start at the genesis sequence', () => {
     const first = makeAuditEntry(1, '2026-11-22T00:00:00.000Z', draft('one'), '0'.repeat(64));
     const second = makeAuditEntry(2, '2026-11-22T00:00:01.000Z', draft('two'), first.hash);
-    expect(verifyEntries([second], { seq: 2, prevHash: first.hash })).toEqual({
-      ok: true,
-      length: 1,
+    expect(verifyEntries([second])).toMatchObject({
+      ok: false,
+      brokenAtSeq: 1,
+      reason: 'sequence gap or reorder',
     });
-    expect(verifyEntries([second])).toMatchObject({ ok: false, reason: 'sequence gap or reorder' });
   });
 });

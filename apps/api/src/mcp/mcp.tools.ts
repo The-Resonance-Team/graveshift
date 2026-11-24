@@ -141,6 +141,9 @@ export class McpTools {
     action: 'open_pr' | 'restart' | 'scale';
     replicas?: number | undefined;
   }): Promise<unknown> {
+    // ADR 0022: an unauthenticated stdio caller has no Project to key the audit chain.
+    // Refuse here, before any backend read, rather than relying on the writer's ack refusal.
+    this.writer.requireProject();
     const view = need(await this.backend.getIncident(args.incidentId), 'incident not found');
     const action: PolicyAction = {
       name: args.action,

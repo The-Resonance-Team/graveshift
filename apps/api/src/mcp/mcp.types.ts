@@ -37,5 +37,7 @@ export type AuditAcknowledgement =
  * implements this interface with a refusal; it never reports an acknowledged audit.
  */
 export interface McpAuditWriter {
+  /** Fail fast before any backend read when the caller has no authenticated Project. */
+  requireProject(): void;
   auditDecision(draft: AuditDraft): Promise<AuditAcknowledgement>;
 }

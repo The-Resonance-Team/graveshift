@@ -61,13 +61,10 @@ export function makeAuditEntry(
   return AuditEntrySchema.parse({ ...draft, prevHash, hash: hashEntry(draft, prevHash) });
 }
 
-export function verifyEntries(
-  entries: readonly AuditEntry[],
-  anchor: ChainAnchor = GENESIS_ANCHOR,
-): VerifyResult {
-  let prevHash = anchor.prevHash;
+export function verifyEntries(entries: readonly AuditEntry[]): VerifyResult {
+  let prevHash = GENESIS_ANCHOR.prevHash;
   for (const [index, entry] of entries.entries()) {
-    const expectedSeq = anchor.seq + index;
+    const expectedSeq = GENESIS_ANCHOR.seq + index;
     if (entry.seq !== expectedSeq) {
       return { ok: false, brokenAtSeq: expectedSeq, reason: 'sequence gap or reorder' };
     }

@@ -4,7 +4,7 @@ import { join } from 'node:path';
 import type { AuditDraft } from '@graveshift/core';
 import { expect, test } from 'bun:test';
 
-import { createDurableAdmission } from './admission-durable';
+import { DurableAdmission } from './admission-durable';
 import * as claims from './claims';
 import { policy, setup, signed, T0 } from './test-helpers';
 
@@ -19,7 +19,7 @@ async function withStore<T>(
   const dir = await mkdtemp(join(tmpdir(), 'graveshift-actuator-'));
   let now = T0;
   const audits: AuditDraft[] = [];
-  const admission = createDurableAdmission(join(dir, 'admission.db'), {
+  const admission = new DurableAdmission(join(dir, 'admission.db'), {
     policy,
     now: () => now,
     audit: async (draft) => {
@@ -42,13 +42,13 @@ test('a restart does not allow the same approval token to run twice', async () =
     const requiredAudit = async (draft: { key: string }) => ({ key: draft.key });
     const rules = { policy, now: () => T0, audit: requiredAudit };
     const first = setup(T0, {
-      durableAdmission: createDurableAdmission(path, rules),
+      durableAdmission: new DurableAdmission(path, rules),
     });
     expect((await first.actuator.execute(signed())).status).toBe('executed');
 
     // A new process opens the same file. The consumed token is still present.
     const restarted = setup(T0, {
-      durableAdmission: createDurableAdmission(path, rules),
+      durableAdmission: new DurableAdmission(path, rules),
     });
     const result = await restarted.actuator.execute(signed());
     expect(result).toMatchObject({
@@ -66,12 +66,13 @@ test('an unopenable admission store path throws at construction', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'graveshift-actuator-'));
   try {
     // A directory is not a SQLite file. Startup must fail here, not at first action.
-    expect(() =>
-      createDurableAdmission(dir, {
-        policy,
-        now: () => T0,
-        audit: async (draft) => ({ key: draft.key }),
-      }),
+    expect(
+      () =>
+        new DurableAdmission(dir, {
+          policy,
+          now: () => T0,
+          audit: async (draft) => ({ key: draft.key }),
+        }),
     ).toThrow();
   } finally {
     await rm(dir, { recursive: true, force: true });
@@ -87,7 +88,7 @@ test('a second token for the same action cannot run the effect after the rate wi
     audit: async (draft: { key: string }) => ({ key: draft.key }),
   };
   try {
-    const admission = createDurableAdmission(join(dir, 'admission.db'), rules);
+    const admission = new DurableAdmission(join(dir, 'admission.db'), rules);
     const first = setup(T0, { durableAdmission: admission });
     expect((await first.actuator.execute(signed())).status).toBe('executed');
     now = T0 + 11 * 60_000;

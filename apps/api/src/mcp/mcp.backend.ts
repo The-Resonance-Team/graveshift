@@ -101,6 +101,11 @@ export class HttpMcpBackend implements McpAuditWriter {
     return this.read('context', { incidentId }, SharedPolicyContextSchema);
   }
 
+  /** The real adapter enforces the Project guard that the stdio writer only stubs. */
+  requireProject(): void {
+    this.projectContext.require();
+  }
+
   /**
    * ADR 0022: report an acknowledgement only after the append to the authenticated Project's
    * chain succeeds. stdio binds no Project, so that path returns an explicit refusal and the

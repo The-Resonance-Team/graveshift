@@ -1,6 +1,6 @@
 import { loadGraveshiftConfig } from '@graveshift/config';
 
-import { createDurableAdmission } from './admission-durable';
+import { DurableAdmission } from './admission-durable';
 import type { RequiredAdmission } from './claims';
 import { createDockerRestarter, createKubeWriter } from './backends';
 import { createActuator } from './execute';
@@ -50,7 +50,7 @@ const envMode = env.GRAVESHIFT_MODE;
 const stateDir = env.ACTUATOR_STATE_DIR ?? '/data/graveshift-actuator';
 let durableAdmission: RequiredAdmission;
 try {
-  durableAdmission = createDurableAdmission(`${stateDir}/admission.db`, {
+  durableAdmission = new DurableAdmission(`${stateDir}/admission.db`, {
     policy,
     now: Date.now,
     audit: requiredAudit,

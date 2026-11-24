@@ -172,14 +172,6 @@ export class DurableAdmission {
   }
 }
 
-export function createDurableAdmission(
-  path: string,
-  rules: claims.AdmissionRules,
-): claims.RequiredAdmission {
-  const store = new DurableAdmission(path, rules);
-  return store;
-}
-
 function fromPrior(prior: ClaimRow, requestHash: string): claims.ClaimResult {
   if (prior.request_hash !== requestHash) return { kind: 'uncertain' };
   if (prior.result_json === null) return { kind: 'uncertain' };

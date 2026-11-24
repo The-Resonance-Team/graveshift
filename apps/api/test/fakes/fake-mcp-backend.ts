@@ -95,6 +95,9 @@ export class FakeMcpBackend implements McpBackend, McpAuditWriter {
     };
   }
 
+  // The real adapter enforces the Project guard; this in-memory fake binds no Project.
+  requireProject(): void {}
+
   async auditDecision(draft: AuditDraft) {
     if (!this.auditAvailable) throw new Error('Audit unavailable');
     if (!this.auditAcknowledged) return { acknowledged: false, reason: 'no_project' } as const;
