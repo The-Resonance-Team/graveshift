@@ -1,0 +1,749 @@
+[
+  {
+    "file": "01-mcp-diagnosis-scope.json",
+    "lead": "apps/api/src/mcp/mcp.tools.ts:incident-read-embeds-diagnosis",
+    "verdict": "confirmed",
+    "observed": {
+      "sentinel": "DIAG_SENTINEL_ZZTOP_42",
+      "listIncidentsHasSentinel": true,
+      "getIncidentHasSentinel": true,
+      "returnedDiagnosisText": "root cause marker DIAG_SENTINEL_ZZTOP_42",
+      "permission": {
+        "get_incident_with_incidents_read": true,
+        "get_incident_with_diagnoses_read": false,
+        "get_diagnosis_with_incidents_read": false,
+        "get_diagnosis_with_diagnoses_read": true
+      },
+      "scopeSeparation": true,
+      "envMode": null
+    },
+    "reason": "Both list_incidents and get_incident return the diagnosis root-cause sentinel. The permission map separates get_incident (incidents:read) from get_diagnosis (diagnoses:read), yet incident reads carry diagnosis content with no scope-aware projection."
+  },
+  {
+    "file": "02-pr-limit.json",
+    "lead": "apps/api/src/work-items/work-item.publication.ts:beginPublication/project-pr-limit",
+    "verdict": "confirmed",
+    "observed": {
+      "maxOpenPrsPerHour": 1,
+      "distinctWorkItems": 2,
+      "distinctAttempts": 2,
+      "publicationCountReadAtEachAdmission": [
+        0,
+        0
+      ],
+      "publicationCountAfterBothAdmissions": 0,
+      "admissions": [
+        {
+          "id": "work-1",
+          "accepted": true,
+          "state": "publishing",
+          "publication": {
+            "repo": "acme/widgets",
+            "branch": "refs/heads/fixer-inc-work-1",
+            "baseSha": "base-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "publicationCountBefore": 0
+        },
+        {
+          "id": "work-2",
+          "accepted": true,
+          "state": "publishing",
+          "publication": {
+            "repo": "acme/widgets",
+            "branch": "refs/heads/fixer-inc-work-2",
+            "baseSha": "base-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+          },
+          "publicationCountBefore": 0
+        }
+      ],
+      "auditEvents": 2,
+      "limitTokensReferencedInsideBeginPublication": [],
+      "sourceLines": [
+        "apps/api/src/work-items/work-item.publication.ts:22-58 (beginPublication: no project-wide PR gate)",
+        "apps/api/src/work-items/work-item.repo.ts:106-115 (publicationCount counts publications in the last hour)",
+        "apps/api/src/internal/policy-context.service.ts:31-42 (openPrsLastHour from publicationCount)",
+        "packages/policy/src/evaluation.ts:33-42 (rate_limited when openPrsLastHour >= maxOpenPrsPerHour)"
+      ]
+    },
+    "reason": "Both distinct work-item/attempt pairs were admitted by the real beginPublication (both snapshots show state 'publishing' with a saved publication intent), with maxOpenPrsPerHour=1 and publicationCount reading zero at each admission. beginPublication (work-item.publication.ts:22-58) performs only per-attempt fencing (loadWork, activeAttempt, requireCommand, requireLiveLease, fenceWork, fenceAttempt) and never consults publicationCount, maxOpenPrsPerHour, openPrsLastHour, or any project-wide reservation (limit tokens found inside function: []). No project-wide PR limit blocks the second publication intent."
+  },
+  {
+    "file": "03-failed-outcome-retention.json",
+    "lead": "apps/daemon/src/observations.ts:failed-outcome-retention",
+    "verdict": "confirmed",
+    "observed": {
+      "eventIdLength": 180,
+      "writeEventIdLengths": [
+        201,
+        201,
+        201,
+        201,
+        201,
+        201
+      ],
+      "dtoLimit": 180,
+      "feedCount": 6,
+      "failedFeeds": 6,
+      "failureMessages": [
+        "DTO limit exceeded: eventId must be <= 180 chars"
+      ],
+      "pendingSets": 3,
+      "pendingDeletes": 0,
+      "retainedPendingOutcomes": 3,
+      "activeCalls": 3,
+      "activeCallsOnRetries": 0,
+      "getCalls": 6,
+      "writeAttempts": 6,
+      "rejectedWrites": 6,
+      "workCalls": 0,
+      "gatewayCalls": 0,
+      "inspectionHook": "instrumented Map.prototype.set/delete keyed by the 180-char event ids"
+    },
+    "reason": "Every permanently failed outcome stayed in pending: three unique ids produced three sets and zero deletes; the three retries skipped the active lookup (retained-outcome path) and re-attempted the write, so retention grows linearly with failures with no eviction."
+  },
+  {
+    "file": "04-service-cache.json",
+    "lead": "apps/daemon/src/observations.ts:service-cache-project-scope",
+    "verdict": "confirmed",
+    "observed": {
+      "dummyOnly": true,
+      "watcherApiLoaded": true,
+      "projectA": "projA",
+      "projectB": "projB",
+      "service": "checkout",
+      "seedIncidentId": "incident-a-checkout",
+      "seedActiveFound": true,
+      "projectBEvent": {
+        "type": "http.request",
+        "severity": "warning",
+        "observedAt": "2026-01-01T00:05:00.000Z",
+        "activeReturned": null,
+        "activeLookupForB": [
+          {
+            "path": "/internal/hauntings/active",
+            "projectId": "projB",
+            "id": null,
+            "service": "checkout"
+          }
+        ],
+        "hauntingRecordsOwnedByB": []
+      },
+      "resolution": {
+        "incidentId": "incident-a-checkout",
+        "state": "resolved",
+        "activeReturned": null
+      },
+      "freshAEvent": {
+        "type": "runtime.oom",
+        "observedAt": "2026-01-01T00:11:00.000Z",
+        "msAfterSeed": 660000,
+        "activeReturnedBefore": null
+      },
+      "writes": [
+        {
+          "projectId": "projA",
+          "eventId": "evt-a1:detected:runtime.oom",
+          "incidentId": "incident-a-checkout",
+          "state": "open",
+          "detectionIds": [
+            "evt-seed:runtime.oom",
+            "evt-a1:runtime.oom"
+          ]
+        },
+        {
+          "projectId": "projA",
+          "eventId": "evt-a2:detected:runtime.oom",
+          "incidentId": "incident-a-checkout",
+          "state": "resolved",
+          "detectionIds": [
+            "evt-seed:runtime.oom",
+            "evt-a1:runtime.oom",
+            "evt-a2:runtime.oom"
+          ]
+        }
+      ],
+      "finalRecords": [
+        {
+          "scopeKey": "projA\u0000incident-a-checkout",
+          "incidentId": "incident-a-checkout",
+          "state": "resolved",
+          "detectionIds": [
+            "evt-seed:runtime.oom",
+            "evt-a1:runtime.oom",
+            "evt-a2:runtime.oom"
+          ]
+        }
+      ],
+      "workCallbacks": [
+        {
+          "projectId": "projA",
+          "incidentId": "incident-a-checkout"
+        },
+        {
+          "projectId": "projA",
+          "incidentId": "incident-a-checkout"
+        }
+      ],
+      "gatewayModelCalls": 0,
+      "activeForAAfter": null,
+      "appendedToClosedRow": true,
+      "sameIncidentId": true,
+      "stillClosed": true,
+      "newActiveHaunting": false
+    },
+    "reason": "createObservations keys byService solely by service name. The project B warning for checkout cleared that shared entry and its release was scoped to B, so when A was resolved and a fresh A runtime.oom arrived after the dedupe window, no A-scoped release occurred: the stale watcher grouper entry reused A incident id, and write() merged the new detection into the resolved row (state stays resolved), leaving no new active Haunting."
+  },
+  {
+    "file": "05-collector-evidence.json",
+    "lead": "apps/daemon/src/reads.ts:collector-evidence-without-project",
+    "verdict": "confirmed",
+    "observed": {
+      "dummyOnly": true,
+      "projectA": "projA",
+      "projectB": "projB",
+      "reservedService": "reserved-service",
+      "sentinel": "SENTINEL_PROJECT_A_EVIDENCE_OK",
+      "logsCall": {
+        "service": "reserved-service",
+        "lines": 1,
+        "projectArgument": "none"
+      },
+      "logLines": [
+        "SENTINEL_PROJECT_A_EVIDENCE_OK"
+      ],
+      "sentinelReturned": true,
+      "tailCalls": [
+        {
+          "service": "reserved-service",
+          "lines": 1
+        }
+      ],
+      "listCalls": [
+        "listServices",
+        "listServices",
+        "listServices"
+      ],
+      "servicesForProjectB": [
+        {
+          "name": "reserved-service",
+          "status": "healthy"
+        }
+      ],
+      "servicesForProjectA": [
+        {
+          "name": "reserved-service",
+          "status": "healthy"
+        }
+      ],
+      "reservedInventoryVisibleToB": true,
+      "reservedInventoryVisibleToA": true,
+      "apiCalls": [
+        {
+          "path": "/internal/hauntings/list",
+          "body": {
+            "projectId": "projB"
+          }
+        },
+        {
+          "path": "/internal/hauntings/list",
+          "body": {
+            "projectId": "projA"
+          }
+        }
+      ]
+    },
+    "reason": "createReadRuntime exposes logs(service, lines) with no Project parameter; the Collector inventory is host-wide. A source reserved for Project A was reached by a project-less logs() call (sentinel returned), and the same reserved inventory appeared in services(projectB) as well as services(projectA). Project A evidence is reachable without a Project binding."
+  },
+  {
+    "file": "06-fix-context-repo.json",
+    "lead": "daemon/fix-context/service-only-repository-selection",
+    "verdict": "confirmed",
+    "observed": {
+      "dummyOnly": true,
+      "sourceCitation": "apps/daemon/src/fix-context.ts:42-46",
+      "exportedSelectorFound": false,
+      "projects": {
+        "projectA": "projA",
+        "projectB": "projB"
+      },
+      "snapshotService": "checkout",
+      "policyRepoServices": [
+        "checkout"
+      ],
+      "reproducedSelectionForCallerB": "dummy-org/checkout-service",
+      "realContextClientCallerB": {
+        "callerProjectId": "projB",
+        "selectedRepo": "dummy-org/checkout-service",
+        "category": "resource_exhaustion",
+        "deploymentIdPrefix": "aaaaaaaa"
+      },
+      "realContextClientCallerA": {
+        "callerProjectId": "projA",
+        "selectedRepo": "dummy-org/checkout-service"
+      },
+      "apiRefs": [
+        {
+          "projectId": "projB",
+          "service": "checkout"
+        },
+        {
+          "projectId": "projB",
+          "service": "checkout"
+        },
+        {
+          "projectId": "projA",
+          "service": "checkout"
+        },
+        {
+          "projectId": "projA",
+          "service": "checkout"
+        }
+      ],
+      "apiRefsUseCallerProject": true
+    },
+    "reason": "contextClient selects the repository solely with policy.github.repos.filter(repo => repo.services.includes(snapshot.item.service)) at lines 42-46; caller.projectId is used only in the later internal API reference, never in selection. With caller.projectId=projB and a snapshot whose service maps to the sole repo, the real contextClient still returned that repo, and caller.projectId=projA returned the identical repo."
+  },
+  {
+    "file": "07-compose-overlay.json",
+    "lead": "deploy/compose/api-service-overlay-retains-control-plane-authority",
+    "verdict": "confirmed",
+    "observed": {
+      "method": "Trusted parent-side `docker compose config --format json` on a scratch copy of the two maintained manifests, with the api profile enabled and an 11-key dummy environment.",
+      "unchanged_pair_validation": "Compose v5.5.0 rejects the unmodified pair: services.api.security_opt contains duplicate no-new-privileges:true entries from the two YAML merges.",
+      "scratch_fixture_change": "The demo copy replaced its security_opt line with `security_opt: !reset [no-new-privileges:true]` so the merge could render; no platform source was edited.",
+      "rendered_api": {
+        "image": "haunted-candy-shop:local",
+        "build_context_absolute": "/Users/xirothedev/security-audit-skill/graveshift/run-1/examples/haunted-candy-shop",
+        "build_dockerfile": "deploy/compose/bun.Dockerfile",
+        "command": [
+          "bun",
+          "src/main.ts"
+        ],
+        "profiles": [
+          "api"
+        ],
+        "networks": [
+          "candy",
+          "core"
+        ]
+      },
+      "platform_credential_environment_keys_present": [
+        "GRAVESHIFT_API_INTERNAL_TOKEN",
+        "GRAVESHIFT_DAEMON_INTERNAL_TOKEN",
+        "GRAVESHIFT_OAUTH_JWT_SECRET",
+        "GRAVESHIFT_ROOT_ADMIN_EMAIL",
+        "GRAVESHIFT_ROOT_ADMIN_PASSWORD",
+        "GRAVESHIFT_ROOT_ORG_NAME",
+        "GRAVESHIFT_ROOT_ORG_SLUG"
+      ],
+      "dummy_marker_delivered": true,
+      "marker_value_note": "A dummy 32-character marker was used; no real secret was read or copied."
+    },
+    "reason": "When the api profile is enabled, the merged services.api selects the examples-controlled image while retaining the platform credential environment fields and the core network. The unchanged pair fails Compose v5 validation because of a duplicate security_opt item; resolving that in a scratch copy produced the rendered result."
+  },
+  {
+    "file": "08-publication-recovery.json",
+    "lead": "fixer/recovery/parent-only-publication-binding",
+    "verdict": "confirmed",
+    "observed": {
+      "plan": {
+        "repo": "acme/widgets",
+        "branch": "refs/heads/fixer-inc-0123456789abcdef0123456789abcdef-fix-security-issue",
+        "baseSha": "base-1111111111111111111111111111111111111111"
+      },
+      "planKeys": [
+        "baseSha",
+        "branch",
+        "repo"
+      ],
+      "planCarriesExpectedTree": false,
+      "baseSha": "base-1111111111111111111111111111111111111111",
+      "verifiedTree": "tree-verified-2222222222222222222222222222222222222222",
+      "substitutedTree": "tree-substituted-33333333333333333333333333333333333333",
+      "treesDiffer": true,
+      "bothCommitsShareSingleParent": true,
+      "draftHeadSha": "commit-substituted-55555555555555555555555555555555555555",
+      "returnedByGetExistingDraft": {
+        "repo": "acme/widgets",
+        "branch": "refs/heads/fixer-inc-0123456789abcdef0123456789abcdef-fix-security-issue",
+        "number": 7,
+        "url": "https://github.com/acme/widgets/pull/7",
+        "headSha": "commit-substituted-55555555555555555555555555555555555555"
+      },
+      "returnedByRecoverPublication": {
+        "repo": "acme/widgets",
+        "branch": "refs/heads/fixer-inc-0123456789abcdef0123456789abcdef-fix-security-issue",
+        "number": 7,
+        "url": "https://github.com/acme/widgets/pull/7",
+        "headSha": "commit-substituted-55555555555555555555555555555555555555"
+      },
+      "headShaAccepted": true,
+      "transportCalls": [
+        "GET /repos/acme/widgets/git/commits/commit-verified-4444444444444444444444444444444444444444",
+        "GET /repos/acme/widgets/git/commits/commit-substituted-55555555555555555555555555555555555555",
+        "GET /repos/acme/widgets/pulls?state=open&head=acme%3Afixer-inc-0123456789abcdef0123456789abcdef-fix-security-issue&per_page=2",
+        "GET /repos/acme/widgets/git/commits/commit-substituted-55555555555555555555555555555555555555",
+        "GET /repos/acme/widgets/git/ref/heads/fixer-inc-0123456789abcdef0123456789abcdef-fix-security-issue",
+        "GET /repos/acme/widgets/pulls?state=open&head=acme%3Afixer-inc-0123456789abcdef0123456789abcdef-fix-security-issue&per_page=2",
+        "GET /repos/acme/widgets/git/commits/commit-substituted-55555555555555555555555555555555555555",
+        "GET /repos/acme/widgets/git/ref/heads/fixer-inc-0123456789abcdef0123456789abcdef-fix-security-issue"
+      ],
+      "sourceLines": [
+        "packages/fixer/src/rest.ts:140-183 (getExistingDraft: parent-only checks at 168-175, no tree check)",
+        "packages/fixer/src/verified-publication.ts:8-12 (PublicationPlan = repo/branch/baseSha only)",
+        "packages/fixer/src/verified-publication.ts:29-41 (recoverPublication calls getExistingDraft with those three fields)"
+      ]
+    },
+    "reason": "The substituted head was accepted by both getExistingDraft and the real recoverPublication wrapper. getExistingDraft (rest.ts:140-183) validates only that the draft head sha matches the ref and that the head commit has exactly one parent equal to baseSha (rest.ts:168-175); it never reads the commit tree or compares it to the originally verified tree digest. The persisted PublicationPlan (verified-publication.ts:8-12) contains only repo/branch/baseSha, so no expected-tree binding is possible. Two distinct trees with the same single parent are therefore interchangeable at recovery time."
+  },
+  {
+    "file": "09-macos-sandbox-lifetime.json",
+    "lead": "fixer/sandbox/macos-detached-descendant-lifetime",
+    "verdict": "confirmed",
+    "observed": {
+      "platformSeenBySandbox": "darwin",
+      "elapsedMs": 10,
+      "result": {
+        "exitCode": 0,
+        "stdout": "foreground-done",
+        "timedOut": false
+      },
+      "foregroundExitedBeforeDeadline": true,
+      "descendantWroteMarkerAfterSupervisorReturn": true,
+      "note": "process.platform was patched to darwin and a shim execs sandbox-exec arguments unchanged; no real macOS sandbox policy is claimed. This tests only the supervisor teardown logic in execute()."
+    },
+    "reason": "A detached descendant kept running and wrote inside the workspace after runSandboxed returned, showing cleanup targeted only the original process group."
+  },
+  {
+    "file": "10-stale-jwt.json",
+    "lead": "identity/account-password-change/stale-jwt",
+    "verdict": "confirmed",
+    "observed": {
+      "dummyAccountId": "dummy-account-1",
+      "twoDistinctSessions": true,
+      "firstBearerBeforeChange": "accepted",
+      "passwordHashChanged": true,
+      "firstBearerAfterChange": "accepted",
+      "secondBearerAfterChange": "accepted",
+      "newPasswordLogin": "accepted",
+      "oldPasswordLogin": "rejected:UnauthorizedException",
+      "firstTokenClaimKeys": [
+        "aud",
+        "email",
+        "exp",
+        "iat",
+        "iss",
+        "sid",
+        "sub"
+      ],
+      "tokenHasPasswordEpochOrRevocation": false,
+      "guardChecksOnlySignatureAccountStateAndMembership": true
+    },
+    "reason": "With dummy ids and a local HS256 stub, two logins produced distinct session tokens. After changePassword updated the stored hash via the service and fake repo, the first bearer was still accepted by the real AccountAuthGuard. The token carries only sub/email/standard JWT claims; no password epoch or revocation field exists, and the guard re-reads Account/membership state without comparing token issuance to the password change."
+  },
+  {
+    "file": "11-unverified-email-membership.json",
+    "lead": "identity/register-addMember/unverified-email-membership",
+    "verdict": "confirmed",
+    "observed": {
+      "dummyOwnerId": "dummy-account-1",
+      "dummyOrgId": "dummy-org-2",
+      "dummyAttackerId": "dummy-account-4",
+      "attackerRegisteredIntendedEmail": true,
+      "attackerHasNoMailboxProof": true,
+      "beforeOwnerGrant": "rejected:ForbiddenException",
+      "ownerAddMemberResult": {
+        "accountId": "dummy-account-4",
+        "orgId": "dummy-org-2",
+        "role": "member"
+      },
+      "attackerProfileOrgs": [
+        {
+          "orgId": "dummy-org-2",
+          "role": "member"
+        }
+      ],
+      "attackerListProjects": [
+        {
+          "projectId": "dummy-project-3",
+          "orgId": "dummy-org-2",
+          "slug": "dummy-private-project"
+        }
+      ],
+      "attackerSeesOwnerOrgProject": true
+    },
+    "reason": "With dummy principals and an in-memory repo, an unauthenticated-style register reserved the intended member email using an attacker password. The owner then added that plain email and IdentityService.addMember resolved it directly to the attacker Account. The attacker, previously denied the Project list, could then list the owner Organization’s dummy Project. No mailbox-verification or invitation-acceptance state exists on this path."
+  },
+  {
+    "file": "12-unthrottled-argon2.json",
+    "lead": "identity/register-login/unthrottled-argon2-work",
+    "verdict": "confirmed",
+    "observed": {
+      "guardMetadata": {
+        "accountRegister": [],
+        "accountLogin": [],
+        "oauthToken": [
+          "ThrottlerGuard"
+        ],
+        "childExitCode": 0
+      },
+      "passwordWork": {
+        "hashCalls": 1,
+        "verifyCalls": 2,
+        "registerOutcome": "accepted",
+        "correctLoginOutcome": "accepted",
+        "wrongLoginOutcome": "rejected:UnauthorizedException",
+        "reachedRegisterWork": true,
+        "reachedLoginWork": true,
+        "reachedFailedLoginWork": true,
+        "stubScope": "replaced only Bun.password.hash/verify with counting fakes for this process"
+      }
+    },
+    "reason": "Runtime metadata shows no guards on AccountController.register/login while OAuthController.token carries ThrottlerGuard. With Bun.password.hash/verify replaced by counting fakes, small dummy register/login requests reached password hashing and verification, including a failed login that still performed verify work. This confirms the localized admission gap and input-to-work path; it does not measure a service outage or decide upstream/runtime work limits."
+  },
+  {
+    "file": "13-kiro-hook-guard.json",
+    "lead": "kiro-hooks.guard-shell.event-shape-fail-open",
+    "verdict": "confirmed",
+    "observed": {
+      "exitCodes": {
+        "recognizedShapeKnownDangerous": 2,
+        "recognizedShapeBenign": 0,
+        "unrecognizedShapeKnownDangerous": 0,
+        "semanticallyEquivalentCommand": 0
+      },
+      "recognizedShapeBlocked": true,
+      "benignShapeAllowed": true,
+      "failOpenOnUnrecognizedShape": true,
+      "regexMissOnSemanticEquivalent": true,
+      "commandsExecuted": false
+    },
+    "reason": "The real guard blocked the recognized literal shape (exit 2) and allowed a benign command (exit 0), but exited 0 both for a destructive command nested in an unprobed event shape and for the semantically equivalent \"rm -rf /;true\". That is the fail-open / missing regex boundary result, observed from exit codes only with dummy stdin; no shell command was executed."
+  },
+  {
+    "file": "14-actuator-docker-project.json",
+    "lead": "packages/actuator/createDockerRestarter/compose-project-binding",
+    "verdict": "confirmed",
+    "observed": {
+      "listDecodedFilters": "{\"label\":[\"com.docker.compose.service=worker\"]}",
+      "listFilter": {
+        "label": [
+          "com.docker.compose.service=worker"
+        ]
+      },
+      "listFilterHasProjectPredicate": false,
+      "restartTargets": [
+        "container-aaaadummy",
+        "container-bbbbdummy"
+      ],
+      "bothDifferentProjectContainersRestarted": true,
+      "restartMethods": [
+        "POST",
+        "POST"
+      ]
+    },
+    "reason": "The list filter contains only the com.docker.compose.service label with no project predicate; both containers (dummy-project-alpha and dummy-project-beta) were POST-restarted."
+  },
+  {
+    "file": "15-actuator-zero-usage.json",
+    "lead": "packages/actuator/runtimeDecision/zeroed-policy-usage",
+    "verdict": "confirmed",
+    "observed": {
+      "recordedUsage": {
+        "openPrsLastHour": 2,
+        "actionsLast10Min": 7,
+        "diagnosisLoops": 50,
+        "llmSpentTodayUsd": 100
+      },
+      "policyLimits": {
+        "maxOpenPrsPerHour": 10,
+        "maxActionsPerServicePer10Min": 100,
+        "maxDiagnosisLoops": 3,
+        "llmDailyBudgetUsd": 10
+      },
+      "runtimeDecisionCounters": {
+        "openPrsLastHour": 0,
+        "actionsLast10Min": 7,
+        "diagnosisLoops": 0,
+        "llmSpentTodayUsd": 0
+      },
+      "runtimeDecisionReason": null,
+      "fullContextCounters": {
+        "openPrsLastHour": 2,
+        "actionsLast10Min": 7,
+        "diagnosisLoops": 50,
+        "llmSpentTodayUsd": 100
+      },
+      "fullContextDecision": {
+        "effect": "deny",
+        "reason": "rate_limited",
+        "matchedRule": "allow-restart"
+      },
+      "fullContextDenied": true,
+      "runtimeBypassed": true
+    },
+    "reason": "The full SharedPolicyContext is denied as rate_limited by the positive diagnosisLoops/daily-spend limits, but runtimeDecision returns no denial because it zeroes diagnosisLoops and llmSpentTodayUsd."
+  },
+  {
+    "file": "16-event-dedupe.json",
+    "lead": "packages/events/src/consumer.ts:projectless-event-dedupe",
+    "verdict": "confirmed",
+    "observed": {
+      "sharedId": "same-envelope-id",
+      "grantedProjectIds": [
+        "101",
+        "202"
+      ],
+      "decodedProjects": [
+        "101",
+        "202"
+      ],
+      "firstType": "no-detection",
+      "secondType": "runtime.oom",
+      "processedCount": 1,
+      "processed": [
+        {
+          "id": "same-envelope-id",
+          "projectId": "101",
+          "type": "no-detection"
+        }
+      ],
+      "acks": [
+        "101",
+        "202"
+      ],
+      "terms": [],
+      "naks": [],
+      "deadLetters": [],
+      "firstAcked": true,
+      "secondAcked": true,
+      "secondProcessed": false
+    },
+    "reason": "Dedupe is keyed on envelope.id alone: project 202 reused id \"same-envelope-id\", was acknowledged on the dedupe branch, and never reached the process callback (which would have produced runtime.oom)."
+  },
+  {
+    "file": "17-collector-poison.json",
+    "lead": "packages/integrations/src/delivery.ts:permanent-collector-poison-retry",
+    "verdict": "confirmed",
+    "observed": {
+      "retryLimit": 5,
+      "poisonAccepted": true,
+      "healthyAccepted": true,
+      "poisonDeliverCalls": 5,
+      "healthyDeliverCalls": 0,
+      "published": [],
+      "publishedCount": 0,
+      "acknowledgeCalls": 0,
+      "sleepDelays": [
+        500,
+        1000,
+        2000,
+        4000,
+        8000
+      ],
+      "sleepDelayMsIgnored": true
+    },
+    "reason": "The retry loop has no attempt cap: the head record threw on every delivery, so entries() kept yielding pending[0]; the healthy record never reached deliver() and the publisher received nothing."
+  },
+  {
+    "file": "18-redactor-regex.json",
+    "lead": "packages/redactor/src/detectors.ts:email-unanchored-scan",
+    "verdict": "confirmed",
+    "observed": {
+      "sizes": [
+        256,
+        512,
+        1024,
+        2048
+      ],
+      "iterations": 3,
+      "timingsNs": [
+        13000,
+        42542,
+        159083,
+        615625
+      ],
+      "timingsMs": [
+        0.013,
+        0.0425,
+        0.1591,
+        0.6156
+      ],
+      "doublingRatios": [
+        3.272,
+        3.739,
+        3.87
+      ],
+      "growthExponents": [
+        1.71,
+        1.903,
+        1.952
+      ],
+      "nonMatchingInputUnchanged": [
+        true,
+        true,
+        true,
+        true
+      ]
+    },
+    "reason": "Each doubling of a non-matching ASCII string more than doubled redact() time (exponent > 1.5), consistent with the unanchored email pattern backtracking from every start index."
+  },
+  {
+    "file": "19-temporal-samples.json",
+    "lead": "packages/watcher/src/rules.ts:unbounded-temporal-samples",
+    "verdict": "confirmed",
+    "observed": {
+      "observedAt": "2026-11-26T00:00:00.000Z",
+      "line": "ERROR: dummy failure in checkout",
+      "small": {
+        "count": 8,
+        "visits": 28,
+        "expectedVisits": 28,
+        "filterCalls": 8,
+        "batches": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7
+        ],
+        "retainedSamples": 8,
+        "detections": 4
+      },
+      "large": {
+        "count": 16,
+        "visits": 120,
+        "expectedVisits": 120,
+        "filterCalls": 16,
+        "batches": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15
+        ],
+        "retainedSamples": 16,
+        "detections": 12
+      },
+      "visitRatio": 4.286,
+      "expectedQuadraticRatio": 4,
+      "noCountCap": true,
+      "instrumentationRestored": true
+    },
+    "reason": "Doubling unique error lines from 8 to 16 grew filter callback visits 4.29x (quadratic n(n-1)/2), and all samples were retained (8 -> 16) with no eviction cap on the error array."
+  }
+]

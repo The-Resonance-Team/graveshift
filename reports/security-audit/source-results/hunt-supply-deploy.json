@@ -1,0 +1,637 @@
+{
+  "units": [
+    {
+      "coverage_id": ".github%2Fworkflows%2Foneshot-reusable.yml%23workflow_call::scripts%2Factions%2Fpolicy-signature.ts%23verifyPolicySignature::.github::SUPPLY-CHAIN-AND-RELEASE.md%23Build-context%20inclusion",
+      "disposition": "covered",
+      "reviewed_paths": [
+        ".gitignore",
+        ".github/workflows/oneshot-reusable.yml",
+        "deploy/compose/bun.Dockerfile",
+        "deploy/compose/bun.Dockerfile.dockerignore",
+        "examples/haunted-candy-shop/Dockerfile",
+        "examples/haunted-candy-shop/.dockerignore",
+        "packages/core/package.json",
+        "packages/events/package.json",
+        "packages/redactor/src/index.ts",
+        "packages/redactor/src/detectors.ts",
+        "scripts/actions/prepare-patch.ts",
+        "scripts/actions/one-shot.ts",
+        "scripts/finalize-contract.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-supply-deploy",
+          "reviewed_paths": [
+            ".gitignore",
+            "deploy/compose/bun.Dockerfile",
+            "deploy/compose/bun.Dockerfile.dockerignore",
+            "examples/haunted-candy-shop/Dockerfile",
+            "examples/haunted-candy-shop/.dockerignore",
+            "packages/core/package.json",
+            "packages/events/package.json",
+            "scripts/finalize-contract.ts"
+          ],
+          "invariant": "Image and package inputs must not copy an established real credential or local privileged configuration into an artifact accessible to a lower-trust reader.",
+          "method": "source",
+          "result": "The shared Dockerfile copies package manifests and apps/packages, uses APP_PATH rather than a credential build argument, and drops to user bun. Its Dockerfile-specific ignore excludes root .env*, .git and .kiro. The demo copies only package.json and src. The public core/events packages declare files allowlists and their finalizer copies LICENSE/NOTICE and rewrites declarations. No real secret disclosure was established in these inspected inputs. Nested ignored files and a produced image/package were not inspected; the broad apps/packages copy is recorded as hardening rather than an invented credential leak. Ignored local env and MCP settings were not read.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-supply-deploy",
+          "reviewed_paths": [
+            ".github/workflows/oneshot-reusable.yml",
+            "scripts/actions/prepare-patch.ts",
+            "scripts/actions/one-shot.ts",
+            "packages/redactor/src/index.ts",
+            "packages/redactor/src/detectors.ts"
+          ],
+          "invariant": "The one-shot artifact must contain only the validated sanitized patch, without attaching job credentials or the trusted checkout.",
+          "method": "source",
+          "result": "prepare-patch.ts:15-38 bounds the input, checks signed policy, validates the patch, redacts file content, validates again, and writes only patch.json. oneshot-reusable.yml:137-142 uploads that exact file with one-day retention. The producer does not serialize process.env, the HMAC key, or a checkout directory. Redaction preserves base identity; its detector coverage is not treated as proof against every possible secret format. No source-visible credential-to-artifact handoff survived this check.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    },
+    {
+      "coverage_id": ".github%2Fworkflows%2Foneshot-reusable.yml%23workflow_call::scripts%2Factions%2Fpolicy-signature.ts%23verifyPolicySignature::.github::SUPPLY-CHAIN-AND-RELEASE.md%23Build-to-promotion%20substitution",
+      "disposition": "covered",
+      "reviewed_paths": [
+        ".github/workflows/oneshot-reusable.yml",
+        ".github/workflows/oneshot.yml",
+        "graveshift.config.yaml",
+        "packages/config/src/load.ts",
+        "packages/patch/src/guard.ts",
+        "packages/patch/src/schemas.ts",
+        "packages/policy/src/decide.ts",
+        "scripts/actions/policy-signature.ts",
+        "scripts/actions/prepare-patch.ts",
+        "scripts/actions/one-shot.ts",
+        "scripts/actions/apply-patch.ts",
+        "tests/actions-signature.test.ts",
+        "tests/actions-scripts.test.ts",
+        "tests/actions-scripts.helpers.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-supply-deploy",
+          "reviewed_paths": [
+            ".github/workflows/oneshot-reusable.yml",
+            ".github/workflows/oneshot.yml",
+            "scripts/actions/policy-signature.ts",
+            "scripts/actions/prepare-patch.ts",
+            "scripts/actions/one-shot.ts",
+            "scripts/actions/apply-patch.ts",
+            "tests/actions-signature.test.ts"
+          ],
+          "invariant": "The artifact consumed with publication credentials must be the sanitized derivation of the same signed job and raw patch bytes.",
+          "method": "source",
+          "result": "policy-signature.ts binds repository, work item, incident, branch, base ref, full base SHA, title, and SHA-256 of raw patch bytes under canonical HMAC-SHA256. Verification requires an adequate key, exact digest encoding, timing-safe comparison, open_pr allow, matching bound fields, and a bounded unexpired lifetime. Both prepare and apply invoke this check. apply-patch.ts:63-69 validates the downloaded artifact and compares its parsed representation with a freshly redacted derivation of the signed payload before writes. A mutable artifact name alone therefore does not supply an artifact-substitution path. Signature tests were read, not executed.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-supply-deploy",
+          "reviewed_paths": [
+            "graveshift.config.yaml",
+            "packages/config/src/load.ts",
+            "packages/patch/src/guard.ts",
+            "packages/patch/src/schemas.ts",
+            "packages/policy/src/decide.ts",
+            "scripts/actions/one-shot.ts",
+            "scripts/actions/apply-patch.ts",
+            "tests/actions-scripts.test.ts",
+            "tests/actions-scripts.helpers.ts"
+          ],
+          "invariant": "Publication, retry and stale-base paths must retain signed commit/blob identity and must not replace an existing branch with different content.",
+          "method": "source",
+          "result": "The trusted policy loader fails closed for unknown repositories, and current policy is re-evaluated. Patch schemas and guards require base identity and valid write blob identities. apply-patch.ts checks resolved base identity and signed BASE_SHA, fetches that SHA, compares edited blobs, and checks symlink containment before writing. Existing remote branches are reused only if their tree equals the staged tree; new branches use an absent-ref force-with-lease. Draft creation is explicit and no merge sink exists. The preliminary BASE_REF resolution uses the trusted cwd rather than PATCH_WORKSPACE; that can cause a safe failure and is recorded separately as a correctness note, not a demonstrated substitution. Fixture and retry tests were inspected only.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    },
+    {
+      "coverage_id": ".github%2Fworkflows%2Foneshot-reusable.yml%23workflow_call::scripts%2Factions%2Fpolicy-signature.ts%23verifyPolicySignature::.github::SUPPLY-CHAIN-AND-RELEASE.md%23Dependency%20source%20and%20namespace%20confusion",
+      "disposition": "covered",
+      "reviewed_paths": [
+        "package.json",
+        "bun.lock",
+        "bunfig.toml",
+        "apps/api/package.json",
+        "packages/core/package.json",
+        "packages/events/package.json",
+        "examples/haunted-candy-shop/package.json",
+        "examples/haunted-candy-shop/Dockerfile",
+        ".github/actions/setup-bun/action.yml",
+        ".github/workflows/ci.yml",
+        ".github/workflows/oneshot-reusable.yml",
+        "deploy/compose/bun.Dockerfile",
+        "scripts/finalize-contract.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-supply-deploy",
+          "reviewed_paths": [
+            "package.json",
+            "bun.lock",
+            "bunfig.toml",
+            "apps/api/package.json",
+            "packages/core/package.json",
+            "packages/events/package.json",
+            "examples/haunted-candy-shop/package.json"
+          ],
+          "invariant": "A lower-trust namespace, alternate registry or generated input must not replace a locked workspace dependency consumed by a trusted job.",
+          "method": "source",
+          "result": "The root pins Bun 1.4.4 and enumerates apps/api, apps/daemon and packages/* as workspaces. bun.lock records the current @graveshift packages as workspace locations, including the events package's semver dependency on core, and external entries include integrity hashes. Searches found no nonempty alternate package-source field, git/file/link dependency source, lock override, or registry redirection in the inspected lock/config. bunfig.toml contains a test preload only. Public core/events publishConfig points explicitly to npm; the example is private and has no dependencies. No attacker-controlled resolver selection feeding privileged execution was established.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-supply-deploy",
+          "reviewed_paths": [
+            ".github/actions/setup-bun/action.yml",
+            ".github/workflows/ci.yml",
+            ".github/workflows/oneshot-reusable.yml",
+            "deploy/compose/bun.Dockerfile",
+            "examples/haunted-candy-shop/Dockerfile",
+            "scripts/finalize-contract.ts"
+          ],
+          "invariant": "Dependency installation and generated packaging steps in credential-bearing workflows must consume trusted inputs rather than the target checkout or an untrusted persisted cache.",
+          "method": "source",
+          "result": "The setup action, both one-shot jobs, and the shared image use frozen-lockfile installs. One-shot installation runs in the trusted checkout selected by an administrator-controlled full SHA; the target checkout receives no install/build/test invocation. No cache restore, workflow_run artifact promotion, registry publishing job, or external generated-code download is declared in these workflows. The demo Dockerfile runs no package install. Image tags and dependency versions were not treated as vulnerabilities without an actor-controlled resolution path; no registry or package-manager process was contacted.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    },
+    {
+      "coverage_id": ".github%2Fworkflows%2Foneshot-reusable.yml%23workflow_call::scripts%2Factions%2Fpolicy-signature.ts%23verifyPolicySignature::.github::SUPPLY-CHAIN-AND-RELEASE.md%23Untrusted%20code%20in%20a%20privileged%20workflow",
+      "disposition": "covered",
+      "reviewed_paths": [
+        ".github/actions/setup-bun/action.yml",
+        ".github/workflows/ci.yml",
+        ".github/workflows/pr-hygiene.yml",
+        ".github/workflows/codeql.yml",
+        ".github/workflows/oneshot-reusable.yml",
+        ".github/workflows/oneshot.yml",
+        "package.json",
+        "scripts/actions/prepare-patch.ts",
+        "scripts/actions/apply-patch.ts",
+        "scripts/actions/one-shot.ts",
+        "packages/config/src/load.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-supply-deploy",
+          "reviewed_paths": [
+            ".github/actions/setup-bun/action.yml",
+            ".github/workflows/ci.yml",
+            ".github/workflows/pr-hygiene.yml",
+            ".github/workflows/codeql.yml"
+          ],
+          "invariant": "Contributor code must not be executed by a source-visible PR path that also holds repository publication or application-secret authority.",
+          "method": "source",
+          "result": "CI uses pull_request and main push with contents:read; its contributor-controlled install/test/build steps have no declared application secrets or publication credentials. The PR label job has pull-requests:write but performs no checkout or contributor code execution, deriving fixed label names from paths-filter outputs. CodeQL declares security-events:write but only pinned checkout/init/analyze actions and no project build step. No pull_request_target, workflow_run, issue-comment execution, or repository_dispatch path was found. Hosted repository protections were not assumed, and ordinary authorized CI computation was not promoted to a finding.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-supply-deploy",
+          "reviewed_paths": [
+            ".github/workflows/oneshot-reusable.yml",
+            ".github/workflows/oneshot.yml",
+            "package.json",
+            "scripts/actions/prepare-patch.ts",
+            "scripts/actions/apply-patch.ts",
+            "scripts/actions/one-shot.ts",
+            "packages/config/src/load.ts"
+          ],
+          "invariant": "One-shot secrets must be given to reviewed workflow code, while mutable target code remains data until draft publication.",
+          "method": "source",
+          "result": "Both one-shot jobs require an administrator-provided 40-hex trusted revision and a nonempty base-ref allowlist before checkout. Checkouts disable persisted credentials. Bun setup, installs, imports, config loading, and script execution use trusted; target is a separate data directory. The HMAC key is scoped to prepare/apply steps and the PR token to apply/open-PR steps. Target package scripts, hooks, tests and builds are not invoked. Git subprocess arguments and file writes are constructed by trusted scripts, and signed policy is checked again before publication. No lower-trust artifact producer or target-code execution with these secrets was identified in the declared flow.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    },
+    {
+      "coverage_id": ".github%2Fworkflows%2Foneshot-reusable.yml%23workflow_call::scripts%2Factions%2Fpolicy-signature.ts%23verifyPolicySignature::.github::SUPPLY-CHAIN-AND-RELEASE.md%23Workflow%20command%20and%20expression%20confusion",
+      "disposition": "covered",
+      "reviewed_paths": [
+        ".github/workflows/oneshot-reusable.yml",
+        ".github/workflows/oneshot.yml",
+        ".github/workflows/pr-hygiene.yml",
+        "graveshift.config.yaml",
+        "scripts/actions/policy-signature.ts",
+        "scripts/actions/one-shot.ts",
+        "scripts/actions/apply-patch.ts",
+        "packages/patch/src/guard.ts",
+        "packages/patch/src/schemas.ts",
+        "tests/actions-workflows.test.ts",
+        "tests/actions-scripts.test.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-supply-deploy",
+          "reviewed_paths": [
+            ".github/workflows/oneshot-reusable.yml",
+            ".github/workflows/oneshot.yml",
+            ".github/workflows/pr-hygiene.yml",
+            "scripts/actions/policy-signature.ts",
+            "tests/actions-workflows.test.ts"
+          ],
+          "invariant": "Workflow inputs and generated outputs must not become shell source, injected workflow commands or executable expressions.",
+          "method": "source",
+          "result": "One-shot inputs enter fixed env fields; run blocks contain no embedded workflow expressions. BASE_REF is character-restricted and matched against the configured allowlist before its single-line GITHUB_OUTPUT write. Trusted SHA output is restricted to exactly 40 lowercase hex characters. Branch, title, work item and base are quoted in gh arguments; the commit message is an argv value rather than shell text. pr-hygiene's script interpolates JSON-encoded outputs whose label keys are fixed by the workflow. The encoded Git authorization value is masked before credential-bearing Git operations. No source-visible input-to-shell or output-file injection reached a privileged sink.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-supply-deploy",
+          "reviewed_paths": [
+            "graveshift.config.yaml",
+            "scripts/actions/one-shot.ts",
+            "scripts/actions/apply-patch.ts",
+            "packages/patch/src/guard.ts",
+            "packages/patch/src/schemas.ts",
+            "tests/actions-workflows.test.ts",
+            "tests/actions-scripts.test.ts"
+          ],
+          "invariant": "A signed patch or ref must not escape its allowed workspace, redirect Git options, traverse a symlink, or bypass repository path and size rules.",
+          "method": "source",
+          "result": "TypeScript ref guards reject empty/dot/dot-dot path segments and constrain branch names to graveshift/. Patch parsing is strict, payload size is capped, duplicate paths are rejected case-insensitively, and absolute/backslash/NUL/dot-segment paths fail. Current trusted rules allow only src/config/migrations/test paths and deny workflow, deploy and secret-file patterns. apply uses argv Git calls, checks real workspace containment and every existing path component for symlinks, then verifies real parent containment before writing. Existing and dangling symlink tests were read only. No source-grounded escaping path survived these controls.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    },
+    {
+      "coverage_id": "deploy%2Fcompose%2Fgraveshift.compose.yml%23services::scripts%2Factions%2Fpolicy-signature.ts%23verifyPolicySignature::.github::CLOUD-AND-DEPLOYMENT.md%23Security-control%20precedence%20drift",
+      "disposition": "candidate",
+      "reviewed_paths": [
+        "graveshift.config.yaml",
+        "examples/haunted-candy-shop/graveshift.config.yaml",
+        "packages/config/src/load.ts",
+        "packages/config/src/schema.ts",
+        "apps/api/src/config/env.schema.ts",
+        "apps/api/src/config/boot.config.ts",
+        "apps/api/src/main.ts",
+        "packages/policy/src/mode.ts",
+        "packages/policy/src/evaluation.ts",
+        "packages/policy/src/decide.ts",
+        "packages/actuator/src/main.ts",
+        "packages/actuator/src/claims.ts",
+        ".kiro/agents/chaos-witch.json",
+        "docs/DEMO.md",
+        "deploy/compose/graveshift.compose.yml",
+        "deploy/compose/demo.compose.yml",
+        "examples/haunted-candy-shop/Dockerfile",
+        "examples/haunted-candy-shop/src/api-main.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-supply-deploy",
+          "reviewed_paths": [
+            "graveshift.config.yaml",
+            "examples/haunted-candy-shop/graveshift.config.yaml",
+            "packages/config/src/load.ts",
+            "packages/config/src/schema.ts",
+            "apps/api/src/config/env.schema.ts",
+            "apps/api/src/config/boot.config.ts",
+            "apps/api/src/main.ts",
+            "packages/policy/src/mode.ts",
+            "packages/policy/src/evaluation.ts",
+            "packages/policy/src/decide.ts",
+            "packages/actuator/src/main.ts",
+            "packages/actuator/src/claims.ts"
+          ],
+          "invariant": "Deployment overrides must not silently widen configured policy mode, disable required startup credentials, or imply an audit guarantee absent from the launcher.",
+          "method": "source",
+          "result": "Both committed example/config policies select propose and disable automatic fixes. resolveMode only accepts a safer or equal mode, and runtime decisions consume that resolver. The actuator rejects a missing/short HMAC key and a failed durable admission store before listening. API environment validation rejects missing internal/JWT secrets and equal API/daemon tokens; main listens on the committed boot host after boot validation. The actuator launcher explicitly sets durableAudit:false and only acknowledges audit locally; this was not mistaken for a durable remote audit handoff or duplicated into the peer-owned actuator audit review. These source controls reject simple environment-mode and empty-secret bypass hypotheses.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-supply-deploy",
+          "reviewed_paths": [
+            ".kiro/agents/chaos-witch.json",
+            "docs/DEMO.md",
+            "deploy/compose/graveshift.compose.yml",
+            "deploy/compose/demo.compose.yml",
+            "examples/haunted-candy-shop/Dockerfile",
+            "examples/haunted-candy-shop/src/api-main.ts"
+          ],
+          "invariant": "Composing the lower-trust watched demo with support services must preserve the separate platform API image, credential set and network membership.",
+          "method": "source",
+          "result": "docs/DEMO.md:20 combines the support file first and demo file second. Both declare services.api and services.postgres. Support api carries internal/JWT/root-bootstrap environment fields and core networking; demo api supplies the haunted image and example build context without resetting the inherited maps/lists. A contributor or declared examples-only writer can control that image's inputs. This supports a conditional credential/network inheritance candidate. The source also retains the API profile, platform command, and platform Dockerfile path, so the unchanged combined demo is not established runnable: the example has neither src/main.ts nor deploy/compose/bun.Dockerfile. Rendering and a minimal examples-only fixture were not executed, and no credential disclosure is claimed as observed.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [
+        "deploy/compose/api-service-overlay-retains-control-plane-authority"
+      ],
+      "unresolved": [
+        "The exact effective combined Compose object and an active API-profile deployment with a runnable lower-trust example image have not been observed. The present unmodified overlay retains incompatible build/command fields; the candidate's runnable examples-only variant requires bounded validation.",
+        "No complete OS-enforced memory and cumulative disk sandbox or artifact promotion is available, so configuration rendering and image/process validation were not performed."
+      ]
+    },
+    {
+      "coverage_id": "deploy%2Fcompose%2Fgraveshift.compose.yml%23services::scripts%2Factions%2Fpolicy-signature.ts%23verifyPolicySignature::.github::CLOUD-AND-DEPLOYMENT.md%23Unexpected%20service%20or%20management-plane%20reachability",
+      "disposition": "candidate",
+      "reviewed_paths": [
+        "deploy/compose/graveshift.compose.yml",
+        "deploy/compose/demo.compose.yml",
+        "deploy/compose/database-test.yml",
+        "deploy/compose/nats/nats.conf",
+        "deploy/compose/prometheus.yml",
+        "apps/api/src/main.ts",
+        "packages/actuator/src/main.ts",
+        "packages/actuator/src/handler.ts",
+        "docs/DEMO.md",
+        ".kiro/agents/chaos-witch.json",
+        "examples/haunted-candy-shop/Dockerfile",
+        "examples/haunted-candy-shop/src/api-main.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-supply-deploy",
+          "reviewed_paths": [
+            "deploy/compose/graveshift.compose.yml",
+            "deploy/compose/demo.compose.yml",
+            "deploy/compose/database-test.yml",
+            "deploy/compose/nats/nats.conf",
+            "deploy/compose/prometheus.yml",
+            "apps/api/src/main.ts",
+            "packages/actuator/src/main.ts",
+            "packages/actuator/src/handler.ts"
+          ],
+          "invariant": "Maintained base deployments must not publicly publish sensitive broker, Docker proxy, actuator or database management listeners.",
+          "method": "source",
+          "result": "Support API/Postgres, demo ports and database-test Postgres mappings explicitly bind 127.0.0.1. Neither Docker proxy, actuator, Prometheus nor NATS declares a host port. NATS has TLS and named users, binds its client listener inside the container, and places monitoring on 127.0.0.1:8222; protocol side listeners are absent. Only actuator joins the internal act network with its write proxy. The API boot host is loopback by current config; the actuator's network listener exposes health and a bounded actions adapter rather than an unauthenticated management console. This establishes declared base topology only, without inferring host firewalls or live reachability.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-supply-deploy",
+          "reviewed_paths": [
+            "docs/DEMO.md",
+            ".kiro/agents/chaos-witch.json",
+            "deploy/compose/graveshift.compose.yml",
+            "deploy/compose/demo.compose.yml",
+            "examples/haunted-candy-shop/Dockerfile",
+            "examples/haunted-candy-shop/src/api-main.ts"
+          ],
+          "invariant": "The documented combined deployment must not attach lower-trust demo code to a platform-only network through a colliding service identity.",
+          "method": "source",
+          "result": "The same services.api collision also combines support core networking with demo candy networking while selecting the demo image/context. This is linked to the single authority-inheritance fingerprint rather than a separate finding. Its minimum candidate result is delivery of a dummy platform-secret marker to the lower-trust image; the additional effective core membership can be checked in the same rendered object. No arbitrary Docker operation, broker bypass, host exposure, or live management access was assumed. The retained API profile and incompatible platform Dockerfile/command remain prerequisites blocking an observed runnable result.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [
+        "deploy/compose/api-service-overlay-retains-control-plane-authority"
+      ],
+      "unresolved": [
+        "The combined service's effective image, networks, retained API profile and runnable command/build inputs require bounded rendering and a minimal dummy example fixture. No such execution is authorized under the available sandbox controls."
+      ]
+    },
+    {
+      "coverage_id": "deploy%2Fk8s%2Frbac.yaml%23graveshift-actuator::scripts%2Factions%2Fpolicy-signature.ts%23verifyPolicySignature::.github::CLOUD-AND-DEPLOYMENT.md%23Host%20or%20control-plane%20capability%20exposure",
+      "disposition": "blocked",
+      "reviewed_paths": [
+        "deploy/k8s/rbac.yaml",
+        "deploy/k8s/kustomization.yaml",
+        "deploy/k8s/networkpolicy.yaml",
+        "deploy/helm/graveshift/Chart.yaml",
+        "deploy/helm/graveshift/values.yaml",
+        "deploy/kind/bootstrap.sh",
+        "deploy/kind/kind-config.yaml",
+        "deploy/compose/graveshift.compose.yml",
+        "deploy/compose/demo.compose.yml",
+        "deploy/compose/bun.Dockerfile",
+        "packages/actuator/src/main.ts",
+        "packages/actuator/src/backends.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-supply-deploy",
+          "reviewed_paths": [
+            "deploy/k8s/rbac.yaml",
+            "deploy/k8s/kustomization.yaml",
+            "deploy/k8s/networkpolicy.yaml",
+            "deploy/helm/graveshift/Chart.yaml",
+            "deploy/helm/graveshift/values.yaml",
+            "deploy/kind/bootstrap.sh",
+            "deploy/kind/kind-config.yaml"
+          ],
+          "invariant": "A lower-trust workload must not receive active host or cluster-wide mutation authority from the maintained Kubernetes deployment path.",
+          "method": "source",
+          "result": "The reader ClusterRole grants get/list/watch; the actuator Role is confined to named api/worker deployments in candy-shop and worker scale. No cluster-admin, secrets resource, pod creation, hostPath or privileged pod is declared. Kustomization contains only RBAC and a permissive egress skeleton, with both workload manifests commented out; Helm has no templates and kind bootstrap performs no cluster commands. There is therefore no source-visible workload attachment making these scaffolds a live capability exposure. Broader ownership/label behavior in actuator backends belongs to the explicitly peer-owned unit and was not duplicated.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-supply-deploy",
+          "reviewed_paths": [
+            "deploy/compose/graveshift.compose.yml",
+            "deploy/compose/demo.compose.yml",
+            "deploy/compose/bun.Dockerfile",
+            "packages/actuator/src/main.ts",
+            "packages/actuator/src/backends.ts"
+          ],
+          "invariant": "The Docker socket transport must enforce the declared read-only observer and restart-only actuator capabilities without granting arbitrary host mutation to a lower-trust workload.",
+          "method": "source",
+          "result": "Only the two socket proxies mount docker.sock; application images run as bun, and demo workloads join candy rather than act in the separate base files. The reader proxy declares POST=0. The actuator proxy declares CONTAINERS=1, POST=1 and ALLOW_RESTARTS=1, and is attached to act with only the actuator. The application backend constructs only container lookup and restart endpoints. However, the repository does not contain the pinned tecnativa/docker-socket-proxy:0.3.0 authorization implementation, so the claim that these variables restrict every write to restart could not be checked. A read-only socket filesystem mount alone was not counted as a Docker API authorization control. No complete lower-trust arbitrary-operation trace was established, so this is a coverage blocker rather than a speculative vulnerability.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": [
+        "The effective HTTP method/path policy of tecnativa/docker-socket-proxy:0.3.0 under CONTAINERS=1, POST=1, ALLOW_RESTARTS=1 is outside repository source. External image/source requests and container execution are forbidden, and the complete OS sandbox is unavailable. A trusted owner must inspect that pinned image's policy or perform an isolated dummy-socket allow/deny check for restart versus create/exec/delete before restart-only transport coverage can be completed."
+      ]
+    },
+    {
+      "coverage_id": "powers%2Fgraveshift%2Fmcp.json%23graveshift::scripts%2Factions%2Fpolicy-signature.ts%23verifyPolicySignature::.github::SUPPLY-CHAIN-AND-RELEASE.md%23Plugin%20and%20extension%20trust%20expansion",
+      "disposition": "covered",
+      "reviewed_paths": [
+        ".kiro/agents/sre-reviewer.json",
+        ".kiro/agents/chaos-witch.json",
+        ".kiro/agents/docs-scribe.json",
+        ".kiro/settings/mcp.example.json",
+        "powers/graveshift/plugin.json",
+        "powers/graveshift/mcp.json",
+        "powers/graveshift/skills/triage/SKILL.md",
+        "apps/api/package.json",
+        "apps/api/src/stdio.ts",
+        ".kiro/hooks/block-dangerous-shell.json",
+        ".kiro/hooks/secret-scan-on-save.json",
+        ".kiro/hooks/typecheck-on-save.json",
+        ".kiro/hooks/spec-task-done.json",
+        ".kiro/hooks/policy-drift.json",
+        ".kiro/hooks/test-companion.json",
+        ".kiro/hooks/pbt-on-guardrails.json",
+        "scripts/kiro/guard-shell.mjs",
+        "scripts/kiro/secret-scan.mjs",
+        ".kiro/steering/safety.md",
+        ".kiro/steering/docker-k8s.md"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-supply-deploy",
+          "reviewed_paths": [
+            ".kiro/agents/sre-reviewer.json",
+            ".kiro/agents/chaos-witch.json",
+            ".kiro/agents/docs-scribe.json",
+            ".kiro/settings/mcp.example.json",
+            "powers/graveshift/plugin.json",
+            "powers/graveshift/mcp.json",
+            "powers/graveshift/skills/triage/SKILL.md",
+            "apps/api/package.json",
+            "apps/api/src/stdio.ts"
+          ],
+          "invariant": "The Power and named agents must not silently expand delegated capabilities or substitute a different publisher's executable identity.",
+          "method": "source",
+          "result": "The Power is explicitly a scaffold and launches the existing local API stdio command, which creates an application context rather than an HTTP listener. It declares no installer/updater, remote publisher replacement, or automatic approval of action tools. The committed MCP example auto-approves only listed read/audit tools; the Kubernetes server is disabled. All three named agents set includeMcpJson:false and deny shell; reviewer exposes read only, while the other agents declare bounded write exclusions. Their intended local same-user installation and workspace-code execution were not treated as a publisher-authenticity boundary. The ignored local MCP settings were not read. The later Compose inheritance issue is owned by the deployment units, not a separate plugin escalation claim.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-supply-deploy",
+          "reviewed_paths": [
+            ".kiro/hooks/block-dangerous-shell.json",
+            ".kiro/hooks/secret-scan-on-save.json",
+            ".kiro/hooks/typecheck-on-save.json",
+            ".kiro/hooks/spec-task-done.json",
+            ".kiro/hooks/policy-drift.json",
+            ".kiro/hooks/test-companion.json",
+            ".kiro/hooks/pbt-on-guardrails.json",
+            "scripts/kiro/guard-shell.mjs",
+            "scripts/kiro/secret-scan.mjs",
+            ".kiro/steering/safety.md",
+            ".kiro/steering/docker-k8s.md"
+          ],
+          "invariant": "Hook event data must not be interpolated into executable shell source or read-file contents echoed as a secret, and advisory developer hooks must not be mistaken for a runtime sandbox.",
+          "method": "source",
+          "result": "Command hooks use fixed local command strings. guard-shell parses stdin into a command string for regex matching and does not execute it. secret-scan reads the selected file but emits only pattern name and file/line, never the matching secret text. Agent hooks use fixed prompts. The shell regex has bypassable forms and the secret scan is post-save with fail-open unreadable-file behavior, but these are same-user development guardrails rather than a complete authorization/sandbox layer. No source-visible plugin install/update or lower-publisher authority crossing was found; no hook, test or project command was executed.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    }
+  ],
+  "candidates": [
+    {
+      "proposed_verdict": "needs_validation",
+      "fingerprint": "deploy/compose/api-service-overlay-retains-control-plane-authority",
+      "title": "Combined Compose service identity can carry platform authority into the demo image",
+      "description": "The documented support-plus-demo composition reuses services.api for the platform API and lower-trust watched example. The demo supplies the haunted image and example build context, while normal Compose merging can retain the platform's internal/JWT/root-bootstrap environment fields and core network membership. An actor with write authority confined to examples/** can control the demo build/runtime inputs without editing platform configuration. The candidate requires an owner to enable the inherited api profile with nonempty platform credentials and a runnable demo image; it does not assert that the unchanged current combination leaks secrets. The source currently retains a platform Dockerfile path and src/main.ts command absent from the example, and no render or execution result was obtained.",
+      "claimed_root_cause": "deploy/compose/graveshift.compose.yml and deploy/compose/demo.compose.yml assign different trust roles to the same Compose service key. The later demo definition overrides image/build context but does not clear inherited platform environment, networks, profile, command or build.dockerfile fields. Thus a runnable examples-controlled variant may receive the authority of the platform service instead of remaining a separate watched workload.",
+      "trace": [
+        {
+          "kind": "entrypoint",
+          "file": ".kiro/agents/chaos-witch.json",
+          "line": 9,
+          "scope": "Declared examples-only write capability",
+          "description": "The named agent declares shell denial and a write exclusion confined to examples/**, establishing a concrete lower-trust source-editing role that can alter the example's Dockerfile and runtime files while leaving deploy/platform source untouched. The candidate also applies to any equivalently scoped example contributor."
+        },
+        {
+          "kind": "propagation",
+          "file": "examples/haunted-candy-shop/Dockerfile",
+          "line": 5,
+          "scope": "Example-controlled image inputs",
+          "description": "The example image copies its src tree and normally runs the demo API. An examples-only writer controls code packaged into that lower-trust image and can supply an examples-local Dockerfile/entrypoint matching fields retained by the combined service; no platform-source edit is needed for those files."
+        },
+        {
+          "kind": "propagation",
+          "file": "deploy/compose/graveshift.compose.yml",
+          "line": 78,
+          "scope": "Privileged API service definition",
+          "description": "Support services.api is opt-in through profile api, uses the platform Dockerfile/command, includes API/daemon internal tokens, the OAuth JWT secret and optional root-bootstrap credentials, and joins core. Empty defaults and the profile gate are material prerequisites, not an observed grant."
+        },
+        {
+          "kind": "propagation",
+          "file": "docs/DEMO.md",
+          "line": 20,
+          "scope": "Maintained combined file order",
+          "description": "The documented combined launch selects graveshift.compose.yml first and demo.compose.yml second, causing same-named service definitions to be merged. The API-profile variant additionally requires the owner to enable that declared profile."
+        },
+        {
+          "kind": "sink",
+          "file": "deploy/compose/demo.compose.yml",
+          "line": 23,
+          "scope": "Merged api workload identity and environment",
+          "description": "Demo services.api inherits its example image/context, candy networking and demo environment through x-app, but does not reset platform fields from the prior definition. The claimed minimum boundary result is a runnable lower-trust image receiving a dummy platform-secret marker; retained core membership is a second configuration effect to inspect, without assuming a successful management operation."
+        }
+      ],
+      "evidence": [
+        {
+          "file": ".kiro/agents/chaos-witch.json",
+          "line": 9,
+          "description": "Declared file-write scope excludes examples/** from the general deny rule while shell remains denied. This supplies the limited example-editing role used in the candidate rather than assuming deploy-file write access."
+        },
+        {
+          "file": "deploy/compose/graveshift.compose.yml",
+          "line": 82,
+          "description": "The platform API retains an api profile. A combined run without this profile does not establish execution of the colliding API service."
+        },
+        {
+          "file": "deploy/compose/graveshift.compose.yml",
+          "line": 85,
+          "description": "The platform build.dockerfile is deploy/compose/bun.Dockerfile, which a context-only override can retain under the example context. That relative file is absent from the current example."
+        },
+        {
+          "file": "deploy/compose/graveshift.compose.yml",
+          "line": 88,
+          "description": "The platform command invokes src/main.ts. The current example has api-main.ts and worker-main.ts, with no main.ts, so an unchanged runnable leak has not been established."
+        },
+        {
+          "file": "deploy/compose/graveshift.compose.yml",
+          "line": 94,
+          "description": "The API environment contains named internal-token, JWT-secret and root-bootstrap fields sourced from the owner's environment. No real values were read or copied."
+        },
+        {
+          "file": "deploy/compose/graveshift.compose.yml",
+          "line": 105,
+          "description": "The platform API joins core, the same network used by the read proxy, broker, database and actuator. The demo override does not explicitly reset this network list."
+        },
+        {
+          "file": "deploy/compose/demo.compose.yml",
+          "line": 7,
+          "description": "x-app selects the examples/haunted-candy-shop build context and haunted-candy-shop:local image, declares candy networking and a demo environment map."
+        },
+        {
+          "file": "deploy/compose/demo.compose.yml",
+          "line": 23,
+          "description": "The demo uses the identical api service key and merges x-app without environment/network reset directives, supplying the source-visible conflicting handoff."
+        },
+        {
+          "file": "examples/haunted-candy-shop/src/api-main.ts",
+          "line": 3,
+          "description": "The normal example launcher consumes process.env. An examples-controlled compatible launcher likewise has access to the environment delivered to its container; actual delivery of a dummy privileged marker remains untested."
+        },
+        {
+          "file": "docs/DEMO.md",
+          "line": 20,
+          "description": "The combined support-first, demo-second invocation is explicitly maintained documentation. Its current default profile and inherited build/command failures must be accounted for when evaluating applicability."
+        }
+      ],
+      "blockers": [
+        "No target configuration rendering, image build or process execution was performed: the parent-approved OS sandbox lacks complete memory and cumulative disk controls, and the promotion allowlist is empty. There is no local observed boundary result or retained execution artifact.",
+        "No owner-observed effective Compose version, file order, profile selection or nonempty platform-credential attachment is available. The candidate requires co-enabling the declared API profile and platform credentials with the example image; empty defaults or an inactive API service do not demonstrate disclosure.",
+        "The current unchanged combination is not established runnable: the demo context lacks the retained deploy/compose/bun.Dockerfile and src/main.ts entrypoint. An examples-only writer can supply compatible files within its declared scope, but that conditional variant has not been exercised. A failed unmodified deployment must not be reported as a live secret leak."
+      ],
+      "validation_plan": {
+        "local": "In a fully approved OS sandbox with empty allowlisted environment, no external network, read-only target/tooling and scratch-only bounded writes, render the two maintained manifests in the documented order with the api profile and dummy values for required NATS variables plus a dummy 32-character platform-secret marker. Disable ambient env-file loading. Inspect only effective services.api image, build context/dockerfile, command, profiles, environment key/marker presence and networks. Determine whether haunted-candy-shop and the marker/core network coexist. Account for the absent retained Dockerfile and main.ts; if process-level proof is necessary, use an offline fixture that adds only compatible files beneath scratch examples/ and emits only the dummy marker. Stop at delivery of that marker, or reject the candidate if the supported Compose behavior prevents the handoff. Never build against a registry, use real credentials, contact a live service or inspect unrelated environment values.",
+        "deployment": "An owner can inspect the effective local deployment definition and launch configuration to establish whether both files are combined with the API profile, a runnable example image and nonempty platform credential fields. Record only source/image identity, field names, presence booleans and network membership; do not export secret values or probe live control-plane endpoints. If the image cannot start or the example and platform credentials are never co-enabled, record the candidate as inapplicable to that deployment."
+      }
+    }
+  ],
+  "hardening": [
+    "deploy/compose/bun.Dockerfile copies all apps/packages, while its Dockerfile-specific ignore uses root .env* rather than an explicit recursive nested-secret exclusion. Narrow release inputs or add recursive exclusions for local env/credential artifacts. No ignored secret was read, no actual credential-bearing nested file was established, and no image disclosure is claimed.",
+    "apply-patch.ts:71-80 resolves BASE_REF in process.cwd() even though workflow writes and subsequent Git calls use PATCH_WORKSPACE=../target. Existing script fixtures use a single checkout, so they do not establish the two-directory workflow behavior. The source-visible effect is a possible safe publication failure, not a demonstrated unauthorized write.",
+    "The documented combined Compose setup also collides on postgres and retains the API profile, command and Dockerfile fields. The unchanged combined run is not established functional. CI validates the two Compose files separately, so it does not settle combined-object behavior. These limitations are retained in the conditional candidate rather than hidden behind a presumed successful deployment.",
+    "The actuator proxy's CONTAINERS=1, POST=1, ALLOW_RESTARTS=1 settings require inspection of the pinned external proxy's effective policy. The repository comment alone does not prove restart-only transport, and docker.sock:ro does not independently prevent write requests over a Unix socket. No arbitrary-operation exploit is claimed without a lower-trust source path.",
+    "Kubernetes RBAC, permissive egress skeleton, Helm values and kind bootstrap are explicitly incomplete and have no workload attachment. Their broad reads or empty egress rule are dormant scaffold/hardening observations, not evidence of a live cluster or internet exposure.",
+    "scripts/kiro/guard-shell.mjs is a substring regex guard, and secret-scan.mjs is post-save and permits unreadable files. They should be described as developer assistance rather than a shell sandbox, full secret prevention control, or publisher boundary. No same-user bypass was elevated to privilege gain.",
+    "Mutable image tags, default local/test database placeholders and public-package metadata were not promoted into vulnerabilities without an actor-controlled handoff and affected lower-trust principal. All checks in this result are source inspection; project code, tests, builds, containers, cloud/GitHub commands, external requests and ignored local settings were not used."
+  ],
+  "uncovered": []
+}

@@ -1,0 +1,221 @@
+[
+  {
+    "id": "identity",
+    "subsystem": "apps/api/src/identity",
+    "surface": "Account registration, login, Organization onboarding and OAuth client creation",
+    "surfaceRef": "apps/api/src/identity/controllers/account.controller.ts#AccountController",
+    "boundary": "Unauthenticated callers and Organization members to account sessions and owner authority",
+    "boundaryRef": "apps/api/src/identity/guards/account-auth.guard.ts#AccountAuthGuard",
+    "paths": ["apps/api/src/identity", "apps/api/src/auth/oauth-principal.ts", "apps/api/src/auth/services/oauth-token.service.ts", "apps/api/test/identity-security.e2e.test.ts", "apps/api/test/identity.e2e.test.ts"],
+    "priority": 1,
+    "priorityReason": "Unauthenticated identity and Organization-owner controls protect account and tenant authority.",
+    "consideredCompanions": ["WEB-PROTOCOL-AND-AUTH.md", "DATA-ISOLATION-AND-LIFECYCLE.md", "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md"],
+    "tasks": [
+      {"label": "Account and Organization access control", "ordinary": "Access control"},
+      {"label": "JWT verification and claim binding", "ordinary": "Access control", "companion": ["WEB-PROTOCOL-AND-AUTH.md", "JWT verification and claim binding"]},
+      {"label": "Account session invalidation", "ordinary": "Business logic", "companion": ["WEB-PROTOCOL-AND-AUTH.md", "Session fixation and invalidation"]},
+      {"label": "Owner and membership scope enforcement", "ordinary": "Access control", "companion": ["DATA-ISOLATION-AND-LIFECYCLE.md", "Missing tenant or owner enforcement"]},
+      {"label": "Bootstrap and onboarding state transitions", "ordinary": "Business logic"},
+      {"label": "Identity pre-authentication work limits", "ordinary": "Business logic", "companion": ["RESOURCE-EXHAUSTION-AND-AVAILABILITY.md", "Pre-authentication work imbalance"]}
+    ]
+  },
+  {
+    "id": "credentials",
+    "subsystem": "apps/api/src/auth",
+    "surface": "OAuth exchange, Credential issue/list/revoke, and config export",
+    "surfaceRef": "apps/api/src/auth/controllers/credentials.controller.ts#CredentialsController",
+    "boundary": "OAuth and Credential holders to bound Project scopes and secret config",
+    "boundaryRef": "apps/api/src/auth/services/credential.service.ts#CredentialService",
+    "paths": ["apps/api/src/auth", "apps/api/src/config", "apps/api/src/internal/internal-config.controller.ts", "apps/api/test/credentials.e2e.test.ts", "apps/api/test/config-guard.e2e.test.ts", "apps/api/test/config-secret.e2e.test.ts"],
+    "priority": 2,
+    "priorityReason": "Credentials and config export protect high-value authority and secrets; grant narrowing and revocation need explicit review.",
+    "consideredCompanions": ["WEB-PROTOCOL-AND-AUTH.md", "DATA-ISOLATION-AND-LIFECYCLE.md"],
+    "tasks": [
+      {"label": "Credential scope and resource binding", "ordinary": "Access control", "companion": ["WEB-PROTOCOL-AND-AUTH.md", "API-key scope and resource binding"]},
+      {"label": "Credential cryptography and secret handling", "ordinary": "Cryptography and secrets"},
+      {"label": "Credential exposure across output paths", "ordinary": "Feature abuse and data leakage", "companion": ["WEB-PROTOCOL-AND-AUTH.md", "API-key exposure and unsafe transport"]},
+      {"label": "Credential revocation and current-grant use", "ordinary": "Business logic", "companion": ["DATA-ISOLATION-AND-LIFECYCLE.md", "Stale authorization and derived copy use"]},
+      {"label": "Config export scope and secret projection", "ordinary": "Feature abuse and data leakage", "companion": ["DATA-ISOLATION-AND-LIFECYCLE.md", "Export and backup scope expansion"], "surfaceRef": "apps/api/src/config/config.controller.ts#ConfigController"}
+    ]
+  },
+  {
+    "id": "ingest",
+    "subsystem": "apps/api/src/auth/services",
+    "surface": "Plugin Event and Sentry envelope ingestion",
+    "surfaceRef": "apps/api/src/auth/controllers/events.controller.ts#EventsController",
+    "boundary": "Plugin publish keys and telemetry producers to Project data, deployment facts, and broker messages",
+    "boundaryRef": "apps/api/src/auth/services/event-ingest.service.ts#EventIngestService",
+    "paths": ["apps/api/src/auth/controllers/events.controller.ts", "apps/api/src/auth/controllers/sentry-events.controller.ts", "apps/api/src/auth/plugin-api-key.guard.ts", "apps/api/src/auth/sentry-key.guard.ts", "apps/api/src/auth/services/event-ingest.service.ts", "apps/api/src/auth/services/sentry-ingest.service.ts", "apps/api/src/auth/sentry-auth.ts", "apps/api/src/auth/sentry-envelope.parser.ts", "apps/api/src/auth/sentry-event.mapper.ts", "packages/core/src/envelope.ts", "packages/core/src/privacy.ts"],
+    "priority": 3,
+    "priorityReason": "Lower-trust telemetry is externally ingested and later influences triage and privileged fixes.",
+    "consideredCompanions": ["PROTOCOLS-RPC-AND-MESSAGING.md", "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md", "DATA-ISOLATION-AND-LIFECYCLE.md"],
+    "tasks": [
+      {"label": "Plugin Project and service binding", "ordinary": "Access control"},
+      {"label": "Sentry identity and parser interpretation", "ordinary": "Injection", "companion": ["PROTOCOLS-RPC-AND-MESSAGING.md", "Envelope and payload identity mismatch"], "surfaceRef": "apps/api/src/auth/controllers/sentry-events.controller.ts#SentryEventsController"},
+      {"label": "Ingest parser and representation bounds", "ordinary": "Resource and file handling", "companion": ["RESOURCE-EXHAUSTION-AND-AVAILABILITY.md", "Decompression and representation amplification"]},
+      {"label": "Ingest disclosure into derived telemetry", "ordinary": "Feature abuse and data leakage", "companion": ["DATA-ISOLATION-AND-LIFECYCLE.md", "Analytics, logs, traces, and diagnostics as alternate readers"]},
+      {"label": "Telemetry to deployment and privileged-state trust", "ordinary": "Chained vulnerabilities and trust boundaries", "companion": ["PROTOCOLS-RPC-AND-MESSAGING.md", "Untrusted producer treated as control plane"]}
+    ]
+  },
+  {
+    "id": "data-work",
+    "subsystem": "apps/api/src/work-items",
+    "surface": "Work item, Deployment, Haunting, Audit, and private durable-state routes",
+    "surfaceRef": "apps/api/src/work-items/controllers/work-items.controller.ts#WorkItemsController",
+    "boundary": "Bound Project callers and daemon commands to durable Project data and fix lifecycle",
+    "boundaryRef": "apps/api/src/internal/project-grant.ts#ProjectGrant",
+    "paths": ["apps/api/src/work-items", "apps/api/src/fix", "apps/api/src/deploys", "apps/api/src/hauntings", "apps/api/src/audit", "apps/api/src/internal", "apps/api/prisma"],
+    "priority": 4,
+    "priorityReason": "Public and internal state paths carry tenant isolation, durable authorization, and irreversible publication state.",
+    "consideredCompanions": ["DATA-ISOLATION-AND-LIFECYCLE.md", "PROTOCOLS-RPC-AND-MESSAGING.md", "AI-AND-LLM.md"],
+    "tasks": [
+      {"label": "Work read and fix-trigger scope access", "ordinary": "Access control"},
+      {"label": "Durable Project read and write isolation", "ordinary": "Access control", "companion": ["DATA-ISOLATION-AND-LIFECYCLE.md", "Missing tenant or owner enforcement"]},
+      {"label": "Command and work namespace collision", "ordinary": "Business logic", "companion": ["DATA-ISOLATION-AND-LIFECYCLE.md", "Composite-key and namespace collision"]},
+      {"label": "Fix claim, lease, answer, publication and recovery transitions", "ordinary": "Business logic", "companion": ["PROTOCOLS-RPC-AND-MESSAGING.md", "Out-of-order and stale message acceptance"]},
+      {"label": "Fix command replay and idempotent effects", "ordinary": "Business logic", "companion": ["PROTOCOLS-RPC-AND-MESSAGING.md", "Duplicate delivery and idempotency gaps"]},
+      {"label": "Audit and Deployment integrity handoffs", "ordinary": "Chained vulnerabilities and trust boundaries", "companion": ["PROTOCOLS-RPC-AND-MESSAGING.md", "Acknowledgment/commit ordering defects"]},
+      {"label": "Migration ownership and scope preservation", "ordinary": "Access control", "companion": ["DATA-ISOLATION-AND-LIFECYCLE.md", "Migration default and ownership confusion"], "surfaceRef": "apps/api/prisma/migrations#identity-and-architecture-migrations"}
+    ]
+  },
+  {
+    "id": "mcp-read",
+    "subsystem": "apps/api/src/mcp",
+    "surface": "MCP HTTP/stdio tools, resources, prompts, and API-to-daemon reads",
+    "surfaceRef": "apps/api/src/mcp/mcp.module.ts#GraveshiftMcpModule",
+    "boundary": "Scoped MCP reader to Project context and host-wide collector evidence",
+    "boundaryRef": "apps/api/src/mcp/mcp-token.verifier.ts#McpBearerGuard",
+    "paths": ["apps/api/src/mcp", "apps/api/src/stdio.ts", "apps/daemon/src/read-handler.ts", "apps/daemon/src/reads.ts", "apps/daemon/src/routes.ts", "apps/daemon/src/private-http.ts", "apps/daemon/src/collectors.ts", "packages/mcp-client/src", "packages/metrics/src"],
+    "priority": 5,
+    "priorityReason": "MCP exposes scoped data to agents and crosses from authenticated Project context into daemon source reads.",
+    "consideredCompanions": ["AI-AND-LLM.md", "DATA-ISOLATION-AND-LIFECYCLE.md", "PROTOCOLS-RPC-AND-MESSAGING.md", "DESKTOP-MOBILE-AND-LOCAL-IPC.md"],
+    "tasks": [
+      {"label": "MCP HTTP and stdio access policy equivalence", "ordinary": "Access control", "companion": ["PROTOCOLS-RPC-AND-MESSAGING.md", "Interceptor and method-path inconsistency"]},
+      {"label": "MCP and collector Project isolation", "ordinary": "Access control", "companion": ["DATA-ISOLATION-AND-LIFECYCLE.md", "Missing tenant or owner enforcement"]},
+      {"label": "MCP schema and dispatch agreement", "ordinary": "Injection", "companion": ["AI-AND-LLM.md", "Tool-schema and dispatcher disagreement"]},
+      {"label": "MCP client connection and tool identity", "ordinary": "Access control", "companion": ["AI-AND-LLM.md", "MCP server and tool identity confusion"], "surfaceRef": "packages/mcp-client/src/client.ts#createGraveshiftMcp"},
+      {"label": "Local daemon peer authentication and authority", "ordinary": "Access control", "companion": ["DESKTOP-MOBILE-AND-LOCAL-IPC.md", "IPC peer-authentication gaps"], "surfaceRef": "apps/daemon/src/main.ts#privateHandler"},
+      {"label": "MCP data projection and redaction", "ordinary": "Feature abuse and data leakage"}
+    ]
+  },
+  {
+    "id": "events-sources",
+    "subsystem": "packages/events",
+    "surface": "NATS consumer, Docker/Kubernetes/Prometheus collector streams and watcher intake",
+    "surfaceRef": "packages/events/src/consumer.ts#connectEventsConsumer",
+    "boundary": "Broker and workload evidence to granted Project observations and incident state",
+    "boundaryRef": "packages/events/src/consumer.ts#processQueued",
+    "paths": ["packages/events/src", "packages/sources-docker/src", "packages/sources-k8s/src", "packages/metrics/src", "packages/integrations/src", "packages/watcher/src", "apps/daemon/src/observations.ts", "apps/daemon/src/collectors.ts", "deploy/compose/nats"],
+    "priority": 6,
+    "priorityReason": "Untrusted workload data and at-least-once messages cross into shared incident processing and host collectors.",
+    "consideredCompanions": ["PROTOCOLS-RPC-AND-MESSAGING.md", "CLOUD-AND-DEPLOYMENT.md", "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md"],
+    "tasks": [
+      {"label": "Broker topic and granted Project scope", "ordinary": "Access control", "companion": ["PROTOCOLS-RPC-AND-MESSAGING.md", "Topic, routing-key, and subscription scope gaps"]},
+      {"label": "Collector envelope and workload identity", "ordinary": "Chained vulnerabilities and trust boundaries", "companion": ["CLOUD-AND-DEPLOYMENT.md", "Namespace and label trust confusion"]},
+      {"label": "Collector and consumer retry/replay semantics", "ordinary": "Business logic", "companion": ["PROTOCOLS-RPC-AND-MESSAGING.md", "Duplicate delivery and idempotency gaps"]},
+      {"label": "Stream buffering and retained cardinality", "ordinary": "Resource and file handling", "companion": ["RESOURCE-EXHAUSTION-AND-AVAILABILITY.md", "Unbounded buffering and cardinality"]},
+      {"label": "Poison-record intake and recovery", "ordinary": "Business logic", "companion": ["RESOURCE-EXHAUSTION-AND-AVAILABILITY.md", "Poison-record and head-of-line blocking"]},
+      {"label": "Collector URL, parser and file sink safety", "ordinary": "Resource and file handling"}
+    ]
+  },
+  {
+    "id": "model",
+    "subsystem": "packages/gateway",
+    "surface": "Prepared incident evidence, agent prompts, routing output and provider completions",
+    "surfaceRef": "apps/daemon/src/routing-model.ts#routingModel",
+    "boundary": "Untrusted logs and model output to agent capabilities, accepted results, secrets and shared spend",
+    "boundaryRef": "packages/gateway/src/gateway.ts#createGateway",
+    "paths": ["packages/gateway/src", "packages/agents/src", "packages/diagnoser/src", "packages/redactor/src", "packages/config/src", "apps/daemon/src/model-context.ts", "apps/daemon/src/routing-model.ts", "apps/daemon/src/flow-harness.ts", "apps/daemon/src/flow-runtime.ts", "packages/notifier-discord/src"],
+    "priority": 7,
+    "priorityReason": "Untrusted context can influence privileged patch proposals; deterministic constraints, audit and budgets must hold.",
+    "consideredCompanions": ["AI-AND-LLM.md", "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md", "DATA-ISOLATION-AND-LIFECYCLE.md"],
+    "tasks": [
+      {"label": "Untrusted evidence to privileged agent context", "ordinary": "Chained vulnerabilities and trust boundaries", "companion": ["AI-AND-LLM.md", "Indirect injection through retrieved or ingested content"]},
+      {"label": "Agent capability and intentional-action binding", "ordinary": "Access control", "companion": ["AI-AND-LLM.md", "Action-confirmation and approval binding"]},
+      {"label": "Provider context and output secret disclosure", "ordinary": "Feature abuse and data leakage", "companion": ["AI-AND-LLM.md", "Sensitive context extraction"]},
+      {"label": "Model output and schema dispatch boundaries", "ordinary": "Injection", "companion": ["AI-AND-LLM.md", "Tool-schema and dispatcher disagreement"]},
+      {"label": "Provider budgets and delegated loop accounting", "ordinary": "Business logic", "companion": ["AI-AND-LLM.md", "Unbounded delegated action loops"]},
+      {"label": "Provider cancellation and detached work", "ordinary": "Business logic", "companion": ["RESOURCE-EXHAUSTION-AND-AVAILABILITY.md", "Detached work after cancellation"]},
+      {"label": "Audit acknowledgment and fallback result integrity", "ordinary": "Business logic"}
+    ]
+  },
+  {
+    "id": "patch-fixer",
+    "subsystem": "packages/fixer",
+    "surface": "Model patch output, Git source snapshots, verification commands and draft publication",
+    "surfaceRef": "apps/daemon/src/fix-execution.ts#executorFromEnv",
+    "boundary": "Model-generated source and untrusted repository data to isolated execution and GitHub write authority",
+    "boundaryRef": "packages/fixer/src/verify.ts#verifyPatch",
+    "paths": ["packages/fixer/src", "packages/patch/src", "apps/daemon/src/fix-execution.ts", "apps/daemon/src/run-fix.ts", "apps/daemon/src/publication.ts", "apps/daemon/src/recovery.ts", "apps/daemon/src/attempt-lifetime.ts", "apps/daemon/src/cancellable-github.ts", "apps/daemon/src/fix-recording.ts"],
+    "priority": 2,
+    "priorityReason": "Source verification executes lower-trust repository material and consumes privileged publication credentials.",
+    "consideredCompanions": ["AI-AND-LLM.md", "SUPPLY-CHAIN-AND-RELEASE.md", "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md", "DESKTOP-MOBILE-AND-LOCAL-IPC.md"],
+    "tasks": [
+      {"label": "Patch path, metadata and file-count guards", "ordinary": "Resource and file handling"},
+      {"label": "Model patch arguments into source and publication sinks", "ordinary": "Injection", "companion": ["AI-AND-LLM.md", "Tool-argument injection into a downstream sink"]},
+      {"label": "Sandbox file ownership and post-check verification", "ordinary": "Resource and file handling", "companion": ["DESKTOP-MOBILE-AND-LOCAL-IPC.md", "Local file ownership and TOCTOU"]},
+      {"label": "Untrusted verification code to host authority", "ordinary": "Access control", "companion": ["SUPPLY-CHAIN-AND-RELEASE.md", "Untrusted code in a privileged workflow"]},
+      {"label": "Verified source and publication identity binding", "ordinary": "Chained vulnerabilities and trust boundaries", "companion": ["SUPPLY-CHAIN-AND-RELEASE.md", "Build-to-promotion substitution"]},
+      {"label": "Publication retries and recovery authority", "ordinary": "Business logic"},
+      {"label": "Verification process and resource containment", "ordinary": "Resource and file handling", "companion": ["RESOURCE-EXHAUSTION-AND-AVAILABILITY.md", "Worker, pool, and priority starvation"]}
+    ]
+  },
+  {
+    "id": "actuator",
+    "subsystem": "packages/actuator",
+    "surface": "Signed runtime action requests and durable admission",
+    "surfaceRef": "packages/actuator/src/handler.ts#createActionHandler",
+    "boundary": "Action signer and approver to Docker/Kubernetes service changes and audit state",
+    "boundaryRef": "packages/actuator/src/execute.ts#createActuator",
+    "paths": ["packages/actuator/src", "packages/policy/src", "apps/api/src/actions", "apps/api/src/internal/policy-context.service.ts"],
+    "priority": 3,
+    "priorityReason": "Runtime actions have direct workload-write authority and explicit signature, approval, policy and replay controls.",
+    "consideredCompanions": ["AI-AND-LLM.md", "CLOUD-AND-DEPLOYMENT.md", "PROTOCOLS-RPC-AND-MESSAGING.md"],
+    "tasks": [
+      {"label": "Runtime signature and secret integrity", "ordinary": "Cryptography and secrets"},
+      {"label": "Approval, normalized action and resource binding", "ordinary": "Access control", "companion": ["AI-AND-LLM.md", "Action-confirmation and approval binding"]},
+      {"label": "Runtime policy and target identity authorization", "ordinary": "Access control", "companion": ["CLOUD-AND-DEPLOYMENT.md", "Namespace and label trust confusion"]},
+      {"label": "Single-use admission, recheck and crash recovery", "ordinary": "Business logic", "companion": ["PROTOCOLS-RPC-AND-MESSAGING.md", "Duplicate delivery and idempotency gaps"]},
+      {"label": "Backend selectors and parameter injection", "ordinary": "Injection"}
+    ]
+  },
+  {
+    "id": "supply-deploy",
+    "subsystem": ".github",
+    "surface": "One-shot Actions inputs, dependency/build context and maintained deployment files",
+    "surfaceRef": ".github/workflows/oneshot-reusable.yml#workflow_call",
+    "boundary": "Contributor and platform job inputs to trusted CI secrets, artifacts and deployed control-plane capabilities",
+    "boundaryRef": "scripts/actions/policy-signature.ts#verifyPolicySignature",
+    "paths": [".github", ".kiro", "powers", "scripts", "tests/actions-scripts.test.ts", "tests/actions-workflows.test.ts", "deploy", "package.json", "bun.lock", "graveshift.config.yaml", ".gitignore", "examples"],
+    "priority": 4,
+    "priorityReason": "CI and deployment are parallel paths into source mutation, publication tokens and runtime network authority.",
+    "consideredCompanions": ["SUPPLY-CHAIN-AND-RELEASE.md", "CLOUD-AND-DEPLOYMENT.md"],
+    "tasks": [
+      {"label": "Privileged workflow code and artifact producer identity", "ordinary": "Access control", "companion": ["SUPPLY-CHAIN-AND-RELEASE.md", "Untrusted code in a privileged workflow"]},
+      {"label": "Workflow expression, shell and path input handling", "ordinary": "Injection", "companion": ["SUPPLY-CHAIN-AND-RELEASE.md", "Workflow command and expression confusion"]},
+      {"label": "Signed patch and promotion artifact binding", "ordinary": "Business logic", "companion": ["SUPPLY-CHAIN-AND-RELEASE.md", "Build-to-promotion substitution"]},
+      {"label": "Dependency and generated input trust", "ordinary": "Chained vulnerabilities and trust boundaries", "companion": ["SUPPLY-CHAIN-AND-RELEASE.md", "Dependency source and namespace confusion"]},
+      {"label": "Build context and packaged secret exposure", "ordinary": "Cryptography and secrets", "companion": ["SUPPLY-CHAIN-AND-RELEASE.md", "Build-context inclusion"]},
+      {"label": "Kiro hooks, agents and Power authority", "ordinary": "Access control", "companion": ["SUPPLY-CHAIN-AND-RELEASE.md", "Plugin and extension trust expansion"], "surfaceRef": "powers/graveshift/mcp.json#graveshift"},
+      {"label": "Deployment management-plane reachability", "ordinary": "Access control", "companion": ["CLOUD-AND-DEPLOYMENT.md", "Unexpected service or management-plane reachability"], "surfaceRef": "deploy/compose/graveshift.compose.yml#services"},
+      {"label": "Deployment security-control precedence", "ordinary": "Business logic", "companion": ["CLOUD-AND-DEPLOYMENT.md", "Security-control precedence drift"], "surfaceRef": "deploy/compose/graveshift.compose.yml#services"},
+      {"label": "Container and cluster capability authority", "ordinary": "Access control", "companion": ["CLOUD-AND-DEPLOYMENT.md", "Host or control-plane capability exposure"], "surfaceRef": "deploy/k8s/rbac.yaml#graveshift-actuator"}
+    ]
+  },
+  {
+    "id": "baseline",
+    "subsystem": "package.json#workspaces",
+    "surface": "Workspace-wide configuration, runtime registration and unexpected fallback surfaces",
+    "surfaceRef": "package.json#workspaces",
+    "boundary": "External or lower-trust inputs to hidden, debug, secret or fallback authority",
+    "boundaryRef": "apps/api/src/app.factory.ts#createApp",
+    "paths": ["apps", "packages", "scripts", "deploy", ".github", ".kiro", "powers", ".gitignore", "package.json", "bun.lock", "graveshift.config.yaml", "examples"],
+    "priority": 8,
+    "priorityReason": "A separate literal baseline and anomaly pass checks unassigned exposure patterns across the complete source inventory.",
+    "consideredCompanions": [],
+    "tasks": [
+      {"label": "Literal secret, debug, default and runtime exposure baseline", "ordinary": "Obvious things"},
+      {"label": "Unassigned source anomalies and fallback security boundaries", "ordinary": "Wildcard"}
+    ]
+  }
+]

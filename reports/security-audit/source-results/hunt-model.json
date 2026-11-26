@@ -1,0 +1,683 @@
+{
+  "units": [
+    {
+      "coverage_id": "apps%2Fdaemon%2Fsrc%2Frouting-model.ts%23routingModel::packages%2Fgateway%2Fsrc%2Fgateway.ts%23createGateway::packages%2Fgateway::AI-AND-LLM.md%23Action-confirmation%20and%20approval%20binding",
+      "disposition": "candidate",
+      "reviewed_paths": [
+        "packages/agents/src/config.ts",
+        "packages/agents/src/routing.ts",
+        "packages/gateway/src/types.ts",
+        "packages/gateway/src/adapters.ts",
+        "apps/daemon/src/routing-model.ts",
+        "apps/daemon/src/work-flow.ts",
+        "apps/daemon/src/run-fix.ts",
+        "apps/api/src/deploys/deploys.controller.ts",
+        "apps/api/src/deploys/deploys.service.ts",
+        "apps/api/src/deploys/dto/create-deploy.dto.ts",
+        "apps/api/src/auth/services/event-ingest.service.ts",
+        "apps/api/src/internal/internal-config.controller.ts",
+        "apps/daemon/src/fix-context.ts",
+        "packages/policy/src/schema.ts",
+        "packages/policy/src/decide.ts",
+        "packages/policy/src/evaluation.ts",
+        "apps/daemon/src/fix-execution.ts",
+        "packages/fixer/src/source.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-model",
+          "reviewed_paths": [
+            "packages/agents/src/config.ts",
+            "packages/agents/src/routing.ts",
+            "packages/gateway/src/types.ts",
+            "packages/gateway/src/adapters.ts",
+            "apps/daemon/src/routing-model.ts",
+            "apps/daemon/src/work-flow.ts",
+            "apps/daemon/src/run-fix.ts"
+          ],
+          "invariant": "Routing/model output must not replace the assigned Agent, mint callable tools, or bypass the authorized Work command and policy decision.",
+          "method": "source",
+          "result": "Production adapters pass a schema, system text, prompt and abort signal to structured generation; they pass no callable tools. Routing returns only a strictly validated question. begin uses the explicit assignment, and resume requires the saved Agent name and slug to match current configuration. Work commands verify the caller Project, and runOwnedFix checks assignment and an audited open_pr decision before execution. allowedTools is configuration data, not a model-controlled tool dispatcher.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-model",
+          "reviewed_paths": [
+            "apps/api/src/deploys/deploys.controller.ts",
+            "apps/api/src/deploys/deploys.service.ts",
+            "apps/api/src/deploys/dto/create-deploy.dto.ts",
+            "apps/api/src/auth/services/event-ingest.service.ts",
+            "apps/api/src/internal/internal-config.controller.ts",
+            "apps/daemon/src/fix-context.ts",
+            "packages/policy/src/schema.ts",
+            "packages/policy/src/decide.ts",
+            "packages/policy/src/evaluation.ts",
+            "apps/daemon/src/fix-execution.ts",
+            "packages/fixer/src/source.ts"
+          ],
+          "invariant": "The repository selected for an authorized Project's Fix must also be authorized for that Project before the daemon uses its GitHub identity.",
+          "method": "source",
+          "result": "Candidate: the daemon receives one instance policy for its granted Projects. contextClient selects a repository solely by snapshot.item.service; RepoPolicy and policy rules have no Project selector. Its strong checks bind the diagnosis, detections and Deployment SHA to the caller Project, but do not bind that Project to the selected repository. A caller with Deployment-write authority can register a syntactically valid known commit SHA in its own Project. If the instance serves mutually untrusted Projects and permits this service's Fix, prepareFix passes the selected repository and that SHA to prepareSource, whose first GitHub read has no Project authorization check. Investigation stopped at that repository-read boundary.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [
+        "daemon/fix-context/service-only-repository-selection"
+      ],
+      "unresolved": [
+        "A bounded dummy-Project reproduction was not run because the parent has not established complete OS-enforced memory and cumulative-disk sandbox controls.",
+        "The owner must establish whether one daemon grant includes mutually untrusted Projects whose repository authority is intended to differ."
+      ]
+    },
+    {
+      "coverage_id": "apps%2Fdaemon%2Fsrc%2Frouting-model.ts%23routingModel::packages%2Fgateway%2Fsrc%2Fgateway.ts%23createGateway::packages%2Fgateway::AI-AND-LLM.md%23Indirect%20injection%20through%20retrieved%20or%20ingested%20content",
+      "disposition": "candidate",
+      "reviewed_paths": [
+        "packages/agents/src/untrusted.ts",
+        "packages/agents/src/config.ts",
+        "packages/agents/src/routing.ts",
+        "packages/config/src/prompt.ts",
+        "packages/diagnoser/src/context.ts",
+        "packages/diagnoser/src/diagnose.ts",
+        "packages/patch/src/generate.ts",
+        "packages/patch/src/guard.ts",
+        "apps/api/src/work-items/work-haunting.mapper.ts",
+        "apps/api/src/work-items/work-ingress.service.ts",
+        "apps/daemon/src/observations.ts",
+        "apps/daemon/src/main.ts",
+        "apps/daemon/src/reads.ts",
+        "apps/daemon/src/fix-context.ts",
+        "apps/daemon/src/fix-execution.ts",
+        "packages/notifier-discord/src/index.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-model",
+          "reviewed_paths": [
+            "packages/agents/src/untrusted.ts",
+            "packages/agents/src/config.ts",
+            "packages/agents/src/routing.ts",
+            "packages/config/src/prompt.ts",
+            "packages/diagnoser/src/context.ts",
+            "packages/diagnoser/src/diagnose.ts",
+            "packages/patch/src/generate.ts",
+            "packages/patch/src/guard.ts",
+            "apps/api/src/work-items/work-haunting.mapper.ts",
+            "apps/api/src/work-items/work-ingress.service.ts",
+            "packages/notifier-discord/src/index.ts"
+          ],
+          "invariant": "Lower-trust telemetry, parameters, diagnoses and repository text must not become a permission grant through prompt text or model output.",
+          "method": "source",
+          "result": "Prepared evidence, request text, parameter values, diagnosis text and repository source are framed as untrusted data, with wrapper-closing text neutralized and template values replaced in one pass. These prompt measures were not treated as authorization. The deterministic controls are fixed structured schemas, diagnosis reference/excerpt validation, configured Agent selection, policy evaluation and a patch guard before accepted success. Keyword-based initial assignment uses global configured Agents and remains behind normal autoFix/Work policy gates. No independent persistent model-memory store or Discord publication implementation exists in the reviewed paths. Prompt influence alone was not promoted.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-model",
+          "reviewed_paths": [
+            "apps/daemon/src/observations.ts",
+            "apps/daemon/src/main.ts",
+            "apps/daemon/src/reads.ts",
+            "apps/daemon/src/fix-context.ts",
+            "apps/daemon/src/fix-execution.ts"
+          ],
+          "invariant": "Ingested evidence must only retrieve host evidence and repository context authorized for the Event/Work Project.",
+          "method": "source",
+          "result": "Two concrete context-selection gaps survive source review: main discards the Project argument on observation log reads, and fix-context resolves repositories by service alone. Untrusted service names can therefore select resources beyond the Project-scoped durable records when the instance hosts mutually untrusted resources. These are linked to their common source-derived fingerprints; no separate generic prompt-injection finding is asserted.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [
+        "daemon/fix-context/service-only-repository-selection",
+        "daemon/observations/projectless-collector-log-context"
+      ],
+      "unresolved": [
+        "Both linked candidates require bounded dummy-resource validation; target-controlled execution is prohibited because complete OS-enforced memory and cumulative-disk sandbox controls are absent.",
+        "The owner must establish the co-tenancy and resource ownership conditions identified in the linked candidates."
+      ]
+    },
+    {
+      "coverage_id": "apps%2Fdaemon%2Fsrc%2Frouting-model.ts%23routingModel::packages%2Fgateway%2Fsrc%2Fgateway.ts%23createGateway::packages%2Fgateway::AI-AND-LLM.md%23Sensitive%20context%20extraction",
+      "disposition": "candidate",
+      "reviewed_paths": [
+        "packages/gateway/src/adapters.ts",
+        "packages/gateway/src/providers.ts",
+        "packages/gateway/src/gateway.ts",
+        "packages/gateway/src/completion.ts",
+        "packages/redactor/src/index.ts",
+        "packages/redactor/src/detectors.ts",
+        "packages/config/src/schema.ts",
+        "packages/config/src/load.ts",
+        "packages/config/src/prompt.ts",
+        "apps/daemon/src/boot-config.ts",
+        "apps/api/src/auth/dto/create-credential.dto.ts",
+        "apps/api/src/auth/services/credential.service.ts",
+        "apps/api/src/auth/services/event-ingest.service.ts",
+        "packages/watcher/src/rules.ts",
+        "apps/daemon/src/observations.ts",
+        "apps/daemon/src/main.ts",
+        "apps/daemon/src/reads.ts",
+        "apps/daemon/src/collectors.ts",
+        "packages/integrations/src/reads.ts",
+        "packages/sources-docker/src/source.ts",
+        "packages/sources-k8s/src/source.ts",
+        "packages/diagnoser/src/context.ts",
+        "packages/diagnoser/src/diagnose.ts",
+        "packages/core/src/recorded.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-model",
+          "reviewed_paths": [
+            "packages/gateway/src/adapters.ts",
+            "packages/gateway/src/providers.ts",
+            "packages/gateway/src/gateway.ts",
+            "packages/gateway/src/completion.ts",
+            "packages/redactor/src/index.ts",
+            "packages/redactor/src/detectors.ts",
+            "packages/config/src/schema.ts",
+            "packages/config/src/load.ts",
+            "packages/config/src/prompt.ts",
+            "apps/daemon/src/boot-config.ts"
+          ],
+          "invariant": "Provider credentials must remain outside model text, and recognized secrets in context and error feedback must be redacted before outbound model requests.",
+          "method": "source",
+          "result": "Provider keys are resolved only from the configured environment-variable name and supplied to the provider factory, rather than inserted into model prompts. Agent endpoints require HTTPS without URL credentials. The gateway redacts system text, prompt text, validation feedback and terminal invalid/audit reasons. Raw transport exceptions are mapped to fixed typed reasons. Config is operator-provided boot data, not a telemetry-controlled endpoint or credential selector. No ignored environment or credential-settings file was inspected for this check, and no live key value is recorded.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-model",
+          "reviewed_paths": [
+            "apps/api/src/auth/dto/create-credential.dto.ts",
+            "apps/api/src/auth/services/credential.service.ts",
+            "apps/api/src/auth/services/event-ingest.service.ts",
+            "packages/watcher/src/rules.ts",
+            "apps/daemon/src/observations.ts",
+            "apps/daemon/src/main.ts",
+            "apps/daemon/src/reads.ts",
+            "apps/daemon/src/collectors.ts",
+            "packages/integrations/src/reads.ts",
+            "packages/sources-docker/src/source.ts",
+            "packages/sources-k8s/src/source.ts",
+            "packages/diagnoser/src/context.ts",
+            "packages/diagnoser/src/diagnose.ts",
+            "packages/core/src/recorded.ts"
+          ],
+          "invariant": "An Event accepted for Project A must not cause private workload logs belonging to Project B to enter Project A's diagnosis context or stored diagnosis.",
+          "method": "source",
+          "result": "Candidate: plugin Credential service names are caller-selected, and ingestion checks Project and optional service equality without resolving a Project-owned workload. A single runtime.oom observation can reach diagnosis without a Deployment. observations supplies projectId to its log callback, but main wires a two-argument callback to reads.logs. That reader enumerates host-wide Collectors and accepts a unique service-name match with no Project check. Both Docker and Kubernetes tailLogs select workloads without caller Project identity. Prepared context then labels the returned logs as valid evidence; reference/excerpt validation establishes quotation accuracy, not ownership. Redaction cannot isolate ordinary private log content. The same diagnosis is subsequently prepared for storage in the Event's Project. Investigation stopped at this context/diagnosis boundary.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [
+        "daemon/observations/projectless-collector-log-context"
+      ],
+      "unresolved": [
+        "No outgoing provider prompt or persisted dummy diagnosis was observed: target-controlled execution is prohibited because complete OS-enforced memory and cumulative-disk sandbox controls are absent.",
+        "The owner must establish whether the shared daemon's Collector inventory includes a workload whose logs are private to a different Organization/Project from the telemetry producer."
+      ]
+    },
+    {
+      "coverage_id": "apps%2Fdaemon%2Fsrc%2Frouting-model.ts%23routingModel::packages%2Fgateway%2Fsrc%2Fgateway.ts%23createGateway::packages%2Fgateway::AI-AND-LLM.md%23Tool-schema%20and%20dispatcher%20disagreement",
+      "disposition": "covered",
+      "reviewed_paths": [
+        "packages/gateway/src/gateway.ts",
+        "packages/gateway/src/types.ts",
+        "packages/gateway/src/adapters.ts",
+        "apps/daemon/src/routing-model.ts",
+        "packages/agents/src/routing.ts",
+        "packages/agents/src/config.ts",
+        "packages/diagnoser/src/types.ts",
+        "packages/diagnoser/src/diagnose.ts",
+        "packages/patch/src/schemas.ts",
+        "packages/patch/src/generate.ts",
+        "packages/patch/src/guard.ts",
+        "packages/fixer/src/source.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-model",
+          "reviewed_paths": [
+            "packages/gateway/src/gateway.ts",
+            "packages/gateway/src/types.ts",
+            "packages/gateway/src/adapters.ts",
+            "apps/daemon/src/routing-model.ts",
+            "packages/agents/src/routing.ts",
+            "packages/agents/src/config.ts",
+            "packages/diagnoser/src/types.ts",
+            "packages/diagnoser/src/diagnose.ts"
+          ],
+          "invariant": "Handlers must consume the same normalized object that passed schema and semantic validation, with no model-selected alternate tool or authority fields.",
+          "method": "source",
+          "result": "The gateway safe-parses response.object, runs task.validate on parsed.data, and returns that same parsed.data. Routing accepts only a strict bounded question object. Diagnosis schemas constrain categories, confidence and nonempty evidence; unrecognized keys are stripped before consumption, and evidence references/excerpts are checked against the retained context. Agent identity, endpoints and allowedTools are never deserialized from a completion into executable capabilities. No schema/dispatcher disagreement was found in these paths.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-model",
+          "reviewed_paths": [
+            "packages/patch/src/schemas.ts",
+            "packages/patch/src/generate.ts",
+            "packages/patch/src/guard.ts",
+            "packages/fixer/src/source.ts"
+          ],
+          "invariant": "Model-supplied file paths, change counts and source identities must remain constrained after normalization and before a patch becomes accepted input.",
+          "method": "source",
+          "result": "Patch/file schemas are strict. generatePatch re-parses accepted output and repeats guardPatch before returning success. The guard rejects unsafe/duplicate paths, forbidden and nonallowlisted targets, invalid negative/fractional counts and inconsistent deletion identities; it counts actual full-file lines so underreported linesChanged cannot lower the charge. Source checks bind base commit/blob identities and reject target collisions. Investigation stopped at these deterministic output controls; no downstream sandbox or publication bypass is claimed.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    },
+    {
+      "coverage_id": "apps%2Fdaemon%2Fsrc%2Frouting-model.ts%23routingModel::packages%2Fgateway%2Fsrc%2Fgateway.ts%23createGateway::packages%2Fgateway::AI-AND-LLM.md%23Unbounded%20delegated%20action%20loops",
+      "disposition": "covered",
+      "reviewed_paths": [
+        "packages/gateway/src/config.ts",
+        "packages/gateway/src/gateway.ts",
+        "packages/gateway/src/adapters.ts",
+        "packages/gateway/src/accounting.ts",
+        "packages/gateway/src/budget.ts",
+        "packages/agents/src/routing.ts",
+        "packages/diagnoser/src/diagnose.ts",
+        "apps/daemon/src/observations.ts",
+        "packages/watcher/src/rules.ts",
+        "apps/daemon/src/work-activation.ts",
+        "apps/daemon/src/run-fix.ts",
+        "packages/policy/src/evaluation.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-model",
+          "reviewed_paths": [
+            "packages/gateway/src/config.ts",
+            "packages/gateway/src/gateway.ts",
+            "packages/gateway/src/adapters.ts",
+            "packages/gateway/src/accounting.ts",
+            "packages/gateway/src/budget.ts"
+          ],
+          "invariant": "A model response must not create an unbounded retry/delegation loop or disable known-usage accounting.",
+          "method": "source",
+          "result": "Transport retries are bounded by operator configuration, SDK retries are zero, and there is at most one semantic correction generation: at most 2*(maxRetries+1) adapter calls per gateway task. No completion field changes this count or enqueues another task. Known billed usage, including malformed SDK object output, is recorded before validation. Missing/invalid successful-response usage or unknown pricing marks global and Agent counters unpriced and stops later calls. Budgets are checked before initial generation and before semantic correction. Their documented post-response, per-process ceiling permits single-call/concurrent overshoot and reset on restart; this was retained as hardening rather than an unbounded delegated-loop finding.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-model",
+          "reviewed_paths": [
+            "packages/agents/src/routing.ts",
+            "packages/diagnoser/src/diagnose.ts",
+            "apps/daemon/src/observations.ts",
+            "packages/watcher/src/rules.ts",
+            "apps/daemon/src/work-activation.ts",
+            "apps/daemon/src/run-fix.ts",
+            "packages/policy/src/evaluation.ts"
+          ],
+          "invariant": "A bounded observation or routing answer must not recursively re-enter diagnosis or create repeated autonomous Fix work.",
+          "method": "source",
+          "result": "Routing asks once and resume either fills the original Agent's parameters or returns needs_human without another question. Observation processing reuses a persisted diagnosis and a deterministic Project/incident activation command. Watcher observation types exclude crew output such as diagnosis.ready, preventing model-output feedback into detection. Fix policy gates confidence, diagnosis loops, PR counters and LLM spend before routing/execution. No model-driven unbounded loop was found.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    },
+    {
+      "coverage_id": "apps%2Fdaemon%2Fsrc%2Frouting-model.ts%23routingModel::packages%2Fgateway%2Fsrc%2Fgateway.ts%23createGateway::packages%2Fgateway::ATTACK-CLASSES.md%23Business%20logic",
+      "disposition": "covered",
+      "reviewed_paths": [
+        "packages/gateway/src/gateway.ts",
+        "packages/gateway/src/completion.ts",
+        "packages/gateway/src/types.ts",
+        "apps/daemon/src/audit.ts",
+        "apps/daemon/src/routing-model.ts",
+        "apps/daemon/src/run-fix.ts",
+        "apps/daemon/src/fix-execution.ts",
+        "packages/diagnoser/src/diagnose.ts",
+        "packages/diagnoser/src/context.ts",
+        "packages/diagnoser/src/rules-only.ts",
+        "apps/daemon/src/flow-harness.ts",
+        "apps/daemon/src/flow-runtime.ts",
+        "packages/gateway/src/audit.test.ts",
+        "packages/diagnoser/src/prepared-evidence.test.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-model",
+          "reviewed_paths": [
+            "packages/gateway/src/gateway.ts",
+            "packages/gateway/src/completion.ts",
+            "packages/gateway/src/types.ts",
+            "apps/daemon/src/audit.ts",
+            "apps/daemon/src/routing-model.ts",
+            "apps/daemon/src/run-fix.ts",
+            "apps/daemon/src/fix-execution.ts",
+            "packages/gateway/src/audit.test.ts"
+          ],
+          "invariant": "A terminal model/fallback value must remain unavailable until the matching durable audit acknowledgment, and audit failure must not cause a second model or fallback decision.",
+          "method": "source",
+          "result": "Every decision reaches acknowledge once. It awaits the sink, verifies the exact random callId and withholds value on rejection or mismatch while retaining usage/cost. The production sink requires the bound audit Project, awaits the internal durable append and verifies the append key before acknowledging the call. Routing and Fix paths check audit scope before model use; observation binds the Event scope. An audit failure occurs after the single decision and cannot re-enter generation or fallback. Source test declarations cover failed/mismatched acknowledgments and all terminal statuses; they were read, not executed.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-model",
+          "reviewed_paths": [
+            "packages/diagnoser/src/diagnose.ts",
+            "packages/diagnoser/src/context.ts",
+            "packages/diagnoser/src/rules-only.ts",
+            "apps/daemon/src/flow-harness.ts",
+            "apps/daemon/src/flow-runtime.ts",
+            "packages/diagnoser/src/prepared-evidence.test.ts"
+          ],
+          "invariant": "Rules-only diagnosis must quote the same prepared evidence as the model path and must not release raw secrets or bypass the audit decision.",
+          "method": "source",
+          "result": "The only production rulesOnly caller is diagnosis. It closes over the prepared ContextBundle, whose whole blocks are redacted before retained-line slicing. Rules-only signal/log excerpts come from that bundle rather than mutable raw inputs; the unknown fallback uses its prepared incident/signal. Fallback exceptions become fallback_unavailable, validator exceptions become validation_unavailable, and audit rejection withholds fallback output. flow-harness and FlowRuntime are explicitly in-memory test support, not production durable adapters. No fallback/audit integrity failure was found beyond the separately linked context-ownership candidates.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    },
+    {
+      "coverage_id": "apps%2Fdaemon%2Fsrc%2Frouting-model.ts%23routingModel::packages%2Fgateway%2Fsrc%2Fgateway.ts%23createGateway::packages%2Fgateway::RESOURCE-EXHAUSTION-AND-AVAILABILITY.md%23Detached%20work%20after%20cancellation",
+      "disposition": "covered",
+      "reviewed_paths": [
+        "packages/gateway/src/gateway.ts",
+        "packages/gateway/src/adapters.ts",
+        "packages/gateway/src/types.ts",
+        "apps/daemon/src/model-context.ts",
+        "apps/daemon/src/routing-model.ts",
+        "apps/daemon/src/run-fix.ts",
+        "apps/daemon/src/fix-execution.ts",
+        "apps/daemon/src/attempt-lifetime.ts",
+        "packages/diagnoser/src/diagnose.ts",
+        "apps/daemon/src/observations.ts",
+        "apps/daemon/src/command-handler.ts",
+        "apps/daemon/src/private-http.ts",
+        "apps/daemon/src/command-lifetime.ts",
+        "apps/daemon/src/command-handler.test.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-model",
+          "reviewed_paths": [
+            "packages/gateway/src/gateway.ts",
+            "packages/gateway/src/adapters.ts",
+            "packages/gateway/src/types.ts",
+            "apps/daemon/src/model-context.ts",
+            "apps/daemon/src/routing-model.ts",
+            "apps/daemon/src/run-fix.ts",
+            "apps/daemon/src/fix-execution.ts",
+            "apps/daemon/src/attempt-lifetime.ts",
+            "packages/diagnoser/src/diagnose.ts",
+            "apps/daemon/src/observations.ts"
+          ],
+          "invariant": "Explicit Fix-attempt cancellation must reach provider generation, prevent retries/fallback acceptance and stop the next privileged stage.",
+          "method": "source",
+          "result": "Lease renewal failure aborts the attempt controller. Routing obtains that signal from its frozen AsyncLocalStorage context; patch execution passes input.signal explicitly. The gateway combines it with an attempt timeout and forwards it as SDK abortSignal, with SDK retries disabled. It checks cancellation before dispatch, on caught errors and after response accounting, and does not choose rules-only fallback for cancellation. runOwnedFix checks cancellation around context, policy, routing, preparation and publication transitions. Event-driven diagnosis has no client cancellation contract but still receives the gateway timeout. No source-visible loss of the explicit attempt signal was found. This establishes signal wiring, not a claim about a remote provider stopping billing.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-model",
+          "reviewed_paths": [
+            "apps/daemon/src/command-handler.ts",
+            "apps/daemon/src/private-http.ts",
+            "apps/daemon/src/command-lifetime.ts",
+            "apps/daemon/src/command-handler.test.ts"
+          ],
+          "invariant": "Work retained after a private HTTP response deadline must have an explicit lifecycle owner; a response timeout must not be mistaken for revoked action authority.",
+          "method": "source",
+          "result": "within races the response deadline without aborting the already authorized durable command. drainCommands tracks the original promise, rejects new commands during shutdown and awaits outstanding work. The source test explicitly expects a timed-out command to complete and shutdown to drain it. This is intentional continued execution of the same authorized command, rather than evidence that an explicit cancellation was ignored. No cross-principal action or unbounded model loop follows solely from that response timeout, so it was not promoted as an availability finding.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    }
+  ],
+  "candidates": [
+    {
+      "proposed_verdict": "needs_validation",
+      "fingerprint": "daemon/fix-context/service-only-repository-selection",
+      "title": "Fix repository selection is not bound to the Work Project",
+      "description": "A tenant able to publish evidence and initiate an eligible Fix in its own granted Project can name a service mapped by the instance policy to a repository outside that tenant's authority. contextClient checks the tenant's durable diagnosis and Deployment, but chooses the repository solely by service name. If the attacker registers a known commit from that repository as a Deployment in its own Project and the normal Fix policy allows the attempt, the daemon uses its operator GitHub App identity to fetch that repository for the attacker's Fix task. The affected resource is the other principal's repository/source context; the attacker need not possess a GitHub credential or membership in its owning Project. This candidate stops at the unauthorized repository-read/context-selection boundary and does not claim a verified patch, draft PR, merge or code execution.",
+      "claimed_root_cause": "Project scope is preserved for Work, diagnosis, detections and Deployment records but is dropped at repository selection. The shared policy's repository records and service-based rules contain no Project grant, and neither contextClient nor prepareSource checks a caller-Project-to-repository authorization before using the instance GitHub identity.",
+      "trace": [
+        {
+          "kind": "entrypoint",
+          "file": "apps/api/src/deploys/deploys.service.ts",
+          "line": 30,
+          "scope": "DeploysService.create",
+          "description": "With its own Deployment-write authority, the tenant registers a supplied 40-hex SHA in its own Project. The service checks Organization and Project access, then appends the supplied SHA without repository ownership/provenance binding. This is a required prerequisite, not a Deployment-authentication bypass."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/api/src/auth/services/event-ingest.service.ts",
+          "line": 26,
+          "scope": "EventIngestService.ingest",
+          "description": "The plugin producer supplies service, its own projectId and the registered Deployment. Scope, Project equality, optional Credential service equality and same-Project Deployment lookup are enforced; the service is not resolved to a Project-owned repository."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/daemon/src/observations.ts",
+          "line": 181,
+          "scope": "createObservations.processOutcome",
+          "description": "The Event's diagnosed incident is saved in its Project, converted to a Work item and passed to onWork with that Project. A later eligible Fix remains a command on the attacker's own Work item."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/daemon/src/work-flow.ts",
+          "line": 74,
+          "scope": "createWorkCommands.fixNow",
+          "description": "The command checks the daemon Project grant, reads that Project's Work item, checks Fix eligibility and claims an attempt. The autoFix triage sibling reaches the same runFix path."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/daemon/src/fix-context.ts",
+          "line": 42,
+          "scope": "contextClient repository resolution",
+          "description": "The repository filter compares only repo.services with snapshot.item.service. The unique match is selected before the subsequent caller-Project-bound context checks."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/daemon/src/fix-context.ts",
+          "line": 55,
+          "scope": "contextClient context binding",
+          "description": "Strong diagnosis, service, confidence, category, detection-Project, signal and Deployment-SHA consistency checks bind the durable context, but the returned repo is never checked against caller.projectId."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/daemon/src/run-fix.ts",
+          "line": 96,
+          "scope": "runOwnedFix policy decision",
+          "description": "The open_pr decision and its audit must permit the attempt. Its category/service/signal/counter gates cannot supply the missing Project-to-repository grant."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/daemon/src/fix-execution.ts",
+          "line": 111,
+          "scope": "prepareFix source preparation",
+          "description": "After audit-scope, Deployment-SHA, base-audit and configured-verification checks, the daemon passes input.context.repo, its GitHub client and the Project's Deployment SHA to prepareSource."
+        },
+        {
+          "kind": "sink",
+          "file": "packages/fixer/src/source.ts",
+          "line": 190,
+          "scope": "prepareSource GitHub read",
+          "description": "client.getCommitTree(repo.repo, baseSha), followed by tree/blob reads, uses the instance GitHub identity without caller Project information. This is the minimum resource-authority boundary requiring validation."
+        }
+      ],
+      "evidence": [
+        {
+          "file": "apps/api/src/internal/internal-config.controller.ts",
+          "line": 19,
+          "description": "One daemon grant supplies a Project set alongside a single instance policy and Agent list, rather than a policy/repository mapping for each Project."
+        },
+        {
+          "file": "packages/policy/src/schema.ts",
+          "line": 44,
+          "description": "Repository entries contain repo, services, base branch and patch constraints, but no Project owner/grant. Rule matching also lacks a Project selector."
+        },
+        {
+          "file": "apps/daemon/src/fix-context.ts",
+          "line": 42,
+          "description": "Repository selection is the unique service-name match; caller.projectId is used only in later durable API reads and detection checks."
+        },
+        {
+          "file": "apps/api/src/deploys/deploys.controller.ts",
+          "line": 63,
+          "description": "Deployment creation requires the tenant's legitimate org:ci or project:write authority. The candidate does not assume another Project's Deployment can be borrowed."
+        },
+        {
+          "file": "apps/api/src/deploys/dto/create-deploy.dto.ts",
+          "line": 44,
+          "description": "Deployment input validates the SHA format and metadata, while DeploysService.create checks the caller's own Project and stores the supplied SHA without repository verification."
+        },
+        {
+          "file": "packages/policy/src/evaluation.ts",
+          "line": 8,
+          "description": "Policy matching uses action, category, service and signals; confidence, counters and spend gates remain effective, but do not authorize the selected repository for a Project."
+        },
+        {
+          "file": "apps/daemon/src/fix-execution.ts",
+          "line": 107,
+          "description": "The last controls before source retrieval require a configured verification entry and audited base SHA. They do not inspect repository ownership, and the downstream source API accepts no caller Project."
+        }
+      ],
+      "blockers": [
+        "No bounded runtime result was produced. Target-controlled code, fixtures and tests are prohibited because complete OS-enforced memory and cumulative-disk controls have not been established; the artifact promotion allowlist is empty.",
+        "The owner must establish that a single daemon is granted mutually untrusted Projects and that a service-mapped repository is intended to be restricted to one of them. A deployment that deliberately shares repository authority across all granted Projects would not establish the claimed cross-principal violation.",
+        "The attack requires a known valid commit SHA from the selected repository, Deployment-write authority in the attacker's own Project, an eligible assigned Agent and a normal audited open_pr allow decision. These prerequisites were traced in source but not exercised together."
+      ],
+      "validation_plan": {
+        "local": "After the parent establishes all required sandbox controls, create two dummy Organizations/Projects granted to one daemon. Give Project A only its own credential, Deployment-write and Fix authority; designate a fake repository as Project B's resource and include its service in the instance policy. Register a known dummy commit in Project A, produce a Project-A Work item with that service and run the normal permitted Fix path using fake durable APIs and a GitHubClient that only records requests. Stop at the first getCommitTree/readBlob call. Verify whether Project A can cause a call for the Project-B repository despite lacking its grant. The regression must deny the repository before any GitHub or provider call, while allowing the same service text with its correctly authorized Project/repository mapping.",
+        "deployment": "The owner should inspect the existing daemon Project grant and repository ownership/configuration offline to determine whether the mutually untrusted co-tenancy condition exists. Do not invoke a live Fix, provider or GitHub write."
+      }
+    },
+    {
+      "proposed_verdict": "needs_validation",
+      "fingerprint": "daemon/observations/projectless-collector-log-context",
+      "title": "Project-scoped diagnosis retrieves host logs without a Project binding",
+      "description": "A plugin producer authorized only for Project A can supply a service name matching a workload in the daemon's host-wide Collector inventory. A detected Event triggers a log fetch for that service. observations passes Project A to its log callback, but main discards the Project and reads.logs authorizes only a unique service-name match. If that workload's logs belong to Project B or another Organization, the daemon's Collector identity retrieves them and the configured provider receives them inside Project A's diagnosis task. The same evidence can pass quotation validation and be stored in Project A's diagnosis. The affected resource is ordinary private workload log data; secret-pattern redaction does not enforce its ownership. A Deployment SHA is not required to reach diagnosis. No live disclosure or provider behavior was tested.",
+      "claimed_root_cause": "The Project-scoped observation-to-evidence handoff loses projectId. ReadRuntime.logs and CollectorReads.tailLogs have no Project parameter or Project-to-workload authorization, while buildContext and validateEvidence treat every returned log as admissible evidence for the current incident.",
+      "trace": [
+        {
+          "kind": "entrypoint",
+          "file": "apps/api/src/auth/services/event-ingest.service.ts",
+          "line": 30,
+          "scope": "EventIngestService.ingest",
+          "description": "An events:publish plugin Credential must match its own projectId and optional service binding. The producer can use an unbound plugin Credential or its caller-selected service binding; no host-workload ownership check is performed."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/watcher/src/rules.ts",
+          "line": 86,
+          "scope": "createRules runtime.oom branch",
+          "description": "One runtime.oom Event produces a detection with the Event's Project and service. The ordinary detection path does not require a Deployment to reach diagnosis."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/daemon/src/observations.ts",
+          "line": 138,
+          "scope": "createObservations diagnosis evidence collection",
+          "description": "For an incident without a diagnosis, the daemon calls options.logs(view.incident.service, 300, projectId), then supplies those logs to diagnose under the Event's audit scope."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/daemon/src/main.ts",
+          "line": 121,
+          "scope": "program createObservations wiring",
+          "description": "The production callback accepts only service and lines and invokes reads.logs(service, lines), discarding the Project argument supplied by observations."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/daemon/src/reads.ts",
+          "line": 104,
+          "scope": "createReadRuntime.logs",
+          "description": "All configured Collectors are inventoried and filtered solely by info.name === service. A unique match is sufficient to call found.source.tailLogs. Redaction and the 300-line tail limit constrain content/size, not Project access."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/sources-docker/src/source.ts",
+          "line": 143,
+          "scope": "DockerCollector.tailLogs",
+          "description": "The Docker variant selects a host container by serviceName and reads its logs using the daemon's Collector connection, without a caller Project. Kubernetes has the same missing authorization parameter while selecting the named deployment/pod."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/diagnoser/src/context.ts",
+          "line": 35,
+          "scope": "buildContext log preparation",
+          "description": "Fetched logs are redacted, retained as log references and placed in the incident prompt without any ownership metadata or authorization check."
+        },
+        {
+          "kind": "sink",
+          "file": "packages/gateway/src/gateway.ts",
+          "line": 96,
+          "scope": "createGateway.call provider request",
+          "description": "adapter.generateObject receives the assembled log evidence for the Project-A diagnosis. This cross-principal context placement is the minimum boundary to validate; disclosure back through model output is a further check, not an observed result."
+        }
+      ],
+      "evidence": [
+        {
+          "file": "apps/api/src/auth/services/credential.service.ts",
+          "line": 74,
+          "description": "Issued plugin Credentials store the authenticated Project and dto.service or null. No Project-owned workload lookup constrains the service string."
+        },
+        {
+          "file": "apps/api/src/auth/dto/create-credential.dto.ts",
+          "line": 43,
+          "description": "A plugin service binding is an optional caller-provided nonblank bounded string, so the service-name prerequisite does not require access to the victim Project."
+        },
+        {
+          "file": "apps/daemon/src/main.ts",
+          "line": 121,
+          "description": "The production log callback drops projectId despite ObservationOptions.logs declaring and observations passing that argument."
+        },
+        {
+          "file": "apps/daemon/src/reads.ts",
+          "line": 15,
+          "description": "The runtime explicitly describes Collector evidence reads as host-wide; logs accepts no Project and its strongest resource check is a unique service-name match."
+        },
+        {
+          "file": "apps/daemon/src/collectors.ts",
+          "line": 60,
+          "description": "Configured Docker/Kubernetes Collectors are added to one shared reads list; startup binds Collector notices to a bootstrap Project but adds no Project authorization to evidence reads."
+        },
+        {
+          "file": "packages/sources-docker/src/source.ts",
+          "line": 39,
+          "description": "Docker container selection is a host-wide service-name lookup. The tailLogs path does not consult the Collector's startup Project binding."
+        },
+        {
+          "file": "packages/sources-k8s/src/source.ts",
+          "line": 178,
+          "description": "The Kubernetes variant resolves a deployment by its generated service name, picks a pod and reads its logs without a caller-Project grant. Namespace inclusion restricts inventory but does not authorize its consumers."
+        },
+        {
+          "file": "packages/diagnoser/src/diagnose.ts",
+          "line": 25,
+          "description": "validateEvidence accepts references and excerpts from the prepared bundle. It proves quotation consistency even for wrongly scoped logs; it does not prove Project ownership."
+        },
+        {
+          "file": "apps/daemon/src/observations.ts",
+          "line": 181,
+          "description": "An accepted diagnosis is persisted with the original Event projectId. prepareRecordedHaunting redacts recognized secrets but preserves ordinary private excerpts, so it is not an ownership barrier."
+        }
+      ],
+      "blockers": [
+        "No local request, prompt capture or dummy-record result was observed. Target-controlled execution is prohibited because complete OS-enforced memory and cumulative-disk controls are absent; the artifact promotion allowlist is empty.",
+        "The owner must establish that a single daemon's Collector inventory contains workloads whose private logs must not be readable by at least one other granted Project. A deliberately shared log inventory would not establish the claimed ownership violation.",
+        "Returning the private excerpt to the producer through a real model requires provider behavior that was not exercised. The unconditional source claim stops at placement in the wrong Project's provider context."
+      ],
+      "validation_plan": {
+        "local": "After the parent establishes all required sandbox controls, wire two dummy Projects to the production observation/log-read composition with fake durable APIs, one fake CollectorReads source and a fake model adapter. Treat the Collector workload as Project B's private resource and return the harmless log marker 'private customer adjustment record'. Submit a valid runtime.oom Event for Project A using that workload's service name, with no Deployment. Capture the fake adapter request and stop when the Project-A prompt contains the Project-B marker. Optionally return a schema-valid diagnosis quoting that log reference and confirm the fake persistence sink receives it under Project A. The regression must reject or omit unauthorized Collector evidence before provider invocation, while preserving legitimate same-Project evidence.",
+        "deployment": "The owner should inspect daemon Project grants, Collector startup ownership and the configured Docker/Kubernetes inventory offline to determine whether mutually private workloads share this evidence reader. Do not read real workload logs or send telemetry to a deployed instance for this check."
+      }
+    }
+  ],
+  "hardening": [
+    "packages/gateway/src/budget.ts documents per-process post-response counters. If operators require a strict daily spend ceiling across concurrent calls or restarts, reserve bounded call cost atomically and persist accounting. The current documented overshoot/restart ceiling alone was not reported as an unbounded delegated-loop finding.",
+    "packages/agents/src/config.ts exposes allowedTools, but the active gateway adapters supply no callable tools. Keep that distinction explicit in configuration documentation and enforce the field if a callable-tool dispatcher is introduced.",
+    "apps/daemon/src/private-http.ts response deadlines do not cancel durable Work commands; apps/daemon/src/command-lifetime.ts owns and drains that work. Expose or document a separate explicit cancellation operation if callers need to revoke a running attempt. Continued execution after the existing response timeout was not treated as an unrequested action."
+  ],
+  "uncovered": []
+}

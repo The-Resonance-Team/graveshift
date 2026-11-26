@@ -1,0 +1,454 @@
+{
+  "units": [
+    {
+      "coverage_id": "apps%2Fapi%2Fsrc%2Fauth%2Fcontrollers%2Fcredentials.controller.ts%23CredentialsController::apps%2Fapi%2Fsrc%2Fauth%2Fservices%2Fcredential.service.ts%23CredentialService::apps%2Fapi%2Fsrc%2Fauth::ATTACK-CLASSES.md%23Cryptography%20and%20secrets",
+      "disposition": "covered",
+      "reviewed_paths": [
+        "apps/api/prisma/schema.prisma",
+        "apps/api/src/auth/auth.config.ts",
+        "apps/api/src/auth/auth.schema.ts",
+        "apps/api/src/auth/auth.types.ts",
+        "apps/api/src/auth/controllers/credentials.controller.ts",
+        "apps/api/src/auth/credential-core.module.ts",
+        "apps/api/src/auth/env.schema.ts",
+        "apps/api/src/auth/repo/credential.database.spec.ts",
+        "apps/api/src/auth/repo/credential.repo.ts",
+        "apps/api/src/auth/services/credential.service.spec.ts",
+        "apps/api/src/auth/services/credential.service.ts",
+        "apps/api/src/auth/services/oauth-token.service.ts",
+        "apps/api/src/config/env.schema.ts",
+        "apps/api/src/identity/services/identity.service.ts",
+        "docs/adr/0013-credentials-in-database.md"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-credentials",
+          "reviewed_paths": [
+            "apps/api/src/auth/services/credential.service.ts",
+            "apps/api/src/auth/services/oauth-token.service.ts",
+            "apps/api/src/identity/services/identity.service.ts",
+            "apps/api/src/auth/auth.config.ts",
+            "apps/api/src/auth/env.schema.ts",
+            "apps/api/src/config/env.schema.ts"
+          ],
+          "invariant": "An unauthenticated caller cannot predict a Credential or OAuth client secret, bypass secret verification, or obtain a token through a missing-key fallback.",
+          "method": "source",
+          "result": "CredentialService.issue generates 32 random bytes at credential.service.ts:71, stores their SHA-256 digest, and uses a separate random UUID as the non-secret record id. IdentityService.createOAuthClient likewise generates 32 random bytes and persists only their digest at identity.service.ts:189-197. OAuth exchange compares a SHA-256 digest with timingSafeEqual at oauth-token.service.ts:44-48 and signs an HS256 token with explicit issuer, audience and a 300-second lifetime at lines 34-40. The root environment schema requires a non-placeholder JWT secret of at least 32 characters, and createAuthConfig obtains it with getOrThrow. Errors propagate; none of these paths falls back to an unsigned token, predictable Credential or default production signing key.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-credentials",
+          "reviewed_paths": [
+            "apps/api/src/auth/services/credential.service.ts",
+            "apps/api/src/auth/repo/credential.repo.ts",
+            "apps/api/prisma/schema.prisma",
+            "apps/api/src/auth/controllers/credentials.controller.ts",
+            "apps/api/src/auth/auth.types.ts",
+            "apps/api/src/auth/auth.schema.ts"
+          ],
+          "invariant": "Only possession of the full random Credential authenticates; database records, prefixes, listing responses and audit events do not reveal a reusable Credential value.",
+          "method": "source",
+          "result": "verify rejects any value outside the exact 64-character lowercase hexadecimal format, performs a full SHA-256 lookup, and compares two 32-byte digests with timingSafeEqual at credential.service.ts:103-117 and 158-161. The prefix is never an authentication selector. The Credential model has hash and prefix fields but no raw-value field. Repository create/revoke/expiry audit payloads at credential.repo.ts:116-127, 151-155 and 184-188 contain metadata rather than the value or hash. The authenticated issuance response deliberately returns value once after repo.add resolves; list maps through the explicit metadata projection at credential.service.ts:164-174. Neither response schema nor metadata type includes a hash.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-credentials",
+          "reviewed_paths": [
+            "apps/api/src/auth/credential-core.module.ts",
+            "apps/api/src/auth/services/credential.service.spec.ts",
+            "apps/api/src/auth/repo/credential.database.spec.ts",
+            "docs/adr/0013-credentials-in-database.md"
+          ],
+          "invariant": "The running credential component uses the hashed PostgreSQL store and preserves the documented no-plaintext-storage contract across failure and restart paths.",
+          "method": "source",
+          "result": "CredentialCoreModule registers one CredentialService and binds CREDENTIAL_REPO to PrismaCredentialRepo, with the Sentry verifier using that same service. ADR 0013:7 and :17 explicitly require one-way storage and no file fallback. Reviewed test source covers hash-only storage, wrong-kind rejection, restart persistence and audit rollback, including credential.database.spec.ts:60-75 and 113-124. These tests were read, not executed; no local behavioral result is claimed. No source-grounded cryptographic or secret-storage candidate survived.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    },
+    {
+      "coverage_id": "apps%2Fapi%2Fsrc%2Fauth%2Fcontrollers%2Fcredentials.controller.ts%23CredentialsController::apps%2Fapi%2Fsrc%2Fauth%2Fservices%2Fcredential.service.ts%23CredentialService::apps%2Fapi%2Fsrc%2Fauth::DATA-ISOLATION-AND-LIFECYCLE.md%23Stale%20authorization%20and%20derived%20copy%20use",
+      "disposition": "covered",
+      "reviewed_paths": [
+        "apps/api/prisma/schema.prisma",
+        "apps/api/src/audit/audit.module.ts",
+        "apps/api/src/audit/audit.repo.ts",
+        "apps/api/src/audit/audit.transaction.ts",
+        "apps/api/src/auth/credential-core.module.ts",
+        "apps/api/src/auth/oauth-client-access.strategy.ts",
+        "apps/api/src/auth/oauth-client-credentials.strategy.ts",
+        "apps/api/src/auth/oauth-principal.ts",
+        "apps/api/src/auth/plugin-api-key.guard.ts",
+        "apps/api/src/auth/repo/credential.database.spec.ts",
+        "apps/api/src/auth/repo/credential.repo.ts",
+        "apps/api/src/auth/scopes.ts",
+        "apps/api/src/auth/sentry-key.guard.ts",
+        "apps/api/src/auth/services/credential.service.ts",
+        "apps/api/src/auth/throttle-key.generator.spec.ts",
+        "apps/api/src/auth/throttle-key.generator.ts",
+        "apps/api/src/identity/controllers/organizations.controller.ts",
+        "apps/api/src/identity/repo/identity.repo.ts",
+        "apps/api/src/identity/services/identity.service.ts",
+        "apps/api/src/mcp/mcp-token.verifier.ts",
+        "apps/api/src/mcp/mcp.module.ts",
+        "docs/adr/0013-credentials-in-database.md"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-credentials",
+          "reviewed_paths": [
+            "apps/api/src/auth/services/credential.service.ts",
+            "apps/api/src/auth/repo/credential.repo.ts",
+            "apps/api/src/audit/audit.module.ts",
+            "apps/api/src/audit/audit.repo.ts",
+            "apps/api/src/audit/audit.transaction.ts",
+            "docs/adr/0013-credentials-in-database.md"
+          ],
+          "invariant": "After successful Credential revocation or expiry, a subsequent verification cannot authorize from a stale process copy, and a failed revoke cannot claim a committed state change.",
+          "method": "source",
+          "result": "Every verify calls repo.findByHash, which reads PostgreSQL, then requires revokedAt to be null and expiry to be strictly later than Date.now at credential.service.ts:108-117 and 151-155. The equality boundary therefore expires closed. Revocation queries and updates include id, clientId and projectId; the update and its audit append share audit.transaction at credential.repo.ts:132-158. AuditModule binds the real AuditRepo, whose transaction calls the serializable Prisma transaction helper at audit.transaction.ts:13-17. A failed append propagates through that transaction. Expiry-audit updates are conditional and idempotent; failure to record the audit does not return an authenticated principal. This matches ADR 0013's shared-state revocation contract.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-credentials",
+          "reviewed_paths": [
+            "apps/api/src/auth/throttle-key.generator.ts",
+            "apps/api/src/auth/plugin-api-key.guard.ts",
+            "apps/api/src/auth/sentry-key.guard.ts",
+            "apps/api/src/auth/credential-core.module.ts",
+            "apps/api/src/mcp/mcp-token.verifier.ts",
+            "apps/api/src/mcp/mcp.module.ts",
+            "apps/api/src/auth/services/credential.service.ts"
+          ],
+          "invariant": "A warm throttler identity, request-local principal, or alternate Credential consumer must not replace the current database-backed authentication decision for a new request.",
+          "method": "source",
+          "result": "The service's bounded clientIndex contains digests and client identifiers only and is not consulted by verify. ThrottleKeyGenerator.track itself calls verify before setting credentialPrincipal on the current request. PluginApiKeyGuard reuses only that request-local result and checks kind and publish scope; it otherwise verifies again. SentryKeyGuard directly invokes the shared verifier with expectedKind plugin. The MCP bearer guard invokes verify with expectedKind mcp, and mcp.module.ts:87-90 registers that guard on the HTTP surface. No cross-request authorization cache or alternate file-backed Credential store is present in these handoffs. The review stops at these credential-consumer decisions; it does not claim a separate review of MCP data dispatch.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-credentials",
+          "reviewed_paths": [
+            "apps/api/src/auth/oauth-principal.ts",
+            "apps/api/src/auth/oauth-client-credentials.strategy.ts",
+            "apps/api/src/auth/oauth-client-access.strategy.ts",
+            "apps/api/src/auth/scopes.ts",
+            "apps/api/src/identity/repo/identity.repo.ts",
+            "apps/api/src/identity/services/identity.service.ts",
+            "apps/api/src/identity/controllers/organizations.controller.ts",
+            "apps/api/prisma/schema.prisma",
+            "apps/api/src/auth/services/credential.service.ts"
+          ],
+          "invariant": "An OAuth management or config token cannot continue to use a Project or scope that its current registered client does not grant; a parent-lifecycle claim must identify a supported transition and an explicit cascading guarantee.",
+          "method": "source",
+          "result": "verifyOAuthPrincipal performs a fresh client lookup and rejects absent clients, changed Project bindings and token scopes outside the current expanded grant at oauth-principal.ts:35-45. Both assigned OAuth strategies use this helper. Independently issued Credentials carry their own stored scopes, expiry and revokedAt. The production identity repository and Organization controller expose client creation/lookup, with no client deletion, scope-edit or membership-removal transition. The Credential table has no OAuth-client foreign key, but the reviewed contract does not promise cascading parent-client revocation. An operator's arbitrary database change alone does not establish the required product-boundary violation, so this possible future lifecycle behavior is not promoted to a candidate.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-credentials",
+          "reviewed_paths": [
+            "apps/api/src/auth/repo/credential.database.spec.ts",
+            "apps/api/src/auth/throttle-key.generator.spec.ts"
+          ],
+          "invariant": "Revocation remains an authentication denial after another instance, process restart, warm lookup, repeated revoke and failed audit transaction.",
+          "method": "source",
+          "result": "Reviewed test source specifies cross-client and restart revocation at credential.database.spec.ts:78-94, foreign-owner rejection at 96-110, rollback at 113-124, and expiry idempotence at 127-150. throttle-key.generator.spec.ts:62-80 specifies that warm, revoked and expired values return to the anonymous bucket rather than preserving authorization. Tests were not run because the assignment blocks target execution. No stale-authorization candidate remained after tracing the source controls.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    },
+    {
+      "coverage_id": "apps%2Fapi%2Fsrc%2Fauth%2Fcontrollers%2Fcredentials.controller.ts%23CredentialsController::apps%2Fapi%2Fsrc%2Fauth%2Fservices%2Fcredential.service.ts%23CredentialService::apps%2Fapi%2Fsrc%2Fauth::WEB-PROTOCOL-AND-AUTH.md%23API-key%20exposure%20and%20unsafe%20transport",
+      "disposition": "covered",
+      "reviewed_paths": [
+        "apps/api/src/app.factory.ts",
+        "apps/api/src/auth/auth.schema.ts",
+        "apps/api/src/auth/auth.types.ts",
+        "apps/api/src/auth/controllers/credentials.controller.ts",
+        "apps/api/src/auth/controllers/oauth.controller.ts",
+        "apps/api/src/auth/credential.mapper.ts",
+        "apps/api/src/auth/credential.select.ts",
+        "apps/api/src/auth/repo/credential.repo.ts",
+        "apps/api/src/auth/sentry-auth.ts",
+        "apps/api/src/auth/sentry-event.mapper.ts",
+        "apps/api/src/auth/sentry-key.guard.ts",
+        "apps/api/src/auth/services/credential.service.ts",
+        "apps/api/src/auth/services/oauth-token.service.ts",
+        "apps/api/src/auth/services/sentry-ingest.service.ts",
+        "apps/api/src/config/boot.config.ts",
+        "apps/api/src/config/config.controller.ts",
+        "apps/api/src/config/config.module.ts",
+        "apps/api/src/internal/internal-config.controller.ts",
+        "apps/api/src/internal/internal.guard.ts",
+        "apps/api/test/config-secret.e2e.test.ts",
+        "apps/api/test/credentials.e2e.test.ts",
+        "packages/agents/src/config.ts",
+        "packages/config/src/load.ts",
+        "packages/config/src/schema.ts",
+        "packages/gateway/src/config.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-credentials",
+          "reviewed_paths": [
+            "apps/api/src/auth/controllers/credentials.controller.ts",
+            "apps/api/src/auth/controllers/oauth.controller.ts",
+            "apps/api/src/auth/services/credential.service.ts",
+            "apps/api/src/auth/services/oauth-token.service.ts",
+            "apps/api/src/auth/auth.schema.ts",
+            "apps/api/src/auth/auth.types.ts"
+          ],
+          "invariant": "Reusable secrets are returned only to the authenticated issuer or successfully authenticated OAuth client and do not appear in later metadata responses.",
+          "method": "source",
+          "result": "The credential controller applies the management OAuth guard to issue/list/revoke. CredentialService returns value only from issue after the repository write completes; list uses the explicit metadata projection. The OAuth endpoint returns an access token only after the stored client's secret has been verified. Response types and schemas distinguish issuance value from later metadata. Conflict errors use fixed messages and do not interpolate a token, hash or client secret. The intended one-time return is not treated as unauthorized disclosure.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-credentials",
+          "reviewed_paths": [
+            "apps/api/src/auth/services/credential.service.ts",
+            "apps/api/src/auth/repo/credential.repo.ts",
+            "apps/api/src/auth/credential.mapper.ts",
+            "apps/api/src/auth/credential.select.ts",
+            "apps/api/src/app.factory.ts",
+            "apps/api/test/credentials.e2e.test.ts"
+          ],
+          "invariant": "Credential metadata, audit copies and normal application logging do not become alternate readers of raw Credential values or stored hashes.",
+          "method": "source",
+          "result": "The active service metadata projection and the sibling credential.mapper/select projections omit hash and value. Production credential audit payloads contain ids, names, kinds, scopes, service and expiry only; the raw value never reaches the repository. The inspected issuance and verification paths do not log submitted or generated secrets, and createApp disables the Nest logger at app.factory.ts:51. credentials.e2e.test.ts:41-62 specifies the no-value/no-hash listing response. This is source evidence only; external proxy logs and cache behavior were not inferred.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-credentials",
+          "reviewed_paths": [
+            "apps/api/src/config/config.controller.ts",
+            "apps/api/src/config/config.module.ts",
+            "apps/api/src/config/boot.config.ts",
+            "apps/api/src/internal/internal-config.controller.ts",
+            "apps/api/src/internal/internal.guard.ts",
+            "packages/config/src/load.ts",
+            "packages/config/src/schema.ts",
+            "packages/agents/src/config.ts",
+            "packages/gateway/src/config.ts",
+            "apps/api/test/config-secret.e2e.test.ts"
+          ],
+          "invariant": "Public config export and the separate internal config projection must not resolve environment-held provider keys, JWT keys, internal tokens, root passwords or database credentials into responses.",
+          "method": "source",
+          "result": "The public controller injects GRAVESHIFT_CONFIG, the validated YAML object, rather than RootBootConfig. The exported Agent and GitHub credential fields are constrained environment-variable names; this path does not resolve them. Agent baseUrl validation explicitly rejects HTTP and URL userinfo at packages/agents/src/config.ts:71-74. The internal controller requires InternalGuard and explicitly returns granted Project ids, Agents, policy, gateway budgets, stream name and mode, omitting RootBootConfig's database URL, root password, internal tokens, auth config and service URLs. GatewayConfigSchema has only budget/retry/timeout/price fields. Reviewed secret-hygiene test source covers unknown Agent-key rejection and policy-key stripping; it was not executed.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-credentials",
+          "reviewed_paths": [
+            "apps/api/src/auth/sentry-auth.ts",
+            "apps/api/src/auth/sentry-key.guard.ts",
+            "apps/api/src/auth/sentry-event.mapper.ts",
+            "apps/api/src/auth/services/sentry-ingest.service.ts"
+          ],
+          "invariant": "Sentry-compatible credential carriers do not broaden the key's authority or copy envelope authentication material into returned or published event metadata.",
+          "method": "source",
+          "result": "The adapter intentionally accepts the plugin value from sentry_key, a Sentry authorization value, or DSN userinfo, rejects conflicting values, and requires a service-bound plugin Credential with only events:publish and an exact route Project match. mapSentryEvent uses the authenticated Project/service and selects event exception, message and request fields for the payload; it does not copy envelope dsn or the verified Credential. SentryIngestService applies string and sensitive-field redaction and returns only an event id. Query-based SDK compatibility is source-visible, but no application logging or response path exposing that key to an unauthorized reader was established; no transport vulnerability is inferred from an unobserved ingress configuration.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    },
+    {
+      "coverage_id": "apps%2Fapi%2Fsrc%2Fauth%2Fcontrollers%2Fcredentials.controller.ts%23CredentialsController::apps%2Fapi%2Fsrc%2Fauth%2Fservices%2Fcredential.service.ts%23CredentialService::apps%2Fapi%2Fsrc%2Fauth::WEB-PROTOCOL-AND-AUTH.md%23API-key%20scope%20and%20resource%20binding",
+      "disposition": "covered",
+      "reviewed_paths": [
+        "apps/api/prisma/schema.prisma",
+        "apps/api/src/app.factory.ts",
+        "apps/api/src/auth/auth.module.ts",
+        "apps/api/src/auth/controllers/credentials.controller.ts",
+        "apps/api/src/auth/credential-core.module.ts",
+        "apps/api/src/auth/dto/create-credential.dto.ts",
+        "apps/api/src/auth/dto/credential-params.dto.ts",
+        "apps/api/src/auth/dto/no-mcp-service.constraint.ts",
+        "apps/api/src/auth/oauth-client-credentials.strategy.ts",
+        "apps/api/src/auth/oauth-principal.ts",
+        "apps/api/src/auth/plugin-api-key.guard.ts",
+        "apps/api/src/auth/repo/credential.repo.ts",
+        "apps/api/src/auth/scopes.ts",
+        "apps/api/src/auth/sentry-key.guard.ts",
+        "apps/api/src/auth/services/credential.service.spec.ts",
+        "apps/api/src/auth/services/credential.service.ts",
+        "apps/api/src/auth/services/event-ingest.service.ts",
+        "apps/api/src/mcp/mcp-token.verifier.ts",
+        "apps/api/test/credentials.e2e.test.ts",
+        "apps/api/test/oauth.e2e.test.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-credentials",
+          "reviewed_paths": [
+            "apps/api/src/app.factory.ts",
+            "apps/api/src/auth/auth.module.ts",
+            "apps/api/src/auth/controllers/credentials.controller.ts",
+            "apps/api/src/auth/dto/create-credential.dto.ts",
+            "apps/api/src/auth/dto/credential-params.dto.ts",
+            "apps/api/src/auth/dto/no-mcp-service.constraint.ts",
+            "apps/api/src/auth/oauth-client-credentials.strategy.ts",
+            "apps/api/src/auth/oauth-principal.ts"
+          ],
+          "invariant": "A caller cannot use JWT claims, undeclared request fields, or a malformed create request to choose another issuing Project or gain management authority.",
+          "method": "source",
+          "result": "The production module registers the OAuth strategy used by every credential route. Passport is configured for HS256 with explicit issuer/audience; verifyOAuthPrincipal additionally requires expiry, numeric Project, a current registered client with that same Project, and a token scope subset of its current grant. The strategy separately requires tokens:manage. configureApp enables whitelist and forbidNonWhitelisted on real class DTOs. CreateCredentialDto has no projectId or clientId field, restricts kind/scopes, and rejects a service binding on MCP. CredentialParamsDto bounds and validates the record selector. Thus a request body cannot override the authenticated principal used by issue/list/revoke.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-credentials",
+          "reviewed_paths": [
+            "apps/api/src/auth/services/credential.service.ts",
+            "apps/api/src/auth/scopes.ts",
+            "apps/api/src/auth/repo/credential.repo.ts",
+            "apps/api/prisma/schema.prisma",
+            "apps/api/src/auth/credential-core.module.ts"
+          ],
+          "invariant": "Credential authority is the intersection of its kind's catalog and the issuing principal's grant, while list/revoke remain bound to both owning client and Project.",
+          "method": "source",
+          "result": "issue rechecks nonempty scopes, exact per-kind allowed scopes, forbidden scopes and the principal's holdings before storage at credential.service.ts:44-57. Neither config:export, fix:trigger nor tokens:manage belongs to a Credential kind. It sets projectId and clientId exclusively from the principal at lines 80-82. The shared verifier returns the stored bindings and rejects a different expected kind. Repository list, initial revoke lookup and conditional revoke update each constrain clientId and projectId. The owner-scoped advisory lock and active-count transaction cap parallel issuance without widening ownership. Full-hash lookup authenticates a bearer identity; no request resource selector participates in that lookup or replaces its stored bindings.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-credentials",
+          "reviewed_paths": [
+            "apps/api/src/auth/plugin-api-key.guard.ts",
+            "apps/api/src/auth/sentry-key.guard.ts",
+            "apps/api/src/auth/services/event-ingest.service.ts",
+            "apps/api/src/mcp/mcp-token.verifier.ts"
+          ],
+          "invariant": "The first consumers of a verified Credential preserve kind, Project, service and action scope rather than allowing a request selector to replace them.",
+          "method": "source",
+          "result": "PluginApiKeyGuard requires plugin kind and events:publish even for a principal obtained by the throttler. EventIngestService checks exact body/project equality and any stored service binding before publication. SentryKeyGuard independently requires plugin kind, exact path/project equality, a nonempty service binding and a single events:publish scope. The MCP verifier and bearer guard require mcp kind and carry the stored Project and scopes into request context. These handoff checks establish the assigned Credential binding invariant; peer-owned downstream event and MCP data operations were not separately hunted.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-credentials",
+          "reviewed_paths": [
+            "apps/api/test/credentials.e2e.test.ts",
+            "apps/api/test/oauth.e2e.test.ts",
+            "apps/api/src/auth/services/credential.service.spec.ts"
+          ],
+          "invariant": "Negative cases cover cross-client/cross-Project selectors, forbidden or unheld scopes, wrong surfaces and forged OAuth claims.",
+          "method": "source",
+          "result": "Reviewed test source specifies rejection of request-supplied projectId, cross-kind scopes, unheld scopes, MCP service bindings, foreign listings and foreign revocation. OAuth tests specify wrong signature/audience/issuer, missing or expired exp, unregistered clients and forged Project/scope claims. Service tests separately reject fix:trigger for both Credential kinds, including when the issuing principal holds it. These were source checks only. No accepted out-of-scope Credential transition was established.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    },
+    {
+      "coverage_id": "apps%2Fapi%2Fsrc%2Fconfig%2Fconfig.controller.ts%23ConfigController::apps%2Fapi%2Fsrc%2Fauth%2Fservices%2Fcredential.service.ts%23CredentialService::apps%2Fapi%2Fsrc%2Fauth::DATA-ISOLATION-AND-LIFECYCLE.md%23Export%20and%20backup%20scope%20expansion",
+      "disposition": "covered",
+      "reviewed_paths": [
+        "apps/api/src/app.module.ts",
+        "apps/api/src/audit/audit.module.ts",
+        "apps/api/src/audit/audit.repo.ts",
+        "apps/api/src/audit/audit.transaction.ts",
+        "apps/api/src/auth/oauth-client-access.strategy.ts",
+        "apps/api/src/auth/oauth-principal.ts",
+        "apps/api/src/auth/scopes.ts",
+        "apps/api/src/auth/services/credential.service.ts",
+        "apps/api/src/config/boot.config.ts",
+        "apps/api/src/config/config.controller.ts",
+        "apps/api/src/config/config.module.ts",
+        "apps/api/src/config/config.provider.ts",
+        "apps/api/src/identity/dto/identity.dto.ts",
+        "apps/api/src/identity/services/identity.service.ts",
+        "apps/api/src/internal/internal-config.controller.ts",
+        "apps/api/src/internal/internal.guard.ts",
+        "apps/api/test/config-guard.e2e.test.ts",
+        "apps/api/test/config-secret.e2e.test.ts",
+        "apps/api/test/config.e2e.test.ts",
+        "docs/adr/0015-one-config-file-at-boot.md",
+        "docs/adr/0023-organization-is-the-tenant-root.md",
+        "graveshift.config.yaml",
+        "packages/agents/src/config.ts",
+        "packages/config/src/load.ts",
+        "packages/config/src/schema.ts",
+        "packages/gateway/src/config.ts",
+        "packages/policy/src/schema.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-credentials",
+          "reviewed_paths": [
+            "apps/api/src/app.module.ts",
+            "apps/api/src/config/config.controller.ts",
+            "apps/api/src/auth/oauth-client-access.strategy.ts",
+            "apps/api/src/auth/oauth-principal.ts",
+            "apps/api/src/auth/scopes.ts",
+            "apps/api/src/auth/services/credential.service.ts",
+            "apps/api/src/identity/dto/identity.dto.ts",
+            "apps/api/src/identity/services/identity.service.ts",
+            "docs/adr/0015-one-config-file-at-boot.md",
+            "docs/adr/0023-organization-is-the-tenant-root.md"
+          ],
+          "invariant": "An ordinary Organization owner, member, MCP holder or plugin holder cannot turn its Project grant into deployment-wide config-export authority.",
+          "method": "source",
+          "result": "The registered ConfigController uses the OAuth access strategy, which performs current registry/project/scope validation and then demands exact config:export. This scope is deliberately HTTP-only and boot/operator-only: it is absent from CLIENT_ISSUABLE_SCOPES and every Credential kind. Public OAuth-client creation checks the catalog again inside IdentityService, so bypassing DTO validation does not grant config:export. CredentialService also rejects it for both kinds. ADR 0015:13 explicitly defines a full config export; returning the global object to an operator-granted exporter is therefore intended authority, rather than a demonstrated cross-Organization expansion. No route parameter chooses a broader artifact or alternate export.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-credentials",
+          "reviewed_paths": [
+            "apps/api/src/config/config.module.ts",
+            "apps/api/src/config/config.provider.ts",
+            "apps/api/src/config/boot.config.ts",
+            "apps/api/src/internal/internal-config.controller.ts",
+            "apps/api/src/internal/internal.guard.ts",
+            "packages/config/src/load.ts",
+            "packages/config/src/schema.ts",
+            "packages/agents/src/config.ts",
+            "packages/policy/src/schema.ts",
+            "packages/gateway/src/config.ts",
+            "graveshift.config.yaml"
+          ],
+          "invariant": "The exported snapshot is the validated non-secret config, and neither the public export nor the internal read accidentally spreads secret-bearing RootBootConfig fields.",
+          "method": "source",
+          "result": "loadGraveshiftConfig returns parsed schema data once at boot, and GraveshiftConfigModule deep-freezes that value. The strict merged schema contains only boot, Agents, policy and fix; Agent/GitHub credential fields name environment variables. Unknown Agent/fix/root keys fail validation, while unknown policy fields are stripped by its object schemas. No environment interpolation occurs on the public export path. The committed config's provider endpoints contain no embedded credentials and its secret fields are variable names. RootBootConfig separately contains deployment-local secrets; InternalConfigController requires the internal token and projects an explicit allowlist that excludes database URL, root identity/password, internal tokens and auth config. Thus the alternate internal reader does not expose those RootBootConfig secrets either.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-credentials",
+          "reviewed_paths": [
+            "apps/api/src/config/config.controller.ts",
+            "apps/api/src/audit/audit.module.ts",
+            "apps/api/src/audit/audit.repo.ts",
+            "apps/api/src/audit/audit.transaction.ts"
+          ],
+          "invariant": "A config export cannot bypass its audit prerequisite or copy config contents into an audit chain with a wider reader set.",
+          "method": "source",
+          "result": "exportConfig awaits recordExport before returning the config at config.controller.ts:50-52. The draft contains only a random event key, the verified client's actor id, type config.exported and payload {exported: config}; actor.projectId selects the audit chain. AuditModule binds AUDIT_SINK to the PostgreSQL AuditRepo, whose append resolves through a serializable database transaction. Failures propagate before the return, and the payload never contains prompts, repository lists, secrets or the config snapshot. There is no queued export file or later download path in this controller.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-credentials",
+          "reviewed_paths": [
+            "apps/api/test/config-guard.e2e.test.ts",
+            "apps/api/test/config-secret.e2e.test.ts",
+            "apps/api/test/config.e2e.test.ts"
+          ],
+          "invariant": "Export denial, secret omission, failed audit, immutable boot snapshots and removed alternate routes preserve the same export policy.",
+          "method": "source",
+          "result": "Reviewed test source specifies anonymous and under-scoped denial, full validated export with unresolved environment names, identifier-only audit payloads, audit-failure denial, boot-snapshot stability and absence of write/removed per-block routes. Config guard tests reject config:export at both DTO and CredentialService boundaries. Secret tests cover unknown Agent keys, stripped policy secrets and invalid boot config. None of these tests or their fixture-processing helpers was executed. No source-grounded export-scope or secret-projection candidate survived.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    }
+  ],
+  "candidates": [],
+  "hardening": [
+    "Consider declaring Cache-Control: no-store directly on successful OAuth-token and Credential-issuance responses in apps/api/src/auth/controllers/oauth.controller.ts and credentials.controller.ts. These controllers and configureApp do not set an explicit no-store policy. No unauthorized cache reader or deployed cache behavior was demonstrated, so this is a hardening note rather than a candidate.",
+    "Before adding OAuth-client deletion or grant-downgrade APIs, define whether they cascade to previously issued Credentials. CredentialService.verify currently checks the independent Credential record, and the Credential model has no parent-client foreign key; current public identity routes expose neither transition. If cascading revocation becomes a product guarantee, enforce it at the shared verifier or in the same transaction as the parent change and add a dummy-client regression case. No current cascading guarantee or source-visible violating API transition was established."
+  ],
+  "uncovered": []
+}

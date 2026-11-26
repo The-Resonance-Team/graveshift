@@ -1,0 +1,99 @@
+{
+  "decision": "needs_validation",
+  "record": {
+    "verdict": "needs_validation",
+    "fingerprint": "packages/watcher/src/rules.ts:unbounded-temporal-samples",
+    "title": "Caller timestamps can grow temporal watcher arrays without a bound",
+    "description": "A plugin Credential holder can submit unique small warning log.line or runtime.restart Events for its bound service while keeping observedAt at one valid timestamp. Each unique Event passes the replay set, and every saved timestamp remains inside inWindow because the comparison uses that same caller timestamp. The error/restart array is then filtered and copied on every input without saturation at the detection threshold. The downstream ten-minute dedupe prevents repeated emitted detections but runs after this work and does not cap sample retention. Source therefore gives linear retained samples and quadratic cumulative array work for a linear number of accepted Events, even when arrival rate respects the API throttle. The shared serial consumer makes this a possible cost imposed on other Projects; no measured delay or availability failure is claimed.",
+    "claimed_root_cause": "Temporal counting stores every matching timestamp in unbounded arrays and ages them only relative to the next untrusted observedAt. There is no count cap or independent expiration. The 10000-entry replay-ID set bounds only identity storage, and detection dedupe happens after the arrays have already grown and been copied.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "apps/api/src/auth/dto/publish-event.dto.ts",
+        "line": 43,
+        "scope": "PublishEventDto.observedAt",
+        "description": "The producer chooses an ISO timestamp; no freshness, advancement or maximum equal-timestamp sample count is enforced. Project/service binding still applies."
+      },
+      {
+        "kind": "propagation",
+        "file": "apps/daemon/src/observations.ts",
+        "line": 99,
+        "scope": "observe watcher intake",
+        "description": "The shared daemon forwards each newly identified warning Event to watcher.ingest with the producer timestamp unchanged."
+      },
+      {
+        "kind": "propagation",
+        "file": "packages/watcher/src/watcher.ts",
+        "line": 32,
+        "scope": "createWatcher.ingest",
+        "description": "observe(envelope) evaluates and mutates temporal rule state before createDedupe.accept is called at line 38."
+      },
+      {
+        "kind": "propagation",
+        "file": "packages/watcher/src/rules.ts",
+        "line": 60,
+        "scope": "createRules replay and time extraction",
+        "description": "Distinct IDs bypass replay suppression. The bounded observed Set does not limit per-service arrays, and at is parsed directly from observedAt."
+      },
+      {
+        "kind": "propagation",
+        "file": "packages/watcher/src/rules.ts",
+        "line": 23,
+        "scope": "inWindow",
+        "description": "All prior samples equal to at satisfy time > at-windowMs and time <= at, regardless of elapsed wall time. Every input scans the full retained array."
+      },
+      {
+        "kind": "sink",
+        "file": "packages/watcher/src/rules.ts",
+        "line": 111,
+        "scope": "log.line temporal accumulation",
+        "description": "The filtered array is copied and appended with no count limit. runtime.restart repeats the same pattern at line 94, retaining growing arrays in the shared watcher's per-service state."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "packages/watcher/src/rules.ts",
+        "line": 32,
+        "description": "Per-Project/service temporal states have no independent expiry; their errors and restarts arrays survive downstream processing and dedupe."
+      },
+      {
+        "file": "packages/watcher/src/rules.ts",
+        "line": 94,
+        "description": "The restart-count variant filters and spreads all samples even after its threshold of three has been crossed."
+      },
+      {
+        "file": "packages/watcher/src/types.ts",
+        "line": 50,
+        "description": "The detector only needs small fixed thresholds: five errors or three restarts. No corresponding storage maximum accompanies the configured windows."
+      },
+      {
+        "file": "packages/watcher/src/pipeline.ts",
+        "line": 19,
+        "description": "Detection dedupe stores a last accepted timestamp and rejects repeated detections, but it cannot undo the preceding temporal-array mutation."
+      },
+      {
+        "file": "apps/api/src/auth/env.schema.ts",
+        "line": 35,
+        "description": "Body and rate limits exist. They do not impose a lifetime sample quota or require producer timestamps to track the arrival clock."
+      },
+      {
+        "file": "packages/events/src/consumer.ts",
+        "line": 139,
+        "description": "The one consumer awaits each Project's processing serially, making per-Event growing array work part of shared observation dispatch."
+      },
+      {
+        "file": "packages/core/src/envelope.ts",
+        "line": 54,
+        "description": "prepareEnvelope validates format and redacts content but preserves the caller-supplied observedAt unchanged; no server time is substituted, so the timestamp driving inWindow is producer-controlled."
+      }
+    ],
+    "blockers": [
+      "No bounded retained-count or deterministic element-visit observation was performed because complete memory and cumulative disk sandbox controls are unavailable.",
+      "Meaningful shared-resource impact has not been measured. Any owner-managed aggregate intake quota or process isolation outside the repository must be inspected before assigning operational impact."
+    ],
+    "validation_plan": {
+      "local": "In a parent-approved sandbox, call the native createRules/createWatcher interfaces with eight and sixteen unique warning log.line Events containing line=ERROR and one fixed valid observedAt, then repeat the independent runtime.restart variant. Use deterministic inspection of retained counts and array-element visits in a trusted scratch copy, with no more than thirty-two records per variant and no timing-based saturation test. Advance only the fixture's arrival clock to establish whether sample cleanup occurs while observedAt stays fixed. Include a second dummy Project sentinel in the consumer harness. A regression should bound temporal storage and work by the rule threshold/window policy even when equal timestamps persist, while preserving existing threshold behavior.",
+      "deployment": "The owner can inspect aggregate quotas and daemon/Project process isolation to determine the actual shared blast radius. Do not generate load or send repeated stale-timestamp Events to a deployed service."
+    }
+  }
+}

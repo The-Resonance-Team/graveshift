@@ -1,0 +1,196 @@
+{
+  "units": [
+    {
+      "coverage_id": ".kiro%2Fhooks%2Fblock-dangerous-shell.json%23hooks::scripts%2Fkiro%2Fguard-shell.mjs%23run::.kiro%2Fhooks::SUPPLY-CHAIN-AND-RELEASE.md%23Plugin%20and%20extension%20trust%20expansion",
+      "disposition": "candidate",
+      "reviewed_paths": [
+        ".kiro/hooks/block-dangerous-shell.json",
+        ".kiro/hooks/secret-scan-on-save.json",
+        ".kiro/hooks/typecheck-on-save.json",
+        ".kiro/hooks/pbt-on-guardrails.json",
+        ".kiro/hooks/policy-drift.json",
+        ".kiro/hooks/test-companion.json",
+        ".kiro/hooks/spec-task-done.json",
+        "scripts/kiro/guard-shell.mjs",
+        "KIRO_USAGE.md",
+        "scripts/kiro/secret-scan.mjs",
+        "docs/SECURITY.md",
+        ".kiro/agents/chaos-witch.json",
+        ".kiro/agents/docs-scribe.json",
+        ".kiro/agents/sre-reviewer.json",
+        ".kiro/steering/safety.md",
+        ".kiro/steering/structure.md",
+        ".gitignore"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-kiro-hooks",
+          "reviewed_paths": [
+            ".kiro/hooks/block-dangerous-shell.json",
+            ".kiro/hooks/secret-scan-on-save.json",
+            ".kiro/hooks/typecheck-on-save.json",
+            ".kiro/hooks/pbt-on-guardrails.json",
+            ".kiro/hooks/policy-drift.json",
+            ".kiro/hooks/test-companion.json",
+            ".kiro/hooks/spec-task-done.json"
+          ],
+          "invariant": "Hook `action.command` strings are fixed tracked configuration with no event-controlled interpolation, and restricted agents' allowed write paths do not include `.kiro/hooks` or `scripts/kiro`.",
+          "method": "source",
+          "result": "All seven hook files declare a fixed `matcher` and fixed `action` (four `type: command` with literal command strings, three `type: agent` with literal prompts). No hook command contains a placeholder, variable, or stdin-derived value. The command hooks invoke `node scripts/kiro/guard-shell.mjs`, `node scripts/kiro/secret-scan.mjs`, `bun check && bun lint --no-script`, and `bun test --check ...` as literal strings. Event data can therefore influence only the scripts' stdin, not the command that is executed. The two agent-type hooks (`policy-drift`, `test-companion`) run fixed prompts on PostFileSave and do not accept event text as a prompt parameter. The ignored local `.kiro/settings/mcp.json` was not read; only the tracked hook JSON files were reviewed.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-kiro-hooks",
+          "reviewed_paths": [
+            "scripts/kiro/guard-shell.mjs",
+            "KIRO_USAGE.md"
+          ],
+          "invariant": "The PreToolUse shell guard binds to a documented hook event schema and denies enumerated destructive shell commands before permitting the tool.",
+          "method": "source",
+          "result": "No Kiro event schema, payload fixture, or vendor runtime source exists in the repository. `extractCommand` guesses eight JSON locations (`command`, `shell`, `input.command`, `tool_input.command`, `toolInput.command`, `arguments.command`, `args.command`, `parameters.command`) and returns '' when none is present; `readStdin` maps any read error to ''; a non-string/non-object parse result also yields ''. `command.match(DANGEROUS)` is a single literal regex, and an empty command or a miss reaches `process.exit(0)` (allow). The regex covers only `docker rm/rmi/system prune`, `kubectl delete`, `helm uninstall`, two `git push` force/main forms, and `rm -rf /` followed by whitespace or end; equivalent forms such as `rm -rf /;true`, `git push origin +main`, `git -c foo=bar push origin main`, and `kubectl -n ns delete pod` do not match. The only statement that exit 2 blocks and exit 1 only warns is repo-authored (`scripts/kiro/guard-shell.mjs:1-2`, `KIRO_USAGE.md:13,38`), not source-visible Kiro behavior. This leaves an event-shape-dependent, fail-open control; decisive Kiro facts are external, so the result is a needs_validation candidate rather than a confirmed finding.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-kiro-hooks",
+          "reviewed_paths": [
+            "scripts/kiro/secret-scan.mjs",
+            "docs/SECURITY.md"
+          ],
+          "invariant": "The PostFileSave secret scanner binds to a documented save-event shape and reads only the file actually saved, failing closed on malformed events.",
+          "method": "source",
+          "result": "The same unverified-shape pattern appears in the sibling save hook: `extractPath` probes twelve guessed field names and returns '' on a miss or non-object; `filePath` is passed directly to `readFileSync(filePath)` with the hook process's privileges, so any path carried in the event is read. `process.exit(0)` is used for no path, an unreadable/missing file, and no pattern match (fail-open for each). The script reports only pattern name, path, and line number (no file content), so no secret value is disclosed on this path; the source-visible concern is an arbitrary-path read/existence oracle driven by event data. `docs/SECURITY.md:13` asserts the hook exists but documents no event schema or principal. This reinforces the same root cause (unverified event-shape binding with fail-open exits) rather than establishing a separate confirmed defect.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-kiro-hooks",
+          "reviewed_paths": [
+            ".kiro/agents/chaos-witch.json",
+            ".kiro/agents/docs-scribe.json",
+            ".kiro/agents/sre-reviewer.json",
+            ".kiro/steering/safety.md",
+            ".kiro/steering/structure.md",
+            ".gitignore"
+          ],
+          "invariant": "Restricted agents cannot write the hook configuration or guard scripts, and the strongest source-visible control prevents a restricted principal from replacing the security-control commands.",
+          "method": "source",
+          "result": "All three restricted agents deny the `shell` capability (`match: ['*']`) and deny `fs_write` on `**`; `chaos-witch` excludes only `examples/**`, `docs-scribe` excludes only `README.md`, `docs/**`, and `KIRO_USAGE.md`, and `sre-reviewer` has no exclusion. None of those allowed paths contains `.kiro/hooks/` or `scripts/kiro/`, so even under the declared rules a restricted agent cannot edit a hook command. All three set `includeMcpJson: false`. `.kiro/steering/safety.md` restates the never-commit-secrets rule and `.kiro/steering/structure.md` records that hooks live in `.kiro/hooks/` with helpers in `scripts/kiro/`. `.gitignore:16-17` keeps only the local MCP settings files out of the repository. Whether Kiro actually enforces these declarative `permissions.rules` is vendor behavior not visible in source, so this check establishes the declared control but not its runtime enforcement.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [
+        "kiro-hooks.guard-shell.event-shape-fail-open"
+      ],
+      "unresolved": [
+        "Kiro CLI v3 PreToolUse/PostFileSave stdin event schema is not in the repository; the eight and twelve guessed field names cannot be verified against the real payload.",
+        "Exit-code semantics (2 blocks, 1 warns) and the behavior on hook launch failure, timeout, or non-2 exit are asserted only in repo-authored docs/comments, not in source-visible Kiro runtime code.",
+        "The principal, working directory, PATH/environment, and shell used to execute `action.command` are not declared in tracked hooks; the relative script path presumes cwd is the repo root.",
+        "No OS-enforced process/memory/disk sandbox is available, so no bounded local observation of the guard with a representative real Kiro event was performed."
+      ]
+    }
+  ],
+  "candidates": [
+    {
+      "proposed_verdict": "needs_validation",
+      "fingerprint": "kiro-hooks.guard-shell.event-shape-fail-open",
+      "title": "Kiro shell hook guard guesses the event shape and fails open outside a finite command denylist",
+      "description": "The tracked `block-dangerous-shell` hook runs `node scripts/kiro/guard-shell.mjs` on every shell tool call. The script does not bind to any in-repo Kiro event schema: it reads stdin, heuristically JSON-parses it, probes eight guessed field locations for a command, and on a read error, an unrecognized shape, or an empty string returns '' and exits 0, which the repository's own documentation says allows the tool. Even when a command string is extracted, the decision is a single regex over the literal text, so semantically destructive variants (for example `rm -rf /;true`, `git push origin +main`, `git -c foo=bar push origin main`, `kubectl -n ns delete pod`) are not blocked. The sibling `secret-scan-on-save` hook repeats the shape-guessing pattern and also fails open, reading an arbitrary path from event JSON. The only statements of Kiro's exit-code contract and hook principal are repository-authored; no vendor schema, payload fixture, or runtime source is present, so exploitability depends on facts outside the repository.",
+      "claimed_root_cause": "The guard treats unverified, event-supplied structure as trusted control input: `extractCommand` enumerates guessed JSON paths and falls back to allow (exit 0) whenever the actual event shape differs, and enforcement is a literal regex that misses semantically equivalent destructive commands. The event-shape, hook-enforcement, and hook-principal facts needed to decide whether a lower-trust tool/save event can reach that fail-open path are external to the repository and cannot be assumed.",
+      "trace": [
+        {
+          "kind": "entrypoint",
+          "file": ".kiro/hooks/block-dangerous-shell.json",
+          "line": 7,
+          "scope": "PreToolUse hook definition for the shell tool",
+          "description": "The hook fires on PreToolUse with matcher `shell` and runs the fixed command string `node scripts/kiro/guard-shell.mjs`; no event data is interpolated into the command."
+        },
+        {
+          "kind": "propagation",
+          "file": "scripts/kiro/guard-shell.mjs",
+          "line": 10,
+          "scope": "readStdin failure path",
+          "description": "Any stdin read failure is swallowed and converted to an empty string, removing the guard's only input."
+        },
+        {
+          "kind": "propagation",
+          "file": "scripts/kiro/guard-shell.mjs",
+          "line": 29,
+          "scope": "extractCommand candidate list",
+          "description": "Eight guessed JSON locations are probed; an actual Kiro shape outside this list, or a parse result that is not a string/object, yields '' with no error."
+        },
+        {
+          "kind": "propagation",
+          "file": "scripts/kiro/guard-shell.mjs",
+          "line": 46,
+          "scope": "DANGEROUS regex decision",
+          "description": "The security decision is one literal regex over the extracted command; semantic equivalents of the listed destructive commands do not match."
+        },
+        {
+          "kind": "sink",
+          "file": "scripts/kiro/guard-shell.mjs",
+          "line": 55,
+          "scope": "PreToolUse verdict on the developer host",
+          "description": "On no match (including an empty extracted command) the script exits 0, which the repository states permits the shell tool to run."
+        }
+      ],
+      "evidence": [
+        {
+          "file": ".kiro/hooks/block-dangerous-shell.json",
+          "line": 9,
+          "description": "Fixed `action.command` runs the guard script; the command string is not event-controlled."
+        },
+        {
+          "file": "scripts/kiro/guard-shell.mjs",
+          "line": 6,
+          "description": "The complete DANGEROUS denylist is a single finite regex over literal text."
+        },
+        {
+          "file": "scripts/kiro/guard-shell.mjs",
+          "line": 12,
+          "description": "readStdin catch returns '' on any read error."
+        },
+        {
+          "file": "scripts/kiro/guard-shell.mjs",
+          "line": 42,
+          "description": "extractCommand returns '' when no guessed field holds a string."
+        },
+        {
+          "file": "scripts/kiro/guard-shell.mjs",
+          "line": 55,
+          "description": "Exit 0 is reached for empty or unmatched commands."
+        },
+        {
+          "file": "scripts/kiro/secret-scan.mjs",
+          "line": 62,
+          "description": "Sibling save hook reads a path taken from guessed event fields with hook-process privileges."
+        },
+        {
+          "file": "KIRO_USAGE.md",
+          "line": 13,
+          "description": "The only exit-code/trigger statement is a repo-authored claim about Kiro CLI v3; no vendor source corroborates it."
+        },
+        {
+          "file": ".kiro/agents/sre-reviewer.json",
+          "line": 7,
+          "description": "Strongest source-visible control: restricted agents deny shell and all fs_write, and their allowed write paths exclude the hook config and scripts."
+        }
+      ],
+      "blockers": [
+        "No Kiro CLI v3 PreToolUse/PostFileSave stdin event schema, payload fixture, or vendor runtime source exists in the repository, so it cannot be established whether the eight guessed command paths (or twelve guessed file paths) cover the real event.",
+        "Kiro's hook enforcement semantics are not source-visible: exit 2 blocking, exit 1 warning, and the behavior on launch failure, timeout, or non-2 exit are asserted only in repo-authored comments and KIRO_USAGE.md.",
+        "The principal, working directory, PATH/environment, and shell used to execute the hook `action.command` are not declared in tracked configuration; the relative script path presumes cwd is the repository root.",
+        "No complete OS-enforced memory, process, CPU, file, disk, and wall-clock sandbox is established, so no bounded local check of the guard with a representative event was run and no observed result can be reported."
+      ],
+      "validation_plan": {
+        "local": "In an owner-controlled harness using a copy of scripts/kiro/guard-shell.mjs, feed candidate stdin payloads such as {\"command\":\"rm -rf /;true\"}, {\"tool\":{\"input\":{\"command\":\"git push origin +main\"}}}, {\"input\":{\"cmd\":\"kubectl -n ns delete pod\"}}, and the plain string 'rm -rf /;true'; record only the emitted exit codes (misses are expected to return 0). Do not execute the embedded commands.",
+        "deployment": "On a developer host, an owner records the actual PreToolUse shell payload with a benign echo hook, confirms the exit-2 blocking contract with a harmless command, and confirms the hook process's user, cwd, and environment; no destructive command is run."
+      }
+    }
+  ],
+  "hardening": [
+    "The guard is a finite literal denylist; even after the event-shape fact is settled, semantically destructive forms (flag reordering, refspec `+`, shell quoting/escaping, namespace flags) are not matched. Parse/normalize the command before matching, and fail closed when the command cannot be identified.",
+    "scripts/kiro/secret-scan.mjs passes an event-supplied path directly to readFileSync with hook-process privileges. Resolve and verify the path against the reported saved file and an allowlisted workspace, even though this path only emits a pattern name, path, and line number rather than file content.",
+    "The command hooks invoke `node`, `bun`, and relative script paths through PATH with an undeclared cwd. Pin the interpreter and resolve paths from the repository root so an unexpected cwd or PATH fails closed instead of silently skipping the control.",
+    "The restricted agents' shell/fs_write denials and `includeMcpJson: false` are declarative configuration. Until Kiro's enforcement is confirmed from vendor source, they should not be treated as a proven containment boundary for source writes near hook configuration."
+  ],
+  "uncovered": []
+}

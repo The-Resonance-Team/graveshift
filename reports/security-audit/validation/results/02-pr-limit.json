@@ -1,0 +1,47 @@
+{
+  "lead": "apps/api/src/work-items/work-item.publication.ts:beginPublication/project-pr-limit",
+  "verdict": "confirmed",
+  "observed": {
+    "maxOpenPrsPerHour": 1,
+    "distinctWorkItems": 2,
+    "distinctAttempts": 2,
+    "publicationCountReadAtEachAdmission": [
+      0,
+      0
+    ],
+    "publicationCountAfterBothAdmissions": 0,
+    "admissions": [
+      {
+        "id": "work-1",
+        "accepted": true,
+        "state": "publishing",
+        "publication": {
+          "repo": "acme/widgets",
+          "branch": "refs/heads/fixer-inc-work-1",
+          "baseSha": "base-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "publicationCountBefore": 0
+      },
+      {
+        "id": "work-2",
+        "accepted": true,
+        "state": "publishing",
+        "publication": {
+          "repo": "acme/widgets",
+          "branch": "refs/heads/fixer-inc-work-2",
+          "baseSha": "base-aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        },
+        "publicationCountBefore": 0
+      }
+    ],
+    "auditEvents": 2,
+    "limitTokensReferencedInsideBeginPublication": [],
+    "sourceLines": [
+      "apps/api/src/work-items/work-item.publication.ts:22-58 (beginPublication: no project-wide PR gate)",
+      "apps/api/src/work-items/work-item.repo.ts:106-115 (publicationCount counts publications in the last hour)",
+      "apps/api/src/internal/policy-context.service.ts:31-42 (openPrsLastHour from publicationCount)",
+      "packages/policy/src/evaluation.ts:33-42 (rate_limited when openPrsLastHour >= maxOpenPrsPerHour)"
+    ]
+  },
+  "reason": "Both distinct work-item/attempt pairs were admitted by the real beginPublication (both snapshots show state 'publishing' with a saved publication intent), with maxOpenPrsPerHour=1 and publicationCount reading zero at each admission. beginPublication (work-item.publication.ts:22-58) performs only per-attempt fencing (loadWork, activeAttempt, requireCommand, requireLiveLease, fenceWork, fenceAttempt) and never consults publicationCount, maxOpenPrsPerHour, openPrsLastHour, or any project-wide reservation (limit tokens found inside function: []). No project-wide PR limit blocks the second publication intent."
+}

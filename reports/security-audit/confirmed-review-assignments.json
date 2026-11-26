@@ -1,0 +1,97 @@
+[
+  {
+    "agent_id": "confirm-01",
+    "fingerprint": "apps/api/src/mcp/mcp.tools.ts:incident-read-embeds-diagnosis",
+    "prompt": "/Users/xirothedev/security-audit-skill/graveshift/run-1/agents/confirm-01/scratch/assignment.md"
+  },
+  {
+    "agent_id": "confirm-02",
+    "fingerprint": "apps/api/src/work-items/work-item.publication.ts:beginPublication/project-pr-limit",
+    "prompt": "/Users/xirothedev/security-audit-skill/graveshift/run-1/agents/confirm-02/scratch/assignment.md"
+  },
+  {
+    "agent_id": "confirm-03",
+    "fingerprint": "apps/daemon/src/observations.ts:failed-outcome-retention",
+    "prompt": "/Users/xirothedev/security-audit-skill/graveshift/run-1/agents/confirm-03/scratch/assignment.md"
+  },
+  {
+    "agent_id": "confirm-04",
+    "fingerprint": "apps/daemon/src/observations.ts:service-cache-project-scope",
+    "prompt": "/Users/xirothedev/security-audit-skill/graveshift/run-1/agents/confirm-04/scratch/assignment.md"
+  },
+  {
+    "agent_id": "confirm-05",
+    "fingerprint": "apps/daemon/src/reads.ts:collector-evidence-without-project",
+    "prompt": "/Users/xirothedev/security-audit-skill/graveshift/run-1/agents/confirm-05/scratch/assignment.md"
+  },
+  {
+    "agent_id": "confirm-06",
+    "fingerprint": "daemon/fix-context/service-only-repository-selection",
+    "prompt": "/Users/xirothedev/security-audit-skill/graveshift/run-1/agents/confirm-06/scratch/assignment.md"
+  },
+  {
+    "agent_id": "confirm-07",
+    "fingerprint": "deploy/compose/api-service-overlay-retains-control-plane-authority",
+    "prompt": "/Users/xirothedev/security-audit-skill/graveshift/run-1/agents/confirm-07/scratch/assignment.md"
+  },
+  {
+    "agent_id": "confirm-08",
+    "fingerprint": "fixer/recovery/parent-only-publication-binding",
+    "prompt": "/Users/xirothedev/security-audit-skill/graveshift/run-1/agents/confirm-08/scratch/assignment.md"
+  },
+  {
+    "agent_id": "confirm-09",
+    "fingerprint": "fixer/sandbox/macos-detached-descendant-lifetime",
+    "prompt": "/Users/xirothedev/security-audit-skill/graveshift/run-1/agents/confirm-09/scratch/assignment.md"
+  },
+  {
+    "agent_id": "confirm-10",
+    "fingerprint": "identity/account-password-change/stale-jwt",
+    "prompt": "/Users/xirothedev/security-audit-skill/graveshift/run-1/agents/confirm-10/scratch/assignment.md"
+  },
+  {
+    "agent_id": "confirm-11",
+    "fingerprint": "identity/register-addMember/unverified-email-membership",
+    "prompt": "/Users/xirothedev/security-audit-skill/graveshift/run-1/agents/confirm-11/scratch/assignment.md"
+  },
+  {
+    "agent_id": "confirm-12",
+    "fingerprint": "identity/register-login/unthrottled-argon2-work",
+    "prompt": "/Users/xirothedev/security-audit-skill/graveshift/run-1/agents/confirm-12/scratch/assignment.md"
+  },
+  {
+    "agent_id": "confirm-13",
+    "fingerprint": "kiro-hooks.guard-shell.event-shape-fail-open",
+    "prompt": "/Users/xirothedev/security-audit-skill/graveshift/run-1/agents/confirm-13/scratch/assignment.md"
+  },
+  {
+    "agent_id": "confirm-14",
+    "fingerprint": "packages/actuator/createDockerRestarter/compose-project-binding",
+    "prompt": "/Users/xirothedev/security-audit-skill/graveshift/run-1/agents/confirm-14/scratch/assignment.md"
+  },
+  {
+    "agent_id": "confirm-15",
+    "fingerprint": "packages/actuator/runtimeDecision/zeroed-policy-usage",
+    "prompt": "/Users/xirothedev/security-audit-skill/graveshift/run-1/agents/confirm-15/scratch/assignment.md"
+  },
+  {
+    "agent_id": "confirm-16",
+    "fingerprint": "packages/events/src/consumer.ts:projectless-event-dedupe",
+    "prompt": "/Users/xirothedev/security-audit-skill/graveshift/run-1/agents/confirm-16/scratch/assignment.md"
+  },
+  {
+    "agent_id": "confirm-17",
+    "fingerprint": "packages/integrations/src/delivery.ts:permanent-collector-poison-retry",
+    "prompt": "/Users/xirothedev/security-audit-skill/graveshift/run-1/agents/confirm-17/scratch/assignment.md"
+  },
+  {
+    "agent_id": "confirm-18",
+    "fingerprint": "packages/redactor/src/detectors.ts:email-unanchored-scan",
+    "prompt": "/Users/xirothedev/security-audit-skill/graveshift/run-1/agents/confirm-18/scratch/assignment.md"
+  },
+  {
+    "agent_id": "confirm-19",
+    "fingerprint": "packages/watcher/src/rules.ts:unbounded-temporal-samples",
+    "prompt": "/Users/xirothedev/security-audit-skill/graveshift/run-1/agents/confirm-19/scratch/assignment.md"
+  }
+]

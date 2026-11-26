@@ -1,0 +1,635 @@
+{
+  "units": [
+    {
+      "coverage_id": "apps%2Fapi%2Fsrc%2Fidentity%2Fcontrollers%2Faccount.controller.ts%23AccountController::apps%2Fapi%2Fsrc%2Fidentity%2Fguards%2Faccount-auth.guard.ts%23AccountAuthGuard::apps%2Fapi%2Fsrc%2Fidentity::ATTACK-CLASSES.md%23Access%20control",
+      "disposition": "candidate",
+      "reviewed_paths": [
+        "apps/api/src/app.factory.ts",
+        "apps/api/src/identity/controllers/account.controller.ts",
+        "apps/api/src/identity/controllers/organizations.controller.ts",
+        "apps/api/src/identity/dto/identity.dto.ts",
+        "apps/api/src/identity/guards/account-auth.guard.ts",
+        "apps/api/src/identity/services/identity.service.ts",
+        "apps/api/src/identity/repo/identity.repo.ts",
+        "apps/api/prisma/schema.prisma",
+        "apps/api/src/identity/identity.module.ts",
+        "apps/api/src/identity/identity.types.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-identity",
+          "reviewed_paths": [
+            "apps/api/src/app.factory.ts",
+            "apps/api/src/identity/controllers/account.controller.ts",
+            "apps/api/src/identity/controllers/organizations.controller.ts",
+            "apps/api/src/identity/dto/identity.dto.ts",
+            "apps/api/src/identity/guards/account-auth.guard.ts",
+            "apps/api/src/identity/services/identity.service.ts",
+            "apps/api/src/identity/identity.module.ts",
+            "apps/api/src/identity/identity.types.ts"
+          ],
+          "invariant": "Request bodies cannot replace the authenticated Account id, select an owner role, or grant operator-only OAuth scopes.",
+          "method": "source",
+          "result": "Controllers take accountId only from the guard-written request field. The guard verifies a bearer and loads the stored Account. Global DTO validation rejects undeclared properties; registration accepts only email/password, member addition fixes the role to member, and OAuth client creation checks its scope allowlist again in the service. Profile, password change and onboarding are the only AllowWithoutOrg routes. No parallel identity controller bypass was found.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-identity",
+          "reviewed_paths": [
+            "apps/api/src/identity/controllers/account.controller.ts",
+            "apps/api/src/identity/controllers/organizations.controller.ts",
+            "apps/api/src/identity/dto/identity.dto.ts",
+            "apps/api/src/identity/guards/account-auth.guard.ts",
+            "apps/api/src/identity/services/identity.service.ts",
+            "apps/api/src/identity/repo/identity.repo.ts",
+            "apps/api/prisma/schema.prisma"
+          ],
+          "invariant": "An owner selecting a person by email must not grant Organization membership to an attacker who merely registered that person's email first.",
+          "method": "source",
+          "result": "Public registration stores an arbitrary syntactically valid email with an attacker-chosen password. Neither the Account model nor the registration/login path records or requires mailbox proof. addMember does require an existing owner, but resolves the supplied email directly to that Account and immediately writes membership. The attacker can then discover the Organization through profile and pass the normal Project membership checks. This is an owner-interaction candidate; no unauthorized membership or read was executed.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [
+        "identity/register-addMember/unverified-email-membership"
+      ],
+      "unresolved": [
+        "A bounded dummy-owner/attacker membership and Project-read check could not run: target execution is prohibited because complete OS memory and cumulative disk controls have not been established."
+      ]
+    },
+    {
+      "coverage_id": "apps%2Fapi%2Fsrc%2Fidentity%2Fcontrollers%2Faccount.controller.ts%23AccountController::apps%2Fapi%2Fsrc%2Fidentity%2Fguards%2Faccount-auth.guard.ts%23AccountAuthGuard::apps%2Fapi%2Fsrc%2Fidentity::ATTACK-CLASSES.md%23Business%20logic",
+      "disposition": "covered",
+      "reviewed_paths": [
+        "apps/api/src/main.ts",
+        "apps/api/src/config/boot.config.ts",
+        "apps/api/src/config/env.schema.ts",
+        "apps/api/src/identity/services/identity.service.ts",
+        "apps/api/src/identity/repo/identity.repo.ts",
+        "apps/api/src/identity/repo/identity.mapper.ts",
+        "apps/api/src/identity/identity.types.ts",
+        "apps/api/prisma/schema.prisma",
+        "apps/api/test/identity-security.e2e.test.ts",
+        "apps/api/test/identity.e2e.test.ts",
+        "apps/api/src/identity/testing/fake-identity.repo.ts",
+        "apps/api/test/database/identity-repo.db.test.ts",
+        "docs/adr/0024-identity-and-root-admin.md"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-identity",
+          "reviewed_paths": [
+            "apps/api/src/main.ts",
+            "apps/api/src/config/boot.config.ts",
+            "apps/api/src/config/env.schema.ts",
+            "apps/api/src/identity/services/identity.service.ts",
+            "apps/api/src/identity/repo/identity.repo.ts",
+            "apps/api/src/identity/repo/identity.mapper.ts",
+            "apps/api/src/identity/identity.types.ts",
+            "apps/api/prisma/schema.prisma",
+            "apps/api/test/identity-security.e2e.test.ts",
+            "apps/api/src/identity/testing/fake-identity.repo.ts",
+            "apps/api/test/database/identity-repo.db.test.ts",
+            "docs/adr/0024-identity-and-root-admin.md"
+          ],
+          "invariant": "Only configured first-boot root seeding can adopt migrated Projects, and a failed seed cannot expose a partial root identity through HTTP.",
+          "method": "source",
+          "result": "main awaits bootstrap before listen and closes the app on failure. Root keys are operator configuration and must be supplied together. bootstrapRoot rechecks Account count inside one transaction containing Account, Organization, owner Membership, migrated-Project adoption and grant writes. Uniqueness errors map to a conflict; the service suppresses a competing-seed conflict only when an Account exists. Public onboarding never calls adoption, and the unused adoption helper has no production caller. Existing rollback and competing-winner tests were read as source only.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-identity",
+          "reviewed_paths": [
+            "apps/api/src/identity/services/identity.service.ts",
+            "apps/api/src/identity/repo/identity.repo.ts",
+            "apps/api/prisma/schema.prisma",
+            "apps/api/test/identity-security.e2e.test.ts",
+            "apps/api/test/identity.e2e.test.ts",
+            "apps/api/src/identity/testing/fake-identity.repo.ts"
+          ],
+          "invariant": "Onboarding and repeat Organization creation can only create a new Organization owned by the authenticated Account; neither can claim an existing tenant.",
+          "method": "source",
+          "result": "Onboarding checks for existing memberships and creates the Organization plus owner Membership in one transaction. A sequential replay conflicts. Ordinary Organization creation requires an existing Membership and deliberately permits several self-owned Organizations. Concurrent zero-membership checks are not serialized, but any resulting extra Organization is also fresh and self-owned, an effect already allowed after onboarding. Duplicate slugs cannot replace existing Organizations. The separate ensureGrant race can affect response success but does not grant another tenant's ownership. No security-boundary failure remains in these state transitions.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    },
+    {
+      "coverage_id": "apps%2Fapi%2Fsrc%2Fidentity%2Fcontrollers%2Faccount.controller.ts%23AccountController::apps%2Fapi%2Fsrc%2Fidentity%2Fguards%2Faccount-auth.guard.ts%23AccountAuthGuard::apps%2Fapi%2Fsrc%2Fidentity::DATA-ISOLATION-AND-LIFECYCLE.md%23Missing%20tenant%20or%20owner%20enforcement",
+      "disposition": "covered",
+      "reviewed_paths": [
+        "docs/adr/0023-organization-is-the-tenant-root.md",
+        "apps/api/src/identity/controllers/organizations.controller.ts",
+        "apps/api/src/identity/guards/account-auth.guard.ts",
+        "apps/api/src/identity/services/identity.service.ts",
+        "apps/api/src/identity/repo/identity.repo.ts",
+        "apps/api/src/identity/repo/identity.mapper.ts",
+        "apps/api/prisma/schema.prisma",
+        "apps/api/src/identity/dto/identity.dto.ts",
+        "apps/api/src/auth/scopes.ts",
+        "apps/api/test/identity.e2e.test.ts",
+        "apps/api/test/identity-security.e2e.test.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-identity",
+          "reviewed_paths": [
+            "docs/adr/0023-organization-is-the-tenant-root.md",
+            "apps/api/src/identity/controllers/organizations.controller.ts",
+            "apps/api/src/identity/guards/account-auth.guard.ts",
+            "apps/api/src/identity/services/identity.service.ts",
+            "apps/api/src/identity/repo/identity.repo.ts",
+            "apps/api/src/identity/repo/identity.mapper.ts",
+            "apps/api/prisma/schema.prisma"
+          ],
+          "invariant": "Given a verified stored Account id, every identity Project read/write binds the selected Organization to that Account's stored Membership, and membership administration requires an owner of that same Organization.",
+          "method": "source",
+          "result": "listProjects and createProject call requireMembership(accountId, orgId), whose query is scoped to accountId and whose comparison uses the requested orgId. Project listing queries where orgId; slug lookup uses the composite orgId/slug key; new Projects take orgId from the checked route argument. addMember checks an owner Membership for the same orgId and inserts a fixed member role. The guard reloads Account and Membership state rather than trusting roles in a JWT. No missing Organization predicate or weaker sibling route was found. The separate unverified-email principal-selection candidate is linked to the access-control unit.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-identity",
+          "reviewed_paths": [
+            "apps/api/src/identity/controllers/organizations.controller.ts",
+            "apps/api/src/identity/services/identity.service.ts",
+            "apps/api/src/identity/repo/identity.repo.ts",
+            "apps/api/src/identity/dto/identity.dto.ts",
+            "apps/api/src/auth/scopes.ts",
+            "apps/api/test/identity.e2e.test.ts",
+            "apps/api/test/identity-security.e2e.test.ts"
+          ],
+          "invariant": "Only an owner can create an OAuth client, and that client's Project and scopes must remain within the selected Organization and public scope catalog.",
+          "method": "source",
+          "result": "createOAuthClient requires owner(accountId, orgId), loads the requested Project and compares project.orgId with orgId before storing the client. It generates the client id and secret itself, stores a SHA-256 digest of the random secret, and repeats the scope allowlist check in the service. config:export, tokens:manage and fix:trigger are outside the public catalog. The DTO rejects extra fields. Existing cross-Organization and forbidden-scope tests describe the same controls; they were not run. No cross-scope creation path remains in this unit.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    },
+    {
+      "coverage_id": "apps%2Fapi%2Fsrc%2Fidentity%2Fcontrollers%2Faccount.controller.ts%23AccountController::apps%2Fapi%2Fsrc%2Fidentity%2Fguards%2Faccount-auth.guard.ts%23AccountAuthGuard::apps%2Fapi%2Fsrc%2Fidentity::RESOURCE-EXHAUSTION-AND-AVAILABILITY.md%23Pre-authentication%20work%20imbalance",
+      "disposition": "candidate",
+      "reviewed_paths": [
+        "package.json",
+        "apps/api/src/app.factory.ts",
+        "apps/api/src/app.module.ts",
+        "apps/api/src/identity/identity.module.ts",
+        "apps/api/src/identity/controllers/account.controller.ts",
+        "apps/api/src/identity/dto/identity.dto.ts",
+        "apps/api/src/identity/services/identity.service.ts",
+        "apps/api/src/identity/repo/identity.repo.ts",
+        "apps/api/src/auth/controllers/oauth.controller.ts",
+        "apps/api/src/main.ts",
+        "deploy/compose/graveshift.compose.yml"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-identity",
+          "reviewed_paths": [
+            "package.json",
+            "apps/api/src/app.factory.ts",
+            "apps/api/src/identity/controllers/account.controller.ts",
+            "apps/api/src/identity/dto/identity.dto.ts",
+            "apps/api/src/identity/services/identity.service.ts",
+            "apps/api/src/identity/repo/identity.repo.ts"
+          ],
+          "invariant": "Cheap unauthenticated inputs must encounter an effective aggregate work bound before memory-hard password operations consume shared API resources.",
+          "method": "source",
+          "result": "Registration accepts email up to 254 characters and password from 12 to 256 characters, then performs an Argon2id hash and persists one Account for each unused email. Login for an existing Account invokes password verification even for a wrong password. Unknown-email login exits before verification. DTO and parser limits constrain one request's size, but these small accepted inputs reach the password API without a source-visible submission budget, service semaphore, deadline or cancellation path. No cost measurement, stress test or persistence fixture was run.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-identity",
+          "reviewed_paths": [
+            "apps/api/src/app.module.ts",
+            "apps/api/src/identity/identity.module.ts",
+            "apps/api/src/identity/controllers/account.controller.ts",
+            "apps/api/src/auth/controllers/oauth.controller.ts",
+            "apps/api/src/main.ts",
+            "deploy/compose/graveshift.compose.yml"
+          ],
+          "invariant": "Configured throttling or deployment admission controls must actually cover registration/login before the expensive work begins.",
+          "method": "source",
+          "result": "AppModule configures ThrottlerModule but registers no global guard. Unlike OAuthController.token, AccountController.register/login have no ThrottlerGuard, and IdentityModule installs no alternative admission control. HTTP identity routes share the API process with other Organizations. The support Compose definition publishes the optional API only on loopback; remote exposure, upstream admission policy, Bun worker/queue bounds and effective CPU/memory budgets are not established by these sources. A shared-availability impact therefore remains conditional and needs validation.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [
+        "identity/register-login/unthrottled-argon2-work"
+      ],
+      "unresolved": [
+        "No target execution is allowed without complete OS memory and cumulative disk controls, so no bounded admission or resource observation was made.",
+        "The actual upstream rate/concurrency policy, identity-route exposure, Bun password-worker queue bounds and shared-process resource budget require an owner-observed configuration check."
+      ]
+    },
+    {
+      "coverage_id": "apps%2Fapi%2Fsrc%2Fidentity%2Fcontrollers%2Faccount.controller.ts%23AccountController::apps%2Fapi%2Fsrc%2Fidentity%2Fguards%2Faccount-auth.guard.ts%23AccountAuthGuard::apps%2Fapi%2Fsrc%2Fidentity::WEB-PROTOCOL-AND-AUTH.md%23JWT%20verification%20and%20claim%20binding",
+      "disposition": "covered",
+      "reviewed_paths": [
+        "apps/api/src/identity/guards/account-auth.guard.ts",
+        "apps/api/src/identity/services/identity.service.ts",
+        "apps/api/src/identity/identity.types.ts",
+        "apps/api/src/identity/repo/identity.repo.ts",
+        "apps/api/src/auth/oauth-principal.ts",
+        "apps/api/src/auth/services/oauth-token.service.ts",
+        "apps/api/src/auth/oauth-client-access.strategy.ts",
+        "apps/api/src/auth/oauth-client-credentials.strategy.ts",
+        "apps/api/src/auth/auth.config.module.ts",
+        "apps/api/src/auth/env.schema.ts",
+        "apps/api/src/config/env.schema.ts",
+        "apps/api/src/auth/scopes.ts",
+        "apps/api/package.json",
+        "bun.lock",
+        "apps/api/src/auth/services/oauth-token.service.spec.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-identity",
+          "reviewed_paths": [
+            "apps/api/src/identity/guards/account-auth.guard.ts",
+            "apps/api/src/identity/services/identity.service.ts",
+            "apps/api/src/identity/identity.types.ts",
+            "apps/api/src/config/env.schema.ts",
+            "apps/api/package.json",
+            "bun.lock"
+          ],
+          "invariant": "An Account bearer must be signed by the configured issuer for the fixed Account audience and bind to an existing Account; attacker-supplied JWT headers must not select an algorithm or key.",
+          "method": "source",
+          "result": "Account issuance pins HS256, the configured secret/issuer, graveshift-account audience and a 3600-second expiry. The guard calls verifyAsync with the same issuer/audience and algorithms restricted to HS256, then queries the Account by sub. No decode-only path, request-selected key, kid/jku/x5u fetch, or ignoreExpiration/ignoreNotBefore option is present. Versions are pinned, including @nestjs/jwt 12.0.5 and jsonwebtoken 9.0.3 in bun.lock. The operator secret is required at boot. No source-visible invalid-signature, foreign-audience or alternate-principal acceptance path was found; malformed-token fixtures were not executed.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-identity",
+          "reviewed_paths": [
+            "apps/api/src/identity/repo/identity.repo.ts",
+            "apps/api/src/auth/oauth-principal.ts",
+            "apps/api/src/auth/services/oauth-token.service.ts",
+            "apps/api/src/auth/oauth-client-access.strategy.ts",
+            "apps/api/src/auth/oauth-client-credentials.strategy.ts",
+            "apps/api/src/auth/auth.config.module.ts",
+            "apps/api/src/auth/env.schema.ts",
+            "apps/api/src/config/env.schema.ts",
+            "apps/api/src/auth/scopes.ts",
+            "apps/api/src/auth/services/oauth-token.service.spec.ts"
+          ],
+          "invariant": "OAuth credentials must authenticate a stored client, issue only its stored Project/scope grant, and remain distinct from Account sessions.",
+          "method": "source",
+          "result": "Exchange loads a stored client, compares a fixed-length SHA-256 digest with timingSafeEqual, and issues a five-minute HS256 token using only stored projectId/scopes. Both Passport strategies pin issuer, audience, algorithm and key. verifyOAuthPrincipal requires an unexpired numeric exp, exact issuer/audience, a numeric Project id, a current matching client and a scope subset of its current stored grant. Endpoint strategies additionally require their exact management/config scope. Account JWTs lack the OAuth Project/scope claims; OAuth client subjects are generated client ids and must separately resolve to an Account for Account routes. Public issuance gives no attacker-selected Account subject. No reachable token-type confusion was found.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    },
+    {
+      "coverage_id": "apps%2Fapi%2Fsrc%2Fidentity%2Fcontrollers%2Faccount.controller.ts%23AccountController::apps%2Fapi%2Fsrc%2Fidentity%2Fguards%2Faccount-auth.guard.ts%23AccountAuthGuard::apps%2Fapi%2Fsrc%2Fidentity::WEB-PROTOCOL-AND-AUTH.md%23Session%20fixation%20and%20invalidation",
+      "disposition": "candidate",
+      "reviewed_paths": [
+        "apps/api/src/identity/controllers/account.controller.ts",
+        "apps/api/src/identity/controllers/organizations.controller.ts",
+        "apps/api/src/identity/guards/account-auth.guard.ts",
+        "apps/api/src/identity/services/identity.service.ts",
+        "apps/api/src/identity/repo/identity.repo.ts",
+        "apps/api/src/identity/identity.types.ts",
+        "apps/api/prisma/schema.prisma",
+        "apps/api/test/identity.e2e.test.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-identity",
+          "reviewed_paths": [
+            "apps/api/src/identity/controllers/account.controller.ts",
+            "apps/api/src/identity/guards/account-auth.guard.ts",
+            "apps/api/src/identity/services/identity.service.ts",
+            "apps/api/src/identity/repo/identity.repo.ts",
+            "apps/api/src/identity/identity.types.ts",
+            "apps/api/prisma/schema.prisma"
+          ],
+          "invariant": "A password change must prevent other holders of pre-change bearer tokens from retaining or gaining the Account's protected authority.",
+          "method": "source",
+          "result": "Login issues a one-hour JWT containing sub/email with no session id or password epoch. changePassword checks the current password, then setPassword changes only passwordHash and mustChangePassword. The Account record has no session-revocation state, and the guard compares neither JWT issue time nor a version against the password change. Account existence, signature, audience, expiry and current Membership checks remain effective, but none invalidates another holder's old bearer. No two-session check was executed.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-identity",
+          "reviewed_paths": [
+            "apps/api/src/identity/controllers/organizations.controller.ts",
+            "apps/api/src/identity/guards/account-auth.guard.ts",
+            "apps/api/src/identity/services/identity.service.ts",
+            "apps/api/test/identity.e2e.test.ts"
+          ],
+          "invariant": "Completion of the bootstrap password change must not silently upgrade independently held first-login tokens to owner-capable sessions.",
+          "method": "source",
+          "result": "The guard reads current mustChangePassword from storage on each request. Once the legitimate holder changes the password, every still-valid pre-change bearer sees false and can reach protected Organization routes using the stored owner Membership. The existing identity e2e test explicitly reuses its pre-change token after changing the password; that is test source, not an observed run, and it does not distinguish another session from the caller's current one. The candidate stops at creation of a dummy Project-bound OAuth client under the Account's existing Organization, not deployment-wide administration.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [
+        "identity/account-password-change/stale-jwt"
+      ],
+      "unresolved": [
+        "An isolated two-session password-change and first-login transition check is blocked by the source-only policy and the absence of complete OS memory and cumulative disk controls; no stale-token authorization result was observed."
+      ]
+    }
+  ],
+  "candidates": [
+    {
+      "proposed_verdict": "needs_validation",
+      "fingerprint": "identity/register-addMember/unverified-email-membership",
+      "title": "Email-based member addition can select an attacker who registered the intended member's email first",
+      "description": "An unauthenticated attacker can register a not-yet-registered person's email with an attacker-chosen password, without controlling that mailbox. If an Organization owner later adds the intended person by that email, the implementation immediately grants membership to the attacker's Account. The attacker can discover that Organization through profile and read its Project metadata or create Projects through the normal member routes. This requires the owner's independent add-member action; registration alone does not grant access to an existing Organization.",
+      "claimed_root_cause": "register treats syntactic email validity as sufficient to reserve the global Account identity. addMember subsequently treats the same unverified email as the authority for selecting the person who receives a protected Membership. There is no mailbox-verification state or email-bound invitation acceptance between those two operations. The owner check is present and correctly scoped, but it authenticates the grantor without authenticating the intended recipient's email ownership.",
+      "trace": [
+        {
+          "kind": "entrypoint",
+          "file": "apps/api/src/identity/controllers/account.controller.ts",
+          "line": 38,
+          "scope": "AccountController.register",
+          "description": "Public POST /api/register accepts the intended member's email and an attacker-chosen password without a bearer or mailbox challenge."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/api/src/identity/dto/identity.dto.ts",
+          "line": 8,
+          "scope": "RegisterDto",
+          "description": "The email check establishes format and length; the request contains no proof of control of that email."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/api/src/identity/services/identity.service.ts",
+          "line": 79,
+          "scope": "IdentityService.register",
+          "description": "The email is stored with the attacker's password hash and mustChangePassword false. A previously unclaimed email is sufficient."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/api/src/identity/services/identity.service.ts",
+          "line": 90,
+          "scope": "IdentityService.login",
+          "description": "The attacker authenticates using the password chosen during registration and obtains a bearer for the preclaimed Account."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/api/src/identity/controllers/organizations.controller.ts",
+          "line": 69,
+          "scope": "OrganizationsController.addMember",
+          "description": "An existing Organization owner independently submits the intended person's email to the member-addition route."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/api/src/identity/services/identity.service.ts",
+          "line": 166,
+          "scope": "IdentityService.addMember",
+          "description": "The correctly scoped owner check passes, then the unverified email resolves directly to the attacker's Account and addMemberToOrg writes its member Membership."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/api/src/identity/guards/account-auth.guard.ts",
+          "line": 56,
+          "scope": "AccountAuthGuard.canActivate",
+          "description": "The attacker's valid bearer resolves to the stored Account, and its newly granted Membership satisfies the Organization gate."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/api/src/identity/services/identity.service.ts",
+          "line": 161,
+          "scope": "IdentityService.listProjects",
+          "description": "The attacker obtains orgId from its profile and now passes requireMembership for the owner's Organization."
+        },
+        {
+          "kind": "sink",
+          "file": "apps/api/src/identity/repo/identity.repo.ts",
+          "line": 226,
+          "scope": "PrismaIdentityRepo.listProjects",
+          "description": "The normal scoped query returns that Organization's Project records to the attacker-selected Account."
+        }
+      ],
+      "evidence": [
+        {
+          "file": "apps/api/prisma/schema.prisma",
+          "line": 56,
+          "description": "Account has a unique email and passwordHash but no email-ownership verification state; registration can reserve the identity before the intended person."
+        },
+        {
+          "file": "apps/api/src/identity/services/identity.service.ts",
+          "line": 72,
+          "description": "Registration performs uniqueness lookup and password hashing, then adds the Account without mailbox verification."
+        },
+        {
+          "file": "apps/api/src/identity/services/identity.service.ts",
+          "line": 166,
+          "description": "The strongest visible control is requireOwner(accountId, orgId); recipient selection nevertheless uses findAccountByEmail and immediately inserts membership."
+        },
+        {
+          "file": "apps/api/src/identity/services/identity.service.ts",
+          "line": 108,
+          "description": "The attacker's own profile lists its Organization ids, so no unknown orgId is required after the owner grants membership."
+        },
+        {
+          "file": "apps/api/src/identity/services/identity.service.ts",
+          "line": 143,
+          "description": "Project creation requires only Membership in the selected Organization, providing a bounded mutation consequence in addition to Project listing."
+        }
+      ],
+      "blockers": [
+        "No dummy-principal HTTP or service fixture was executed. Target-controlled execution is prohibited because complete OS-enforced memory and cumulative disk controls are unavailable; source inspection alone does not satisfy the required observed-boundary-result gate."
+      ],
+      "validation_plan": {
+        "local": "After the parent establishes every required sandbox control, use only dummy Accounts, a dummy Organization and one dummy Project. Register an attacker-controlled password under intended-member@identity.test without mailbox proof and log in. Have a separate legitimate dummy owner add that email. With the attacker's bearer, read its own profile and request the dummy Organization's Project list. Stop at the first dummy Project returned or Membership exposed. Include a negative case requiring recipient email proof before that Membership becomes usable; do not contact mail systems or real people."
+      }
+    },
+    {
+      "proposed_verdict": "needs_validation",
+      "fingerprint": "identity/register-login/unthrottled-argon2-work",
+      "title": "Public identity routes bypass the configured throttle before password work",
+      "description": "Small valid unauthenticated registration requests trigger Argon2id hashing and Account insertion, while login requests naming an existing Account trigger password verification even when the password is wrong. AccountController does not use the configured ThrottlerGuard. If upstream admission and Bun's effective worker/queue controls do not protect the shared API budget, anonymous password work could reduce availability for other Organizations. The source establishes the admission gap and input-to-work path, not a measured service outage or unbounded native worker count.",
+      "claimed_root_cause": "ThrottlerModule is configured without a global guard, and the public identity controller omits the per-route guard that OAuth token exchange explicitly installs. The identity service submits password work without a source-visible per-IP/global work budget or submission bound. Per-field and parser size limits do not stop repeated small requests. Runtime worker limits and deployed upstream controls may constrain the impact and are not assumed absent.",
+      "trace": [
+        {
+          "kind": "entrypoint",
+          "file": "apps/api/src/identity/controllers/account.controller.ts",
+          "line": 38,
+          "scope": "AccountController.register and AccountController.login",
+          "description": "Public registration and the adjacent auth/login handler accept requests without an authentication or throttle guard."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/api/src/app.module.ts",
+          "line": 53,
+          "scope": "AppModule ThrottlerModule configuration",
+          "description": "A configured throttler does not cover these routes automatically: AppModule registers no APP_GUARD and the identity module provides no alternative admission guard."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/api/src/identity/dto/identity.dto.ts",
+          "line": 8,
+          "scope": "RegisterDto and LoginDto",
+          "description": "A short syntactically valid email and 12-to-256-character password pass validation; a large request body is unnecessary."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/api/src/identity/services/identity.service.ts",
+          "line": 74,
+          "scope": "IdentityService.register",
+          "description": "An unused email passes the uniqueness lookup and reaches password hashing without a submission budget. Repeated unique emails avoid the duplicate-account early exit."
+        },
+        {
+          "kind": "sink",
+          "file": "apps/api/src/identity/services/identity.service.ts",
+          "line": 81,
+          "scope": "IdentityService.register and IdentityService.login password operations",
+          "description": "Registration submits Argon2id work to Bun.password.hash; the independent existing-email login variant submits Bun.password.verify at line 92. These costs occur in the shared API process before successful authentication."
+        }
+      ],
+      "evidence": [
+        {
+          "file": "apps/api/src/identity/controllers/account.controller.ts",
+          "line": 38,
+          "description": "Neither public identity handler has ThrottlerGuard; protected handlers explicitly declare their AccountAuthGuard."
+        },
+        {
+          "file": "apps/api/src/app.module.ts",
+          "line": 53,
+          "description": "The application configures a rate limit but does not install it globally."
+        },
+        {
+          "file": "apps/api/src/auth/controllers/oauth.controller.ts",
+          "line": 20,
+          "description": "The sibling public OAuth token route explicitly installs ThrottlerGuard, showing the guard-based enforcement used elsewhere."
+        },
+        {
+          "file": "apps/api/src/identity/services/identity.service.ts",
+          "line": 81,
+          "description": "An accepted unused email causes Argon2id hashing followed by durable Account creation."
+        },
+        {
+          "file": "apps/api/src/identity/services/identity.service.ts",
+          "line": 92,
+          "description": "A known email causes password verification even when the attempt will return UnauthorizedException; unknown emails skip this cost."
+        },
+        {
+          "file": "apps/api/src/identity/dto/identity.dto.ts",
+          "line": 8,
+          "description": "Input length limits are effective per request but do not bound aggregate submissions or work already admitted."
+        },
+        {
+          "file": "deploy/compose/graveshift.compose.yml",
+          "line": 104,
+          "description": "The optional support API publishes on loopback. This is a visible reachability constraint; public routing and any upstream work limits cannot be inferred from this scaffold."
+        }
+      ],
+      "blockers": [
+        "No bounded admission fixture or native password-cost observation was run because target execution is prohibited without complete OS memory and cumulative disk controls.",
+        "The effective upstream rate/concurrency limits, reachable identity-route topology, Bun password-worker queue/concurrency bounds and shared API resource budget are not established. Without them, a meaningful cross-Organization availability effect cannot be asserted."
+      ],
+      "validation_plan": {
+        "local": "Once a complete sandbox is available, configure a dummy identity application with a rate limit of one and replace password hashing/verification with bounded deferred mocks. Submit only two small requests per registration/login variant and record whether the second reaches the password-work mock or is rejected before admission. Inspect worker/queue configuration rather than stressing real Argon2. Use a separately bounded dummy request to determine which resources are shared, then stop; do not perform saturation testing.",
+        "deployment": "The owner should inspect the actual API ingress or local caller boundary, per-IP and aggregate admission policy, Bun password-work queue limits, and API CPU/memory isolation. Establish whether those controls cap anonymous admitted work below the shared resource budget and how pending work is cleared. This is a configuration and capacity review, not a request to send traffic to a deployed service."
+      }
+    },
+    {
+      "proposed_verdict": "needs_validation",
+      "fingerprint": "identity/account-password-change/stale-jwt",
+      "title": "Password changes leave other pre-change Account bearers usable",
+      "description": "A holder of a copied, still-valid Account bearer can continue using it after the legitimate Account holder changes the password, for the remainder of the one-hour token lifetime. For the bootstrap Account, a bearer issued while mustChangePassword is true also becomes owner-capable when somebody else completes the password change. The source has no session-specific state that distinguishes the current caller's bearer from another holder's bearer. The candidate requires prior possession of a valid token and stops at authority within that Account's own Organization; it does not establish a way to obtain a token or gain deployment-wide administration.",
+      "claimed_root_cause": "Account JWTs contain no session identifier or password epoch. setPassword changes only passwordHash and mustChangePassword, while AccountAuthGuard verifies the static signing key and current Account/Membership state without checking an issuance epoch or revocation state. Clearing mustChangePassword therefore affects every unexpired token for that Account, including separately held first-login tokens. Preserving the current password-changing session may be intentional, but this representation cannot invalidate other sessions separately.",
+      "trace": [
+        {
+          "kind": "entrypoint",
+          "file": "apps/api/src/identity/controllers/account.controller.ts",
+          "line": 47,
+          "scope": "AccountController.login",
+          "description": "An Account login before the password change issues the bearer later held by the attacker. The attacker must already possess this valid token."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/api/src/identity/services/identity.service.ts",
+          "line": 95,
+          "scope": "IdentityService.login",
+          "description": "The bearer contains Account sub/email and a 3600-second expiry, with no session identifier or password-version binding."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/api/src/identity/controllers/account.controller.ts",
+          "line": 62,
+          "scope": "AccountController.changePassword",
+          "description": "The legitimate holder uses a separate session to change the Account password; the service verifies the current password before writing the new hash."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/api/src/identity/repo/identity.repo.ts",
+          "line": 105,
+          "scope": "PrismaIdentityRepo.setPassword",
+          "description": "Only passwordHash and mustChangePassword are updated. No bearer-revocation state is changed."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/api/src/identity/guards/account-auth.guard.ts",
+          "line": 45,
+          "scope": "AccountAuthGuard.canActivate",
+          "description": "The old bearer still passes signature/audience verification before expiry. The stored Account exists, and its current mustChangePassword false value removes the first-login restriction for all such bearers."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/api/src/identity/services/identity.service.ts",
+          "line": 184,
+          "scope": "IdentityService.createOAuthClient",
+          "description": "The stale bearer supplies the same Account id, whose existing owner Membership and same-Organization Project satisfy the otherwise correct authorization checks."
+        },
+        {
+          "kind": "sink",
+          "file": "apps/api/src/identity/repo/identity.repo.ts",
+          "line": 245,
+          "scope": "PrismaIdentityRepo.addOAuthClient",
+          "description": "A holder of the pre-change token can create a new Project-bound OAuth client under the Account's Organization without knowing the new password."
+        }
+      ],
+      "evidence": [
+        {
+          "file": "apps/api/src/identity/services/identity.service.ts",
+          "line": 95,
+          "description": "Account token issuance binds only sub/email, static issuer/audience/key and one-hour expiration."
+        },
+        {
+          "file": "apps/api/src/identity/services/identity.service.ts",
+          "line": 202,
+          "description": "Changing the password correctly requires the current password, but the successful path does not revoke or rotate pre-existing bearer state."
+        },
+        {
+          "file": "apps/api/src/identity/repo/identity.repo.ts",
+          "line": 108,
+          "description": "The password write changes only passwordHash and mustChangePassword."
+        },
+        {
+          "file": "apps/api/src/identity/guards/account-auth.guard.ts",
+          "line": 56,
+          "description": "The strongest current-state controls reload Account and Memberships; they do not compare token issue time/version with the password change. The first-login gate uses the Account's current boolean."
+        },
+        {
+          "file": "apps/api/prisma/schema.prisma",
+          "line": 56,
+          "description": "Account has no session version, password-change time or revocation relation that the guard could consult."
+        },
+        {
+          "file": "apps/api/test/identity.e2e.test.ts",
+          "line": 173,
+          "description": "The existing test expects a pre-change token to work after the root password change. This was read as source, not executed, and does not cover invalidating a separately held token."
+        }
+      ],
+      "blockers": [
+        "A bounded two-session lifecycle check was not executed because the assignment prohibits target-controlled execution without complete OS memory and cumulative disk controls. The required local observation of stale-token authorization is therefore unavailable."
+      ],
+      "validation_plan": {
+        "local": "After the parent establishes the complete sandbox, create a dummy owner Account, its Organization and one dummy Project. Issue two bearer sessions at distinct controlled clock instants. Use the second session and the current dummy password to change the password, then try exactly one protected OAuth-client creation with the first bearer before its original expiry. Repeat the transition with a dummy bootstrap Account: verify the first bearer is blocked while mustChangePassword is true, change the password through the second session, then try that first bearer once. Stop at the first dummy client record or rejection. Do not exchange the resulting client secret, contact external services or use real credentials."
+      }
+    }
+  ],
+  "hardening": [
+    "The zero-membership onboarding check is not serialized across concurrent distinct-slug requests. Its source-visible consequence is extra fresh self-owned Organizations, which the normal Organization-creation route already permits, so no security finding is claimed for that race.",
+    "AccountAuthGuard could defensively require a nonempty string sub and a mandatory numeric exp before the repository lookup. The local issuer already creates a string Account id and finite expiration, and no attacker-controlled signed-token issuer or authentication bypass was found for these omitted explicit shape checks."
+  ],
+  "uncovered": []
+}

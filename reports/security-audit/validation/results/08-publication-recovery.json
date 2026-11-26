@@ -1,0 +1,54 @@
+{
+  "lead": "fixer/recovery/parent-only-publication-binding",
+  "verdict": "confirmed",
+  "observed": {
+    "plan": {
+      "repo": "acme/widgets",
+      "branch": "refs/heads/fixer-inc-0123456789abcdef0123456789abcdef-fix-security-issue",
+      "baseSha": "base-1111111111111111111111111111111111111111"
+    },
+    "planKeys": [
+      "baseSha",
+      "branch",
+      "repo"
+    ],
+    "planCarriesExpectedTree": false,
+    "baseSha": "base-1111111111111111111111111111111111111111",
+    "verifiedTree": "tree-verified-2222222222222222222222222222222222222222",
+    "substitutedTree": "tree-substituted-33333333333333333333333333333333333333",
+    "treesDiffer": true,
+    "bothCommitsShareSingleParent": true,
+    "draftHeadSha": "commit-substituted-55555555555555555555555555555555555555",
+    "returnedByGetExistingDraft": {
+      "repo": "acme/widgets",
+      "branch": "refs/heads/fixer-inc-0123456789abcdef0123456789abcdef-fix-security-issue",
+      "number": 7,
+      "url": "https://github.com/acme/widgets/pull/7",
+      "headSha": "commit-substituted-55555555555555555555555555555555555555"
+    },
+    "returnedByRecoverPublication": {
+      "repo": "acme/widgets",
+      "branch": "refs/heads/fixer-inc-0123456789abcdef0123456789abcdef-fix-security-issue",
+      "number": 7,
+      "url": "https://github.com/acme/widgets/pull/7",
+      "headSha": "commit-substituted-55555555555555555555555555555555555555"
+    },
+    "headShaAccepted": true,
+    "transportCalls": [
+      "GET /repos/acme/widgets/git/commits/commit-verified-4444444444444444444444444444444444444444",
+      "GET /repos/acme/widgets/git/commits/commit-substituted-55555555555555555555555555555555555555",
+      "GET /repos/acme/widgets/pulls?state=open&head=acme%3Afixer-inc-0123456789abcdef0123456789abcdef-fix-security-issue&per_page=2",
+      "GET /repos/acme/widgets/git/commits/commit-substituted-55555555555555555555555555555555555555",
+      "GET /repos/acme/widgets/git/ref/heads/fixer-inc-0123456789abcdef0123456789abcdef-fix-security-issue",
+      "GET /repos/acme/widgets/pulls?state=open&head=acme%3Afixer-inc-0123456789abcdef0123456789abcdef-fix-security-issue&per_page=2",
+      "GET /repos/acme/widgets/git/commits/commit-substituted-55555555555555555555555555555555555555",
+      "GET /repos/acme/widgets/git/ref/heads/fixer-inc-0123456789abcdef0123456789abcdef-fix-security-issue"
+    ],
+    "sourceLines": [
+      "packages/fixer/src/rest.ts:140-183 (getExistingDraft: parent-only checks at 168-175, no tree check)",
+      "packages/fixer/src/verified-publication.ts:8-12 (PublicationPlan = repo/branch/baseSha only)",
+      "packages/fixer/src/verified-publication.ts:29-41 (recoverPublication calls getExistingDraft with those three fields)"
+    ]
+  },
+  "reason": "The substituted head was accepted by both getExistingDraft and the real recoverPublication wrapper. getExistingDraft (rest.ts:140-183) validates only that the draft head sha matches the ref and that the head commit has exactly one parent equal to baseSha (rest.ts:168-175); it never reads the commit tree or compares it to the originally verified tree digest. The persisted PublicationPlan (verified-publication.ts:8-12) contains only repo/branch/baseSha, so no expected-tree binding is possible. Two distinct trees with the same single parent are therefore interchangeable at recovery time."
+}

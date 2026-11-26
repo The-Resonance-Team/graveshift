@@ -1,0 +1,436 @@
+{
+  "units": [
+    {
+      "coverage_id": "apps%2Fapi%2Fsrc%2Fauth%2Fcontrollers%2Fevents.controller.ts%23EventsController::apps%2Fapi%2Fsrc%2Fauth%2Fservices%2Fevent-ingest.service.ts%23EventIngestService::apps%2Fapi%2Fsrc%2Fauth%2Fservices::ATTACK-CLASSES.md%23Access%20control",
+      "disposition": "covered",
+      "reviewed_paths": [
+        "apps/api/src/auth/controllers/events.controller.ts",
+        "apps/api/src/auth/controllers/sentry-events.controller.ts",
+        "apps/api/src/auth/auth.module.ts",
+        "apps/api/src/auth/plugin-api-key.guard.ts",
+        "apps/api/src/auth/sentry-key.guard.ts",
+        "apps/api/src/auth/credential-core.module.ts",
+        "apps/api/src/auth/services/credential.service.ts",
+        "apps/api/src/auth/repo/credential.repo.ts",
+        "apps/api/src/auth/throttle-key.generator.ts",
+        "apps/api/src/auth/services/event-ingest.service.ts",
+        "apps/api/src/auth/services/sentry-ingest.service.ts",
+        "apps/api/src/auth/sentry-event.mapper.ts",
+        "apps/api/src/deploys/deploy.repo.ts",
+        "apps/api/test/events.e2e.test.ts",
+        "apps/api/test/sentry-events.e2e.test.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-ingest",
+          "reviewed_paths": [
+            "apps/api/src/auth/controllers/events.controller.ts",
+            "apps/api/src/auth/controllers/sentry-events.controller.ts",
+            "apps/api/src/auth/auth.module.ts",
+            "apps/api/src/auth/plugin-api-key.guard.ts",
+            "apps/api/src/auth/sentry-key.guard.ts",
+            "apps/api/src/auth/credential-core.module.ts",
+            "apps/api/src/auth/services/credential.service.ts",
+            "apps/api/src/auth/repo/credential.repo.ts",
+            "apps/api/src/auth/throttle-key.generator.ts"
+          ],
+          "invariant": "Both ingestion routes require a current plugin Credential with events:publish; an MCP token, OAuth token, revoked Credential, or throttler identity cannot replace that authority.",
+          "method": "source",
+          "result": "Both controllers install their authentication guards. CredentialService.verify reads the record by token hash, checks revocation and expiry, and checks the requested kind. The Sentry verifier token resolves to that same service. PluginApiKeyGuard checks events:publish and accepts the throttler's credentialPrincipal only after track verified the same nonempty Bearer value; management JWT tracking does not populate that field. SentryKeyGuard independently verifies the key and requires exactly the publish scope. No weaker alternative ingestion controller was registered in the reviewed path.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-ingest",
+          "reviewed_paths": [
+            "apps/api/src/auth/services/event-ingest.service.ts",
+            "apps/api/src/auth/services/sentry-ingest.service.ts",
+            "apps/api/src/auth/sentry-event.mapper.ts",
+            "apps/api/src/deploys/deploy.repo.ts",
+            "apps/api/test/events.e2e.test.ts",
+            "apps/api/test/sentry-events.e2e.test.ts"
+          ],
+          "invariant": "Request fields cannot publish into another Project or another service outside the Credential's binding, including when resolving a Deployment.",
+          "method": "source",
+          "result": "EventIngestService:30-45 compares body.projectId and any non-null service binding before a Deployment lookup or publish. DeployRepo.findByDeployment queries the authenticated Project, SHA, and Environment together. SentryIngestService repeats the Project/service check, and mapSentryEvent:93-103 assigns Project and service from the verified Credential rather than event fields. Unbound plugin Credentials intentionally cover all services in their own Project, as the HTTP test source explicitly specifies. The test sources also specify wrong-Project, wrong-service, expired/revoked-key, and forged Sentry body rejection or isolation; those tests were read, not executed.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    },
+    {
+      "coverage_id": "apps%2Fapi%2Fsrc%2Fauth%2Fcontrollers%2Fevents.controller.ts%23EventsController::apps%2Fapi%2Fsrc%2Fauth%2Fservices%2Fevent-ingest.service.ts%23EventIngestService::apps%2Fapi%2Fsrc%2Fauth%2Fservices::DATA-ISOLATION-AND-LIFECYCLE.md%23Analytics%2C%20logs%2C%20traces%2C%20and%20diagnostics%20as%20alternate%20readers",
+      "disposition": "covered",
+      "reviewed_paths": [
+        "docs/adr/0019-event-identity-and-privacy.md",
+        "packages/core/src/envelope.ts",
+        "packages/core/src/privacy.ts",
+        "packages/core/src/schemas.ts",
+        "packages/redactor/src/index.ts",
+        "packages/redactor/src/detectors.ts",
+        "apps/api/src/auth/services/sentry-ingest.service.ts",
+        "apps/api/src/auth/sentry-event.mapper.ts",
+        "apps/api/src/auth/auth.module.ts",
+        "apps/api/src/auth/services/nats-event-publisher.ts",
+        "packages/events/src/nats.ts",
+        "packages/events/src/publisher.ts",
+        "apps/api/src/auth/services/event-ingest.service.ts",
+        "apps/api/src/audit/audit.mapper.ts",
+        "apps/api/src/audit/audit.repo.ts",
+        "apps/api/src/mcp/events/events.types.ts",
+        "apps/api/src/mcp/events/events.service.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-ingest",
+          "reviewed_paths": [
+            "docs/adr/0019-event-identity-and-privacy.md",
+            "packages/core/src/envelope.ts",
+            "packages/core/src/privacy.ts",
+            "packages/core/src/schemas.ts",
+            "packages/redactor/src/index.ts",
+            "packages/redactor/src/detectors.ts",
+            "apps/api/src/auth/services/sentry-ingest.service.ts",
+            "apps/api/src/auth/sentry-event.mapper.ts",
+            "apps/api/src/auth/auth.module.ts",
+            "apps/api/src/auth/services/nats-event-publisher.ts",
+            "packages/events/src/nats.ts",
+            "packages/events/src/publisher.ts"
+          ],
+          "invariant": "Recognized credentials and sensitive payload keys must pass the documented privacy checks before either HTTP ingestion format reaches the broker, while approved nonsecret identity stays stable.",
+          "method": "source",
+          "result": "ADR 0019 distinguishes approved nonsecret identifiers from free text. prepareEnvelope rejects recognized sensitive identity metadata, recursively redacts string values, drops sensitive or redacted object keys, rejects non-JSON values/accessors/cycles, and validates the final envelope. Sentry's own redaction has a narrower sensitive-key expression, but the production binding is AuthModule -> NatsEventPublisher -> connectNatsPublisher -> createNatsPublisher, whose publish method calls prepareEnvelope again before serialization. Thus the apparent Sentry sensitive-key gap is prevented by a source-visible downstream layer. The DSN and its key are used for authentication and are not copied into the mapped payload. No source-grounded unauthorized disclosure survived this trace.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-ingest",
+          "reviewed_paths": [
+            "apps/api/src/auth/services/event-ingest.service.ts",
+            "apps/api/src/audit/audit.mapper.ts",
+            "apps/api/src/audit/audit.repo.ts",
+            "apps/api/src/mcp/events/events.types.ts",
+            "apps/api/src/mcp/events/events.service.ts"
+          ],
+          "invariant": "The unassigned-event audit copy and Event Occurrences must not restore raw credential-bearing payloads or move the ingested record into another Project.",
+          "method": "source",
+          "result": "The unassigned audit record contains the already-validated event id, Project, optional SHA, and explicitly redacted Environment, rather than the request payload or authentication material. AuditRepo stores and queries that copy under projectId, with Project-scoped event-key deduplication. Event descriptors call prepareEnvelope before projecting declared occurrence fields; EventPollService applies the descriptor's read scope and filters the bound Project before projection. Its identity exemptions therefore receive the prepared identity contract, while other text is redacted again. No raw-ingest diagnostic logger or alternate unsanitized payload write appears in these paths. External analytics/storage access policies were not assumed or probed.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    },
+    {
+      "coverage_id": "apps%2Fapi%2Fsrc%2Fauth%2Fcontrollers%2Fevents.controller.ts%23EventsController::apps%2Fapi%2Fsrc%2Fauth%2Fservices%2Fevent-ingest.service.ts%23EventIngestService::apps%2Fapi%2Fsrc%2Fauth%2Fservices::PROTOCOLS-RPC-AND-MESSAGING.md%23Untrusted%20producer%20treated%20as%20control%20plane",
+      "disposition": "covered",
+      "reviewed_paths": [
+        "docs/adr/0027-deployment-is-the-triage-root.md",
+        "apps/api/src/auth/services/event-ingest.service.ts",
+        "apps/api/src/auth/sentry-event.mapper.ts",
+        "apps/api/src/deploys/deploy.repo.ts",
+        "packages/core/src/schemas.ts",
+        "packages/events/src/consumer.ts",
+        "packages/events/src/subject.ts",
+        "packages/watcher/src/watcher.ts",
+        "packages/watcher/src/rules.ts",
+        "packages/core/src/rules.ts",
+        "apps/daemon/src/observations.ts",
+        "apps/api/src/hauntings/haunting.controller.ts",
+        "apps/api/src/hauntings/haunting.service.ts",
+        "apps/api/src/hauntings/haunting.repo.ts",
+        "apps/api/src/internal/internal.guard.ts",
+        "apps/api/src/internal/project-grant.ts",
+        "apps/api/src/deploys/deployment-closure.ts",
+        "apps/api/src/mcp/events/events.types.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-ingest",
+          "reviewed_paths": [
+            "docs/adr/0027-deployment-is-the-triage-root.md",
+            "apps/api/src/auth/services/event-ingest.service.ts",
+            "apps/api/src/auth/sentry-event.mapper.ts",
+            "apps/api/src/deploys/deploy.repo.ts",
+            "packages/core/src/schemas.ts"
+          ],
+          "invariant": "Telemetry can refer only to an existing Deployment in its authenticated Project and cannot create Deployment facts or make Sentry release/environment fields into a fix point.",
+          "method": "source",
+          "result": "EventIngestService overwrites deploymentId/environment with the result of DeployRepo.findByDeployment(Project, SHA, Environment), or nulls both when either input is absent or no match exists. It never calls append. Sentry mapping does not emit deploymentId or environment and ignores arbitrary release/deployment fields. This matches ADR 0027's explicit acceptance of unassigned Sentry/collector Events. The reviewed ingestion services provide no telemetry-to-Deployment-create command path.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-ingest",
+          "reviewed_paths": [
+            "packages/events/src/consumer.ts",
+            "packages/events/src/subject.ts",
+            "packages/watcher/src/watcher.ts",
+            "packages/watcher/src/rules.ts",
+            "packages/core/src/rules.ts",
+            "apps/daemon/src/observations.ts",
+            "apps/api/src/hauntings/haunting.controller.ts",
+            "apps/api/src/hauntings/haunting.service.ts",
+            "apps/api/src/hauntings/haunting.repo.ts",
+            "apps/api/src/internal/internal.guard.ts",
+            "apps/api/src/internal/project-grant.ts",
+            "apps/api/src/deploys/deployment-closure.ts",
+            "apps/api/src/mcp/events/events.types.ts"
+          ],
+          "invariant": "A caller-chosen source/type/payload is observation data; it must not become an independently authenticated control command or override Project authority at the next state-write boundary.",
+          "method": "source",
+          "result": "Consumer intake re-prepares the Event, checks exact subject/body equality, and checks the granted Project before handing it to observations. Watcher rules dispatch a fixed list of observation types; arbitrary audit.*, fix.*, deployment.*, or work.* names do not directly dispatch durable commands there. Observations derive the Project from the admitted Event and send derived Haunting writes through the separately authenticated internal API. HauntingService checks the stored Project grant, HauntingRepo rejects detections from another Project and writes by the composite Project/id key, and Deployment closure checks the opening SHA/Environment pair before a Project-scoped update. Event catalog prefixes can label untrusted notifications but do not supply durable audit or action approval authority. Telemetry's documented ability to cause a detection/diagnosis in its own scope was not treated as privilege gain. Peer-owned broker deduplication and later fix-execution internals were not investigated further.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    },
+    {
+      "coverage_id": "apps%2Fapi%2Fsrc%2Fauth%2Fcontrollers%2Fevents.controller.ts%23EventsController::apps%2Fapi%2Fsrc%2Fauth%2Fservices%2Fevent-ingest.service.ts%23EventIngestService::apps%2Fapi%2Fsrc%2Fauth%2Fservices::RESOURCE-EXHAUSTION-AND-AVAILABILITY.md%23Decompression%20and%20representation%20amplification",
+      "disposition": "candidate",
+      "reviewed_paths": [
+        "apps/api/src/app.factory.ts",
+        "apps/api/src/app.module.ts",
+        "apps/api/src/auth/controllers/events.controller.ts",
+        "apps/api/src/auth/controllers/sentry-events.controller.ts",
+        "apps/api/src/auth/payload-size.interceptor.ts",
+        "apps/api/src/auth/auth.config.module.ts",
+        "apps/api/src/auth/env.schema.ts",
+        "apps/api/src/auth/sentry-envelope.parser.ts",
+        "apps/api/src/auth/services/sentry-ingest.service.ts",
+        "packages/core/src/envelope.ts",
+        "packages/events/src/streams.ts",
+        "packages/events/src/consumer.ts",
+        "apps/api/src/auth/sentry-event.mapper.ts",
+        "packages/redactor/src/index.ts",
+        "packages/redactor/src/detectors.ts",
+        "apps/api/src/auth/services/event-ingest.service.ts",
+        "packages/core/src/privacy.ts",
+        "apps/api/src/main.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-ingest",
+          "reviewed_paths": [
+            "apps/api/src/app.factory.ts",
+            "apps/api/src/app.module.ts",
+            "apps/api/src/auth/controllers/events.controller.ts",
+            "apps/api/src/auth/controllers/sentry-events.controller.ts",
+            "apps/api/src/auth/payload-size.interceptor.ts",
+            "apps/api/src/auth/auth.config.module.ts",
+            "apps/api/src/auth/env.schema.ts",
+            "apps/api/src/auth/sentry-envelope.parser.ts",
+            "apps/api/src/auth/services/sentry-ingest.service.ts",
+            "packages/core/src/envelope.ts",
+            "packages/events/src/streams.ts",
+            "packages/events/src/consumer.ts"
+          ],
+          "invariant": "Byte counts, parser progress, recursive conversion, and downstream representation limits must prevent unbounded expansion from one accepted ingestion request.",
+          "method": "source",
+          "result": "Sentry raw parsing is configured with a one-MiB limit; parseSentryEnvelope independently caps the whole envelope and event item at 1,048,576 bytes. Item lengths must be nonnegative safe integers, stay within the body, and end at a newline or EOF; each loop advances the byte cursor, unknown item payloads are skipped, and multiple event items are rejected. There is no archive extraction, attachment decoding, or secondary fetch in this parser. Sentry redaction truncates nested containers at depth 64. Core JSON cleaning rejects cycles and unsupported object representations and converts failures to EnvelopeError. Plugin input has a configurable 65,536-byte default and 102,400-byte maximum before its DTO/service processing. Both controllers apply throttling, with a default of 60 requests per client per minute. The stream declares a 128-KiB message limit, and consumer decoding independently rejects larger messages. These controls settle the direct framing/representation-expansion paths; they do not establish a per-string CPU bound for the separate candidate below.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-ingest",
+          "reviewed_paths": [
+            "apps/api/src/auth/sentry-event.mapper.ts",
+            "packages/redactor/src/index.ts",
+            "packages/redactor/src/detectors.ts",
+            "apps/api/src/auth/services/event-ingest.service.ts",
+            "packages/core/src/privacy.ts",
+            "apps/api/src/main.ts"
+          ],
+          "invariant": "An accepted bounded telemetry string must not impose disproportionate synchronous regex work on the API process shared with other Projects.",
+          "method": "source",
+          "result": "mapSentryEvent's eventType calls redact on the complete raw event.type or exception type before slicing the result to 128 characters. redact synchronously runs the email pattern /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/g, whose unanchored greedy local-part scan can retry across a long non-matching token. An event.type consisting of a long ASCII alphabetic token can fit below the Sentry byte caps yet map to a small final Event, so the downstream broker message cap does not prevent this work. Plugin payload strings reach the same detector through prepareEnvelope under the smaller plugin cap; metadata also reaches it through hasSensitiveText. No worker handoff or per-call CPU deadline appears on these paths. Actual Bun regex behavior and meaningful delay to unrelated work were not observed because execution is prohibited without complete memory and cumulative-disk sandbox controls.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [
+        "packages/redactor/src/detectors.ts:email-unanchored-scan"
+      ],
+      "unresolved": [
+        "The supported Bun regex engine's optimization or fallback behavior and the resulting cost at accepted input sizes need a bounded local check; source review alone does not demonstrate shared API availability impact.",
+        "Target-controlled execution is prohibited because complete OS-enforced memory and cumulative-disk sandbox controls are not established. No local execution or artifact promotion was performed."
+      ]
+    },
+    {
+      "coverage_id": "apps%2Fapi%2Fsrc%2Fauth%2Fcontrollers%2Fsentry-events.controller.ts%23SentryEventsController::apps%2Fapi%2Fsrc%2Fauth%2Fservices%2Fevent-ingest.service.ts%23EventIngestService::apps%2Fapi%2Fsrc%2Fauth%2Fservices::PROTOCOLS-RPC-AND-MESSAGING.md%23Envelope%20and%20payload%20identity%20mismatch",
+      "disposition": "covered",
+      "reviewed_paths": [
+        "apps/api/src/auth/sentry-auth.ts",
+        "apps/api/src/auth/sentry-key.guard.ts",
+        "apps/api/src/auth/sentry-envelope.parser.ts",
+        "apps/api/src/auth/sentry-event.mapper.ts",
+        "apps/api/src/auth/services/sentry-ingest.service.ts",
+        "apps/api/src/auth/dto/sentry-params.dto.ts",
+        "apps/api/src/app.factory.ts",
+        "apps/api/src/auth/dto/publish-event.dto.ts",
+        "packages/core/src/schemas.ts",
+        "packages/events/src/subject.ts",
+        "packages/events/src/consumer.ts",
+        "apps/api/src/auth/sentry-envelope.parser.spec.ts",
+        "apps/api/src/auth/sentry-event.mapper.spec.ts",
+        "apps/api/test/sentry-events.e2e.test.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-ingest",
+          "reviewed_paths": [
+            "apps/api/src/auth/sentry-auth.ts",
+            "apps/api/src/auth/sentry-key.guard.ts",
+            "apps/api/src/auth/sentry-envelope.parser.ts",
+            "apps/api/src/auth/sentry-event.mapper.ts",
+            "apps/api/src/auth/services/sentry-ingest.service.ts",
+            "apps/api/src/auth/dto/sentry-params.dto.ts",
+            "apps/api/src/app.factory.ts"
+          ],
+          "invariant": "The authenticated key, Project, service, and selected event identity must have one authoritative interpretation from Sentry authentication through publication.",
+          "method": "source",
+          "result": "All collected query, Sentry Authorization, and envelope-DSN keys must match and have the 64-lowercase-hex form. The DSN parser only extracts the key; it performs no fetch. The numeric route Project must equal the stored Credential Project, and the mapped Project/service are taken only from that Credential. Authentication header reading and complete envelope parsing share the same jsonObject framing helper, so CRLF/padded headers are rejected consistently. A present envelope header event_id takes precedence over the body event_id; only an absent header id permits the body id or generated fallback. Invalid selected ids are rejected, the success response uses the published id, and skipped-only envelopes return a fresh random id. The header/body precedence does not create a second consumer acting on a different protected identity in the reviewed path.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-ingest",
+          "reviewed_paths": [
+            "apps/api/src/auth/dto/publish-event.dto.ts",
+            "packages/core/src/schemas.ts",
+            "packages/events/src/subject.ts",
+            "packages/events/src/consumer.ts",
+            "apps/api/src/auth/sentry-envelope.parser.spec.ts",
+            "apps/api/src/auth/sentry-event.mapper.spec.ts",
+            "apps/api/test/sentry-events.e2e.test.ts"
+          ],
+          "invariant": "Wire framing, type normalization, and subject construction must not let an item boundary or payload selector change the Project or service used by a downstream consumer.",
+          "method": "source",
+          "result": "Length-prefixed payloads use Buffer byte offsets rather than character lengths and require an exact terminating boundary. Non-event frames are skipped by that same framing logic, malformed event JSON is rejected, and more than one event frame is rejected. Plugin DTO/core schemas constrain Project and dotted type tokens, Sentry produces a normalized sentry.* type, and publishSubject validates tokens before constructing the subject. The consumer requires that subject to equal the subject reconstructed from the prepared body. Service-token normalization can collapse punctuation, but it does not mutate the bound service string in the Event body; no HTTP service-binding bypass was established from that representation alone. Parser, mapper, and HTTP regression sources were inspected without executing them. No concrete security-relevant parser disagreement survived the source trace.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    }
+  ],
+  "candidates": [
+    {
+      "proposed_verdict": "needs_validation",
+      "fingerprint": "packages/redactor/src/detectors.ts:email-unanchored-scan",
+      "title": "Allowed telemetry strings may cause superlinear synchronous redaction before truncation",
+      "description": "A producer holding a service-bound plugin Credential can submit a valid Sentry event with a long alphabetic event.type below the one-MiB envelope limit. The mapper redacts that entire string before truncating its normalized type to 128 characters, and its payload projection can omit the original top-level type. The shared email detector has an unanchored greedy local-part expression that can repeatedly scan suffixes of a non-matching token. This creates a source-grounded candidate from one Project's telemetry capability to CPU work on the shared API process; the final Event can be small enough for the broker cap. Plugin payload and identity processing reach the same detector under the smaller plugin request cap. No timing, service interruption, or cross-Project delay was demonstrated, and no severity is assigned.",
+      "claimed_root_cause": "The shared redactor applies an unanchored, potentially quadratic email regex synchronously to caller-controlled strings without a per-string work budget. Sentry eventType invokes it before the only type-length truncation. The strongest visible controls are the one-MiB Sentry raw/parser caps, the plugin default 65,536-byte and maximum 102,400-byte cap, client request throttling, four redaction passes, and a downstream 128-KiB stream message limit. They bound request count, total bytes, passes, or final publication size, but do not establish linear regex work or preempt a synchronous call. Whether the supported Bun engine optimizes this pattern enough to prevent meaningful shared impact is unresolved.",
+      "trace": [
+        {
+          "kind": "entrypoint",
+          "file": "apps/api/src/auth/controllers/sentry-events.controller.ts",
+          "line": 62,
+          "scope": "SentryEventsController.ingest",
+          "description": "A throttled caller with a valid plugin publish Credential submits an envelope; Project and service remain constrained by SentryKeyGuard."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/api/src/app.factory.ts",
+          "line": 17,
+          "scope": "configureApp raw envelope parser",
+          "description": "The route accepts a raw envelope up to one MiB; it does not impose a separate maximum on the JSON event.type string."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/api/src/auth/sentry-envelope.parser.ts",
+          "line": 49,
+          "scope": "eventPayload and parseSentryEnvelope",
+          "description": "The parser checks whole-envelope and event-item byte caps and parses an event JSON object without a per-field string-length bound."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/api/src/auth/services/sentry-ingest.service.ts",
+          "line": 72,
+          "scope": "SentryIngestService.ingest",
+          "description": "The accepted event object is passed to mapSentryEvent before final envelope validation or broker publication."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/api/src/auth/sentry-event.mapper.ts",
+          "line": 23,
+          "scope": "eventType",
+          "description": "The raw exception type or event.type is passed to redact in full at line 25; the 128-character slice occurs afterward at line 28. A long top-level event.type is not copied into the mapped payload."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/redactor/src/index.ts",
+          "line": 12,
+          "scope": "pass and redact",
+          "description": "The synchronous detector loop calls String.replace for the email expression on the API request's execution path; the maximum of four passes does not limit the work of one match attempt."
+        },
+        {
+          "kind": "sink",
+          "file": "packages/redactor/src/detectors.ts",
+          "line": 79,
+          "scope": "DETECTORS email pattern",
+          "description": "The unanchored [A-Za-z0-9._%+-]+ local part followed by a required @ can rescan successive suffixes of a long non-matching alphabetic token. Engine behavior and meaningful shared CPU delay require bounded validation."
+        }
+      ],
+      "evidence": [
+        {
+          "file": "apps/api/src/auth/sentry-event.mapper.ts",
+          "line": 19,
+          "description": "eventType chooses unbounded event text, redacts before truncation, then emits at most 128 normalized suffix characters; the mapped payload at lines 87-91 contains only exception, message, and request."
+        },
+        {
+          "file": "packages/redactor/src/detectors.ts",
+          "line": 79,
+          "description": "The email pattern is /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}/g, with no preceding token boundary or explicit local-part length bound."
+        },
+        {
+          "file": "packages/redactor/src/index.ts",
+          "line": 23,
+          "description": "redact invokes detector passes synchronously and has no cancellation, worker isolation, or elapsed-work budget."
+        },
+        {
+          "file": "apps/api/src/app.factory.ts",
+          "line": 24,
+          "description": "The Sentry raw-body limit is one MiB; this is an effective input-byte control but permits a long single type token."
+        },
+        {
+          "file": "apps/api/src/auth/sentry-envelope.parser.ts",
+          "line": 80,
+          "description": "The parser independently enforces the default whole-envelope and event-item byte limits before event mapping; the candidate must remain within both."
+        },
+        {
+          "file": "apps/api/src/app.module.ts",
+          "line": 57,
+          "description": "Both ingestion controllers use the configured client throttler. A meaningful proof must use a single admitted request, rather than rely on bypassing or exceeding the rate limit."
+        },
+        {
+          "file": "apps/api/src/auth/env.schema.ts",
+          "line": 35,
+          "description": "Plugin events have a 65,536-byte default and 102,400-byte configuration ceiling; the adjacent throttler defaults to 60 requests per 60,000 ms."
+        },
+        {
+          "file": "packages/core/src/envelope.ts",
+          "line": 18,
+          "description": "The plugin sibling reaches redact through recursive payload cleaning; privacy.ts also applies the same detector set to metadata using hasSensitiveText."
+        },
+        {
+          "file": "packages/events/src/streams.ts",
+          "line": 11,
+          "description": "The declared 128-KiB stream message limit is downstream of the Sentry type redaction and can still admit the mapper's small final representation."
+        },
+        {
+          "file": "apps/api/src/main.ts",
+          "line": 14,
+          "description": "The API bootstrap starts one Nest application listener. The reviewed redaction path executes in that application, without a source-visible per-Project worker boundary."
+        }
+      ],
+      "blockers": [
+        "Complete OS-enforced memory and cumulative-disk sandbox controls are not established, and the assignment forbids all target-controlled execution. No regex fixture, API process, test, or benchmark was run; there is no observed result or retained local artifact.",
+        "The supported Bun/JavaScriptCore regex optimizer or fallback behavior may change the cost of this pattern. A safe bounded local check must establish growth within the accepted body sizes and a meaningful delay to unrelated work on the same isolated API process before calling this an availability vulnerability."
+      ],
+      "validation_plan": {
+        "local": "After the parent establishes all required OS-enforced sandbox controls, use an empty allowlisted environment, no external networking, read-only source/tools, scratch-only writes, low CPU/memory/process/file/disk limits, and a short hard wall-clock deadline. First compare one call to the exact redactor on non-matching ASCII alphabetic strings at small increasing sizes such as 256, 512, 1024, and 2048 bytes, stopping on the first decisive result or deadline. Then, only if the cost warrants it, use an isolated in-memory Sentry controller/service fixture with a dummy verified plugin Credential, fake publisher, header event_id of 32 lowercase hex characters, and an event JSON object containing timestamp: 1, level: info, and type set to the same bounded alphabetic string. Confirm acceptance below the one-MiB caps, observe an independent timer or dummy second-Project request on that same process, and stop at the minimum measurable shared delay. Exercise the plugin sibling separately below its configured byte cap. If the engine remains effectively linear or prevents meaningful shared delay, reject the candidate. Do not send traffic to a deployed API, broker, or provider."
+      }
+    }
+  ],
+  "hardening": [
+    "SentryIngestService currently relies on the production Publisher implementation for the full prepareEnvelope privacy contract. Calling the canonical preparation seam explicitly in the service, or expressing that guarantee in the Publisher interface contract, would make this dependency easier to maintain. The current AuthModule -> NATS publisher chain already enforces it, so the narrower local Sentry sensitive-key regex is not reported as a disclosure vulnerability."
+  ],
+  "uncovered": []
+}

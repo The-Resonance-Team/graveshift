@@ -1,0 +1,22 @@
+[
+  {
+    "phase": "post-wave",
+    "agent_id": "critic-wave1",
+    "result": {
+      "missing_units": [],
+      "reassign_ids": [],
+      "resolved_prior_leads": [],
+      "stop": true
+    }
+  },
+  {
+    "phase": "final-clean",
+    "agent_id": "critic-final",
+    "result": {
+      "missing_units": [],
+      "reassign_ids": [],
+      "resolved_prior_leads": [],
+      "stop": true
+    }
+  }
+]

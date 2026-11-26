@@ -1,0 +1,134 @@
+# Config for the Haunted Candy Shop example project. Load it with
+# GRAVESHIFT_CONFIG_PATH=examples/haunted-candy-shop/graveshift.config.yaml.
+# It holds no secret value: *_Env keys name environment variables.
+boot:
+  host: 127.0.0.1
+  port: 3000
+
+agents:
+  system:
+    - name: Exorcist
+      slug: exorcist
+      role: exorcist
+      description: 'Proposes a guarded patch for an incident on a Grave.'
+      prompt: 'Propose one minimal patch for the given diagnosis.'
+      params: []
+      provider: '@ai-sdk/anthropic'
+      model: claude-sonnet-5.5
+      baseUrl: https://api.anthropic.com/v1
+      apiKeyEnv: ANTHROPIC_API_KEY
+      allowedTools:
+        - propose_fix
+      dailyBudgetUsd: 2.5
+      escalateTo: sre-agent
+
+    - name: SRE Agent
+      slug: sre-agent
+      role: sre
+      description: 'Handles incidents, outages and OOM VPS restarts.'
+      prompt: 'Resolve {{INCIDENT_DETAIL}} on version {{VERSION}}.'
+      params:
+        - VERSION: v1
+        - INCIDENT_DETAIL: 'OOM VPS'
+      provider: '@ai-sdk/google'
+      model: gemini-3.8-flash-high
+      baseUrl: https://generativelanguage.googleapis.com/v1beta
+      apiKeyEnv: GOOGLE_GENERATIVE_AI_API_KEY
+      allowedTools:
+        - query_metric
+        - tail_logs
+      dailyBudgetUsd: 2.5
+      escalateTo: devops-agent
+
+    - name: DevOps Agent
+      slug: devops-agent
+      role: devops
+      description: 'Handles deployment, pipeline and infrastructure tasks.'
+      prompt: 'Check deployment {{VERSION}} for {{SERVICE}}.'
+      params:
+        - VERSION: v1
+        - SERVICE: api
+      provider: '@ai-sdk/anthropic'
+      model: claude-sonnet-5.5
+      baseUrl: https://api.anthropic.com/v1
+      apiKeyEnv: ANTHROPIC_API_KEY
+      allowedTools:
+        - propose_fix
+      dailyBudgetUsd: 5
+      escalateTo: sre-agent
+  client: []
+
+policy:
+  version: 1
+  mode: propose
+  approvers:
+    discordUserIds: ['123456789012345678'] # placeholder id; replace with the owner's id
+    discordRoleIds: []
+  limits:
+    maxOpenPrsPerHour: 3
+    maxActionsPerServicePer10Min: 1
+    maxDiagnosisLoops: 2
+    llmDailyBudgetUsd: 2.00
+  llm:
+    minConfidenceForPr: 0.6
+    minConfidenceForAction: 0.75
+  github:
+    repos:
+      - repo: 'xiro/haunted-candy-shop'
+        services: ['api', 'worker']
+        baseBranch: main
+        branchPrefix: 'graveshift/'
+        draft: true
+        allowedPaths: ['src/**', 'config/**', 'migrations/**', 'test/**']
+        forbiddenPaths: ['.github/**', '**/*.pem', '**/.env*', 'deploy/**', 'policy*.yaml']
+        maxFilesChanged: 5
+        maxLinesChanged: 200
+  rules:
+    - id: pr-for-code-bugs
+      action: open_pr
+      when: { category: [code_bug, config_error, deploy_regression] }
+      effect: allow
+    - id: restart-on-crashloop
+      action: [restart_service, rollout_restart]
+      when: { services: [api, worker], signals: [restart_loop, oom_killed] }
+      effect: require_approval
+    - id: scale-bounded
+      action: scale
+      when: { services: [worker] }
+      params: { replicas: { min: 1, max: 3 } }
+      effect: require_approval
+    - id: never-touch-db
+      action: '*'
+      when: { services: [postgres] }
+      effect: deny
+  default: deny
+
+fix:
+  enabled: false
+  agent: Exorcist
+  promptTemplate: |
+    You are {{AGENT_NAME}}, the {{AGENT_ROLE}} Agent.
+    {{AGENT_DESCRIPTION}}
+    Standing prompt: {{AGENT_PROMPT}}
+    Model: {{MODEL}}. Provider: {{PROVIDER}}. Daily budget: {{DAILY_BUDGET_USD}} USD.
+
+    Propose a guarded patch for the diagnosis below.
+    {{DIAGNOSIS}}
+    Repository rules:
+    {{RULES}}
+    Answer with one JSON object: {"files":[{"path","content","linesChanged"}]}.
+    content is the full file text, or null to delete the file.
+    linesChanged is a non-negative integer count of changed lines.
+    Use only paths inside allowedPaths. Never change policy, deploy or workflow files.
+  gateway:
+    globalDailyBudgetUsd: 10
+    maxRetries: 1
+    timeoutMs: 20000
+    priceTableUsdPer1M:
+      claude-sonnet-5.5: { in: 3, out: 15 }
+      gemini-3.8-flash-high: { in: 0.5, out: 2 }
+  github:
+    appIdEnv: GRAVESHIFT_GITHUB_APP_ID
+    privateKeyEnv: GRAVESHIFT_GITHUB_PRIVATE_KEY
+    installations:
+      xiro/haunted-candy-shop: 100

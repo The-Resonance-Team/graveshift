@@ -1,0 +1,792 @@
+{
+  "units": [
+    {
+      "coverage_id": "packages%2Fevents%2Fsrc%2Fconsumer.ts%23connectEventsConsumer::packages%2Fevents%2Fsrc%2Fconsumer.ts%23processQueued::packages%2Fevents::ATTACK-CLASSES.md%23Resource%20and%20file%20handling",
+      "disposition": "covered",
+      "reviewed_paths": [
+        "apps/daemon/src/collectors.ts",
+        "packages/sources-docker/src/api.ts",
+        "packages/sources-k8s/src/kube-api.ts",
+        "packages/metrics/src/client.ts",
+        "packages/metrics/src/queries.ts",
+        "packages/events/src/consumer.ts",
+        "packages/core/src/envelope.ts",
+        "packages/core/src/privacy.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-events-sources",
+          "reviewed_paths": [
+            "apps/daemon/src/collectors.ts",
+            "packages/sources-docker/src/api.ts",
+            "packages/sources-k8s/src/kube-api.ts",
+            "packages/metrics/src/client.ts",
+            "packages/metrics/src/queries.ts",
+            "packages/events/src/consumer.ts",
+            "packages/core/src/envelope.ts",
+            "packages/core/src/privacy.ts"
+          ],
+          "invariant": "Workload metadata and Event contents must not select an arbitrary network origin, executable deserializer or local filesystem sink in the assigned collectors and consumer.",
+          "method": "source",
+          "result": "Docker and Prometheus origins come from operator configuration; the daemon rejects non-HTTP(S) origins and URL credentials. Docker uses fixed API paths and encodes container IDs. Prometheus uses a fixed query path and JSON-quotes configured job selectors. Kubernetes uses the in-cluster client with fixed API operations. The reviewed paths contain no Event-derived file read/write or code-evaluation sink. The queued decoder checks 128 KiB before fatal UTF-8 decoding and JSON parsing, catches schema/privacy failures, and terminates malformed records. Docker skips malformed newline-delimited JSON frames and Kubernetes ignores malformed Event objects. This settles URL, deserialization and file-sink authority; availability bounds are assessed in the separate buffering unit.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    },
+    {
+      "coverage_id": "packages%2Fevents%2Fsrc%2Fconsumer.ts%23connectEventsConsumer::packages%2Fevents%2Fsrc%2Fconsumer.ts%23processQueued::packages%2Fevents::CLOUD-AND-DEPLOYMENT.md%23Namespace%20and%20label%20trust%20confusion",
+      "disposition": "candidate",
+      "reviewed_paths": [
+        "apps/daemon/src/main.ts",
+        "apps/daemon/src/collectors.ts",
+        "apps/daemon/src/observations.ts",
+        "packages/integrations/src/index.ts",
+        "packages/sources-docker/src/source.ts",
+        "packages/sources-k8s/src/source.ts",
+        "packages/sources-k8s/src/map.ts",
+        "packages/watcher/src/pipeline.ts",
+        "packages/watcher/src/rules.ts",
+        "apps/api/src/auth/services/event-ingest.service.ts",
+        "apps/api/src/hauntings/haunting.repo.ts",
+        "apps/api/src/hauntings/haunting.mapper.ts",
+        "packages/core/src/recorded.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-events-sources",
+          "reviewed_paths": [
+            "apps/daemon/src/main.ts",
+            "apps/daemon/src/collectors.ts",
+            "apps/daemon/src/observations.ts",
+            "packages/integrations/src/index.ts",
+            "packages/sources-docker/src/source.ts",
+            "packages/sources-k8s/src/source.ts",
+            "packages/sources-k8s/src/map.ts",
+            "packages/watcher/src/pipeline.ts",
+            "packages/watcher/src/rules.ts",
+            "apps/api/src/auth/services/event-ingest.service.ts",
+            "apps/api/src/hauntings/haunting.repo.ts",
+            "apps/api/src/hauntings/haunting.mapper.ts",
+            "packages/core/src/recorded.ts"
+          ],
+          "invariant": "Every workload identity, cached active Haunting and group-release decision must retain the authoritative Project and service namespace through observation processing.",
+          "method": "source",
+          "result": "Collector Project IDs come from trusted Context rather than workload labels. Kubernetes qualifies services with the configured prefix and Event namespace and applies the configured namespace filter; Docker takes its service selector from workload attributes but does not take a Project from them. API producers are checked against their Credential's Project and service. Watcher state, replay identity, dedupe and open groups include Project. The daemon bridge breaks that invariant: byService is keyed only by service, and an Event for a different Project can delete or replace the cached ID needed to release the first Project's closed group. The durable active lookup excludes closed rows, but the subsequent get/upsert path permits the stale group's next detection to be appended to the closed Haunting. Serial consumer dispatch prevents a separate current-variable concurrency claim; none is reported.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [
+        "apps/daemon/src/observations.ts:service-cache-project-scope"
+      ],
+      "unresolved": [
+        "The two-Project close/interleave/new-detection sequence has not been executed because complete memory and cumulative disk sandbox controls are unavailable."
+      ]
+    },
+    {
+      "coverage_id": "packages%2Fevents%2Fsrc%2Fconsumer.ts%23connectEventsConsumer::packages%2Fevents%2Fsrc%2Fconsumer.ts%23processQueued::packages%2Fevents::PROTOCOLS-RPC-AND-MESSAGING.md%23Duplicate%20delivery%20and%20idempotency%20gaps",
+      "disposition": "candidate",
+      "reviewed_paths": [
+        "packages/events/src/consumer.ts",
+        "packages/events/src/publisher.ts",
+        "packages/events/src/streams.ts",
+        "packages/events/src/subject.ts",
+        "packages/integrations/src/delivery.ts",
+        "packages/sources-docker/src/source.ts",
+        "packages/sources-k8s/src/source.ts",
+        "packages/watcher/src/rules.ts",
+        "apps/daemon/src/observations.ts",
+        "apps/api/src/auth/services/event-ingest.service.ts",
+        "apps/api/src/auth/dto/publish-event.dto.ts",
+        "apps/api/src/hauntings/haunting.repo.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-events-sources",
+          "reviewed_paths": [
+            "packages/events/src/consumer.ts",
+            "packages/events/src/publisher.ts",
+            "packages/events/src/streams.ts",
+            "packages/events/src/subject.ts",
+            "packages/integrations/src/delivery.ts",
+            "packages/sources-docker/src/source.ts",
+            "packages/sources-k8s/src/source.ts",
+            "packages/watcher/src/rules.ts",
+            "apps/daemon/src/observations.ts",
+            "apps/api/src/auth/services/event-ingest.service.ts",
+            "apps/api/src/auth/dto/publish-event.dto.ts",
+            "apps/api/src/hauntings/haunting.repo.ts"
+          ],
+          "invariant": "An Event replay identity must be isolated by its Project, and a delivery cursor or completed marker must advance only after the corresponding side effect is acknowledged.",
+          "method": "source",
+          "result": "Collector native IDs include the Context Project and configured collector service; native cursors advance after queued publication, and stopped work cannot acknowledge. The consumer awaits observation processing and acknowledgement before recording completion, leaves failed work eligible for redelivery, and bounds its completed-ID set to 100000. The daemon reconciles recorded detections and durable Project-scoped audit receipts on retry. However, API callers choose Event IDs without a global uniqueness constraint, publisher msgID is only envelope.id in the one all-Project stream, and the consumer's completed set also uses only envelope.id. An authorized Event in one Project can therefore reserve another Project's known/predictable ID and cause its later detection to be acknowledged without dispatch. The watcher itself uses [projectId,id], showing the inconsistent scope at the preceding transport layer.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [
+        "packages/events/src/consumer.ts:projectless-event-dedupe"
+      ],
+      "unresolved": [
+        "No bounded two-Project transport fixture or pinned-version broker deduplication observation was run under the source-only policy."
+      ]
+    },
+    {
+      "coverage_id": "packages%2Fevents%2Fsrc%2Fconsumer.ts%23connectEventsConsumer::packages%2Fevents%2Fsrc%2Fconsumer.ts%23processQueued::packages%2Fevents::PROTOCOLS-RPC-AND-MESSAGING.md%23Topic%2C%20routing-key%2C%20and%20subscription%20scope%20gaps",
+      "disposition": "covered",
+      "reviewed_paths": [
+        "packages/events/src/subject.ts",
+        "packages/events/src/consumer.ts",
+        "packages/events/src/nats.ts",
+        "packages/core/src/schemas.ts",
+        "apps/api/src/auth/services/event-ingest.service.ts",
+        "apps/daemon/src/main.ts",
+        "deploy/compose/nats/nats.conf",
+        "deploy/compose/nats/graveshift-events.stream.json",
+        "deploy/compose/nats/graveshift-watcher.consumer.json",
+        "deploy/compose/graveshift.compose.yml"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-events-sources",
+          "reviewed_paths": [
+            "packages/events/src/subject.ts",
+            "packages/events/src/consumer.ts",
+            "packages/events/src/nats.ts",
+            "packages/core/src/schemas.ts",
+            "apps/api/src/auth/services/event-ingest.service.ts",
+            "apps/daemon/src/main.ts",
+            "deploy/compose/nats/nats.conf",
+            "deploy/compose/nats/graveshift-events.stream.json",
+            "deploy/compose/nats/graveshift-watcher.consumer.json",
+            "deploy/compose/graveshift.compose.yml"
+          ],
+          "invariant": "A lower-trust producer must not escape its Project through subject tokens, payload overrides, lane disagreement, wildcard selection or an ungranted consumer subscription.",
+          "method": "source",
+          "result": "Project/type grammar rejects wildcards and empty tokens; service normalization produces one token. Decoding reconstructs the complete subject from the prepared body and requires exact equality, including Project and severity lane. processQueued checks the daemon's grantedProjectIds before replay lookup or processing and terminates or dead-letters an ungranted Event. DLQ subjects do not match the detection filter. Plugins publish through the API's bound Credential principal and receive no broker identity in this path. Checked-in NATS users are privileged API/read-side identities with explicit capabilities; no tenant-supplied topic or durable name is used. The consumer only binds the declared durable and does not provision it. Compose explicitly does not launch a daemon, so no live reachability or external ACL attachment is inferred. The global Event-ID namespace defect is recorded in its distinct replay unit.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    },
+    {
+      "coverage_id": "packages%2Fevents%2Fsrc%2Fconsumer.ts%23connectEventsConsumer::packages%2Fevents%2Fsrc%2Fconsumer.ts%23processQueued::packages%2Fevents::RESOURCE-EXHAUSTION-AND-AVAILABILITY.md%23Poison-record%20and%20head-of-line%20blocking",
+      "disposition": "candidate",
+      "reviewed_paths": [
+        "packages/integrations/src/delivery.ts",
+        "packages/integrations/src/watch.ts",
+        "packages/integrations/src/index.ts",
+        "packages/sources-docker/src/api.ts",
+        "packages/sources-docker/src/source.ts",
+        "packages/sources-docker/src/map-details.ts",
+        "packages/sources-k8s/src/kube-api.ts",
+        "packages/sources-k8s/src/source.ts",
+        "packages/sources-k8s/src/map.ts",
+        "packages/sources-k8s/src/map-details.ts",
+        "packages/core/src/envelope.ts",
+        "packages/core/src/privacy.ts",
+        "packages/redactor/src/index.ts",
+        "packages/redactor/src/detectors.ts",
+        "packages/events/src/consumer.ts",
+        "packages/events/src/streams.ts",
+        "apps/daemon/src/collectors.ts",
+        "apps/daemon/src/main.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-events-sources",
+          "reviewed_paths": [
+            "packages/integrations/src/delivery.ts",
+            "packages/integrations/src/watch.ts",
+            "packages/integrations/src/index.ts",
+            "packages/sources-docker/src/api.ts",
+            "packages/sources-docker/src/source.ts",
+            "packages/sources-docker/src/map-details.ts",
+            "packages/sources-k8s/src/kube-api.ts",
+            "packages/sources-k8s/src/source.ts",
+            "packages/sources-k8s/src/map.ts",
+            "packages/sources-k8s/src/map-details.ts",
+            "packages/core/src/envelope.ts",
+            "packages/core/src/privacy.ts",
+            "packages/redactor/src/index.ts",
+            "packages/redactor/src/detectors.ts",
+            "packages/events/src/consumer.ts",
+            "packages/events/src/streams.ts",
+            "apps/daemon/src/collectors.ts",
+            "apps/daemon/src/main.ts"
+          ],
+          "invariant": "One permanently invalid observation from a watched workload must not indefinitely prevent unrelated workloads from publishing through the shared Collector queue.",
+          "method": "source",
+          "result": "Malformed Docker frames and malformed Kubernetes Event objects are skipped, while invalid broker envelopes terminate and ordinary broker processing failures have a declared five-delivery maximum. Collector delivery is different: every preparation/publication exception is retried indefinitely at the queue head, and acknowledge/shift occurs only after success. A Kubernetes name containing a dummy model-key-shaped substring, such as demo-sk-aaaaaaaaaaaaaaaaaaaa, is incorporated into the qualified service and rejected by assertSafeMetadata. Docker's com.docker.compose.service attribute can similarly contain a dummy email address. Both failures occur inside the retrying entry.deliver path. The 256-item queue limit bounds count but preserves head-of-line blocking; Kubernetes drain prevents reconnecting, and Docker waits for queue room. The one-second stop deadline permits manual cancellation but does not quarantine the poison record during normal operation. Actual delegated workload authority and enabled Collector/publisher wiring remain deployment conditions.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [
+        "packages/integrations/src/delivery.ts:permanent-collector-poison-retry"
+      ],
+      "unresolved": [
+        "A bounded poison-head fixture cannot be executed without complete memory and cumulative disk sandbox controls.",
+        "An owner must establish that a less-trusted workload principal can choose the relevant names or labels in an enabled Collector's scope and that normal publication is authorized."
+      ]
+    },
+    {
+      "coverage_id": "packages%2Fevents%2Fsrc%2Fconsumer.ts%23connectEventsConsumer::packages%2Fevents%2Fsrc%2Fconsumer.ts%23processQueued::packages%2Fevents::RESOURCE-EXHAUSTION-AND-AVAILABILITY.md%23Unbounded%20buffering%20and%20cardinality",
+      "disposition": "candidate",
+      "reviewed_paths": [
+        "apps/daemon/src/observations.ts",
+        "apps/daemon/src/api-client.ts",
+        "apps/daemon/src/main.ts",
+        "packages/watcher/src/rules.ts",
+        "packages/watcher/src/pipeline.ts",
+        "packages/watcher/src/watcher.ts",
+        "packages/watcher/src/types.ts",
+        "packages/events/src/consumer.ts",
+        "packages/events/src/streams.ts",
+        "packages/integrations/src/delivery.ts",
+        "packages/integrations/src/watch.ts",
+        "packages/metrics/src/collector.ts",
+        "packages/metrics/src/client.ts",
+        "apps/api/src/auth/controllers/events.controller.ts",
+        "apps/api/src/auth/services/event-ingest.service.ts",
+        "apps/api/src/auth/dto/publish-event.dto.ts",
+        "apps/api/src/auth/env.schema.ts",
+        "apps/api/src/auth/payload-size.interceptor.ts",
+        "apps/api/src/app.module.ts",
+        "apps/api/src/app.factory.ts",
+        "apps/api/src/hauntings/dto/haunting.dto.ts",
+        "packages/core/src/envelope.ts",
+        "packages/core/src/schemas.ts",
+        "packages/core/src/recorded.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-events-sources",
+          "reviewed_paths": [
+            "apps/daemon/src/observations.ts",
+            "apps/daemon/src/api-client.ts",
+            "apps/daemon/src/main.ts",
+            "packages/watcher/src/rules.ts",
+            "packages/watcher/src/pipeline.ts",
+            "packages/watcher/src/watcher.ts",
+            "packages/watcher/src/types.ts",
+            "packages/events/src/consumer.ts",
+            "packages/events/src/streams.ts",
+            "packages/integrations/src/delivery.ts",
+            "packages/integrations/src/watch.ts",
+            "packages/metrics/src/collector.ts",
+            "packages/metrics/src/client.ts",
+            "apps/api/src/auth/controllers/events.controller.ts",
+            "apps/api/src/auth/services/event-ingest.service.ts",
+            "apps/api/src/auth/dto/publish-event.dto.ts",
+            "apps/api/src/auth/env.schema.ts",
+            "apps/api/src/auth/payload-size.interceptor.ts",
+            "apps/api/src/app.module.ts",
+            "apps/api/src/app.factory.ts",
+            "apps/api/src/hauntings/dto/haunting.dto.ts",
+            "packages/core/src/envelope.ts",
+            "packages/core/src/schemas.ts",
+            "packages/core/src/recorded.ts"
+          ],
+          "invariant": "Accepted bounded Events must not create unbounded retained outcomes or unbounded temporal-processing cost in the daemon shared by granted Projects, including after terminal delivery failure.",
+          "method": "source",
+          "result": "Source-visible controls include the default 65536-byte API Event cap, default 60-per-60000-ms throttle, 128-KiB broker/decoder cap, five broker deliveries, 100000 completed IDs, 10000 watcher replay IDs, 256 Collector pending entries, cancellable Collector retry shutdown, and five-second metric query deadlines with one polling cycle at a time. These controls do not bound daemon pending outcomes: they are inserted before processing and deleted only after full success. An accepted 180-character Event ID produces a suffixed Haunting eventId longer than the internal DTO's 180-character maximum, creating a deterministic permanent failure without clearing the pending entry. Increasing observation times by the dedupe interval allows successive accepted detections whose cloned group histories accumulate in those retained outcomes. Separately, unique log/restart Events with one fixed valid observedAt grow temporal arrays without a count cap; downstream dedupe runs after those arrays are filtered and copied. The throttle bounds arrival rate but does not make caller timestamps advance or impose aggregate retention. Neither path was executed, and no crash or measured cross-Project latency is claimed.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [
+        "apps/daemon/src/observations.ts:failed-outcome-retention",
+        "packages/watcher/src/rules.ts:unbounded-temporal-samples"
+      ],
+      "unresolved": [
+        "Retained outcome counts, small-fixture growth and terminal-retry cleanup have not been observed in a bounded runtime because complete memory and cumulative disk sandbox controls are unavailable.",
+        "Temporal sample retention and cumulative element visits require a bounded instrumented fixture; no saturation, stress or live availability check is authorized."
+      ]
+    }
+  ],
+  "candidates": [
+    {
+      "proposed_verdict": "needs_validation",
+      "fingerprint": "packages/events/src/consumer.ts:projectless-event-dedupe",
+      "title": "Event replay keys cross Project boundaries",
+      "description": "A plugin Credential holder confined to one Project controls its Event IDs. If it knows or predicts an ID used by a different granted Project, it can submit an otherwise valid warning Event with that ID first. The shared consumer subsequently acknowledges the other Project's Event as already completed without dispatching its detection. A warning Event whose type does not produce detections can seed this state without a model call. Publisher msgID uses the same unscoped ID in the all-Project stream, creating a second place where the collision may suppress delivery. The claimed result is suppression of a target Project's observation; target-ID knowledge and a shared stream/consumer are explicit prerequisites.",
+      "claimed_root_cause": "Project authority is present in the subject and body but omitted from replay identity: createNatsPublisher sends msgID=prepared.id and processQueued checks/marks a single shared Set using envelope.id. The API preserves producer-chosen IDs and does not establish global uniqueness. A 100000-entry size bound limits retained keys but does not isolate them.",
+      "trace": [
+        {
+          "kind": "entrypoint",
+          "file": "apps/api/src/auth/dto/publish-event.dto.ts",
+          "line": 13,
+          "scope": "PublishEventDto.id",
+          "description": "The producer supplies any nonempty string as its Event ID; the contract adds no Project namespace or globally unique server ID."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/api/src/auth/services/event-ingest.service.ts",
+          "line": 30,
+          "scope": "EventIngestService.ingest",
+          "description": "Scope, Project and service binding are enforced, then the original Event ID is preserved through preparation and publication."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/events/src/publisher.ts",
+          "line": 23,
+          "scope": "createNatsPublisher.publish",
+          "description": "Every Project uses prepared.id alone as the broker msgID, while the subject includes its Project."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/events/src/streams.ts",
+          "line": 18,
+          "scope": "GRAVESHIFT_EVENTS_STREAM",
+          "description": "The one stream spans all Project subjects and declares a 120-second duplicate window."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/events/src/consumer.ts",
+          "line": 91,
+          "scope": "processQueued Project check",
+          "description": "Both dummy Projects can legitimately pass the granted set; their distinct subjects and bodies pass exact reconstruction."
+        },
+        {
+          "kind": "sink",
+          "file": "packages/events/src/consumer.ts",
+          "line": 105,
+          "scope": "processQueued completed-ID fast path",
+          "description": "After the first Project's successful processing marks the ID at line 113, an Event with the same ID from the second Project is acknowledged and returned without calling process."
+        }
+      ],
+      "evidence": [
+        {
+          "file": "packages/events/src/streams.ts",
+          "line": 55,
+          "description": "The completed-ID Set has one global string namespace and only an oldest-entry size eviction."
+        },
+        {
+          "file": "packages/events/src/consumer.ts",
+          "line": 126,
+          "description": "One deduplicator is created for the consumer serving every granted Project."
+        },
+        {
+          "file": "apps/daemon/src/observations.ts",
+          "line": 99,
+          "description": "An accepted envelope type with no watcher outcomes still finishes observation processing, allowing the transport to mark its ID completed."
+        },
+        {
+          "file": "packages/watcher/src/rules.ts",
+          "line": 60,
+          "description": "The watcher uses [projectId,id] for replay identity, demonstrating the stronger downstream namespace that the consumer bypasses."
+        },
+        {
+          "file": "packages/events/src/consumer.ts",
+          "line": 65,
+          "description": "Size, schema, exact subject equality and granted-Project controls are present; none changes the unscoped replay key after both valid Projects pass."
+        }
+      ],
+      "blockers": [
+        "No bounded in-memory producer/consumer observation was performed: complete memory and cumulative disk sandbox controls are not established, and the assignment forbids target-code execution.",
+        "The publisher-side stream-wide msgID collision still needs a bounded observation against the pinned NATS version; no broker, deployed endpoint or external service was contacted."
+      ],
+      "validation_plan": {
+        "local": "In a parent-approved sandbox, feed a createEventsConsumer fake transport two small valid warning envelopes for dummy Projects 101 and 202 with ID shared-event, and record process calls and acknowledgements. Use a no-detection type for the first Event. Stop after checking whether the second Project is acknowledged without dispatch. Independently inspect publisher options for distinct Project IDs, then use a bounded isolated broker fixture to establish msgID behavior. A regression should allow one dispatch per [Project,Event ID] while still deduplicating a replay within the same Project.",
+        "deployment": "The owner can inspect effective stream/consumer sharing and producer ID-generation rules to establish whether a co-tenant could know or predict a target ID. This requires configuration and producer-source inspection, without sending live test Events."
+      }
+    },
+    {
+      "proposed_verdict": "needs_validation",
+      "fingerprint": "apps/daemon/src/observations.ts:service-cache-project-scope",
+      "title": "A co-tenant Event can prevent release of another Project's closed Haunting group",
+      "description": "When one daemon serves two granted Projects using the same service name, a Credential holder in Project B can submit a valid warning Event for that service while B has no active Haunting. The active lookup for B deletes the service-only cache entry belonging to Project A, but its attempted release is restricted to B and leaves A's watcher group intact. If A's durable Haunting is closed before its next eligible detection, that detection reuses the unreleased group. The daemon loads the closed record, preserves its closed state and appends the new detection to it, rather than opening the new active Haunting expected by the existing single-Project close/reopen behavior. The minimum claimed boundary result is a new Project A detection being recorded on a closed Haunting because of Project B's Event.",
+      "claimed_root_cause": "createObservations stores active IDs under service alone, although createGrouper stores groups under [projectId,service]. Cache deletion, replacement and release therefore refer to different namespaces. Durable Project checks protect row ownership but do not repair the stale group, and the merge path preserves the prior closed incident state.",
+      "trace": [
+        {
+          "kind": "entrypoint",
+          "file": "apps/api/src/auth/services/event-ingest.service.ts",
+          "line": 26,
+          "scope": "EventIngestService.ingest",
+          "description": "A Project B Credential can publish to its own bound service using a service name also present in Project A. A warning http.request Event can exercise the active lookup without creating a B detection."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/events/src/consumer.ts",
+          "line": 91,
+          "scope": "processQueued granted Project intake",
+          "description": "A shared daemon legitimately accepts both granted Projects and serially invokes its one observation runtime."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/daemon/src/observations.ts",
+          "line": 92,
+          "scope": "observe active-group reconciliation",
+          "description": "Project B finds A's ID in byService, calls release(B,A-id), and deletes the service entry when B's active lookup returns null."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/watcher/src/pipeline.ts",
+          "line": 77,
+          "scope": "createGrouper.release",
+          "description": "The Project equality check correctly refuses to delete A's group when release is called with B, so A's stale group remains while its cache entry is lost."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/watcher/src/pipeline.ts",
+          "line": 43,
+          "scope": "createGrouper.add",
+          "description": "After A's durable Haunting closes, its next eligible detection finds the old [A,service] group and retains the old incident ID instead of creating a new group."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/daemon/src/observations.ts",
+          "line": 118,
+          "scope": "processOutcome recorded view construction",
+          "description": "The get-by-ID call returns A's closed record. Spreading prior.incident after change.incident preserves the closed state while adding the new detection and updatedAt."
+        },
+        {
+          "kind": "sink",
+          "file": "apps/api/src/hauntings/haunting.repo.ts",
+          "line": 61,
+          "scope": "HauntingRepo.upsert",
+          "description": "The Project, service, opening time and monotonic-update checks allow this update to the existing closed row; no new active Haunting is created for the detection."
+        }
+      ],
+      "evidence": [
+        {
+          "file": "apps/daemon/src/observations.ts",
+          "line": 42,
+          "description": "byService has no Project component, and its reads, writes and deletions at lines 50, 69 and 92-97 all use service alone."
+        },
+        {
+          "file": "packages/watcher/src/pipeline.ts",
+          "line": 44,
+          "description": "Open groups are keyed by [detection.projectId,detection.service], so the watcher and bridge cache disagree about identity."
+        },
+        {
+          "file": "apps/api/src/hauntings/haunting.repo.ts",
+          "line": 98,
+          "description": "The authoritative active lookup excludes resolved and dismissed rows. Thus A's later null response is legitimate, but the missing service cache ID prevents release."
+        },
+        {
+          "file": "apps/api/src/hauntings/haunting.mapper.ts",
+          "line": 66,
+          "description": "mergeRecorded accepts the next incident state, and hauntingData writes it directly to the row; there is no closed-to-new-detection lifecycle rejection."
+        },
+        {
+          "file": "apps/daemon/src/observations.ts",
+          "line": 84,
+          "description": "The source checks returned active service, state and detection Project, but those checks do not scope byService itself."
+        }
+      ],
+      "blockers": [
+        "The bounded two-Project lifecycle sequence has not been observed because complete memory and cumulative disk sandbox controls are unavailable and target-code execution is forbidden."
+      ],
+      "validation_plan": {
+        "local": "Use a parent-approved sandbox and one createObservations instance with a fake API whose records are correctly keyed by Project and ID. Create A's Haunting for service checkout, submit a warning http.request Event from B for checkout while B has no active Haunting, mark A's stored record resolved in the fixture, then submit A's new runtime.oom Event after the ten-minute dedupe interval. Stop after inspecting the next recorded view and active lookup: the expected regression behavior is a new open incident ID, with no cross-Project cache deletion or release. Mock the gateway and Work port so the fixture performs no external or paid action."
+      }
+    },
+    {
+      "proposed_verdict": "needs_validation",
+      "fingerprint": "packages/integrations/src/delivery.ts:permanent-collector-poison-retry",
+      "title": "A permanently rejected workload name can block the shared Collector queue",
+      "description": "An enabled Kubernetes Collector watches multiple configured namespaces through one ordered queue. A less-trusted workload owner who can choose a legal name containing a dummy model-key-shaped substring, such as demo-sk-aaaaaaaaaaaaaaaaaaaa, can produce a Warning Event that maps to an observation whose service fails privacy validation. The queue retries that deterministic failure forever, blocking later observations from other watched workloads. The Docker variant uses a producer-controlled com.docker.compose.service label containing a dummy email such as ops@example.invalid. The affected resource is the Collector's observation lane; no process crash or suppression beyond that Collector is claimed. Each variant requires delegated workload metadata authority and normally functioning Collector publication.",
+      "claimed_root_cause": "createDeliveryQueue retries all entry.deliver and publisher errors indefinitely without distinguishing permanent validation failures, enforcing an attempt/deadline limit, or quarantining the head record. Both Collectors prepare workload-derived service metadata inside entry.deliver, where assertSafeMetadata can always reject it. The queue's 256-record bound and one-second manual stop deadline do not allow healthy records past that head during normal operation.",
+      "trace": [
+        {
+          "kind": "entrypoint",
+          "file": "packages/sources-k8s/src/kube-api.ts",
+          "line": 23,
+          "scope": "toEvent",
+          "description": "A schema-valid Warning Event carries the workload's involvedObject.name into involvedName. The parser has no privacy-pattern restriction on workload names."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/sources-k8s/src/source.ts",
+          "line": 99,
+          "scope": "Kubernetes watch callback",
+          "description": "An included namespace's workload name becomes the qualified Grave service and mapped runtime Event details in one shared Collector queue."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/sources-k8s/src/source.ts",
+          "line": 105,
+          "scope": "queued Kubernetes delivery",
+          "description": "entry.deliver constructs its envelope using the workload-derived service before sending it. A name such as demo-sk-aaaaaaaaaaaaaaaaaaaa retains a word boundary before the key-shaped substring even after qualification."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/integrations/src/index.ts",
+          "line": 94,
+          "scope": "envelopeBuilder",
+          "description": "The helper passes Context.service into prepareEnvelope, preserving the workload-derived selector as routing metadata."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/core/src/privacy.ts",
+          "line": 8,
+          "scope": "assertSafeMetadata",
+          "description": "The model-key detector matches the dummy sk- substring and rejects the non-UUID service with EnvelopeError on every attempt."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/integrations/src/delivery.ts",
+          "line": 46,
+          "scope": "createDeliveryQueue.retry",
+          "description": "The same permanent validation exception is caught and retried with capped backoff until the queue is externally stopped."
+        },
+        {
+          "kind": "sink",
+          "file": "packages/integrations/src/delivery.ts",
+          "line": 71,
+          "scope": "ordered delivery worker",
+          "description": "The worker never reaches acknowledge, pending.shift or notification for the poison head, so later unrelated workload records cannot publish through this Collector."
+        }
+      ],
+      "evidence": [
+        {
+          "file": "packages/redactor/src/detectors.ts",
+          "line": 47,
+          "description": "The explicit model-key regex accepts a sk- prefix followed by at least twenty allowed characters, including the dummy all-letter example."
+        },
+        {
+          "file": "packages/core/src/envelope.ts",
+          "line": 60,
+          "description": "Service and fingerprint are privacy-checked routing metadata rather than redacted payload fields."
+        },
+        {
+          "file": "packages/sources-k8s/src/source.ts",
+          "line": 140,
+          "description": "A full queue aborts the push watch, but finally waits on queue.drain; this cannot bypass a permanently failing head or reconnect to healthy later records."
+        },
+        {
+          "file": "packages/sources-docker/src/source.ts",
+          "line": 92,
+          "description": "The Docker variant trusts the com.docker.compose.service attribute for service and constructs its envelope inside the same retrying delivery callback at lines 99-110. An email-shaped label deterministically fails the separate email metadata detector."
+        },
+        {
+          "file": "packages/integrations/src/delivery.ts",
+          "line": 88,
+          "description": "ready prevents more than 256 pending records but keeps Docker waiting behind the head. stop at line 123 provides manual bounded cancellation, not automatic quarantine."
+        },
+        {
+          "file": "apps/daemon/src/collectors.ts",
+          "line": 60,
+          "description": "The active daemon factory can enable Docker and Kubernetes Collectors, each sharing one queue across its collected workloads. The effective enabled deployment and delegated workload authority are not established by this source-only review."
+        }
+      ],
+      "blockers": [
+        "No small poison-then-healthy Collector fixture was executed because complete memory and cumulative disk sandbox controls are unavailable.",
+        "The owner must establish actual delegated metadata authority and enabled Collector namespace/endpoint scope. Direct host-root control alone would not establish a lower-trust Docker principal.",
+        "Normal daemon reader/publisher authentication must be established from effective wiring. Compose does not launch the daemon, and the checked-in NATS read user's permissions alone do not authorize detection publication."
+      ],
+      "validation_plan": {
+        "local": "In a parent-approved sandbox, use the native Collector interface with a fixed clock, an in-memory publisher and exactly two native records. First emit a Kubernetes Warning/ImagePullBackOff Event for Pod demo-sk-aaaaaaaaaaaaaaaaaaaa-5d8f9c7b6d-x2k4q in an included dummy namespace, then a healthy-named Warning record in another included dummy namespace. Allow a fixed small number of injected backoff steps, then stop. Record whether the first record repeatedly fails preparation and the second never reaches the publisher. Repeat the independent Docker variant with com.docker.compose.service=ops@example.invalid followed by another container's record. A regression should quarantine or explicitly refuse permanent-invalid input and allow the second record to progress while retaining retry semantics for transient failures.",
+        "deployment": "The owner can inspect manifests, delegated workload roles, enabled Collector settings and effective NATS permissions to establish that a lower-trust workload owner can choose these names/labels and shares a normally functional observation lane with another workload. Do not create workloads or send poison records in a deployed environment."
+      }
+    },
+    {
+      "proposed_verdict": "needs_validation",
+      "fingerprint": "apps/daemon/src/observations.ts:failed-outcome-retention",
+      "title": "Permanent Haunting-write failures retain expanding observation histories",
+      "description": "A plugin Credential holder can send small valid detection Events with unique 180-character IDs. The public DTO and Event schema accept those IDs, but createObservations appends :detected:<rule> and sends that longer value to an internal DTO capped at 180 characters. Each write is therefore permanently refused after the accepted WatcherOutcome has entered the daemon's pending map. The consumer's five-delivery limit eventually stops retrying the broker record without notifying or evicting the cached outcome. With timestamps spaced by the watcher dedupe interval, later failed Events for the same bound service retain successive cloned histories containing one, two, three and more detections. This yields source-visible quadratic retained history across a linear number of small Events in the daemon shared by other granted Projects. No heap measurement, crash or service outage has been observed.",
+      "claimed_root_cause": "The in-memory pending outcome cache has success-only cleanup and no terminal-failure, size or expiry policy. Public Event-ID validation is incompatible with derived internal idempotency-key limits, supplying a deterministic permanent-error trigger. createGrouper returns a deep clone of each cumulative group, so each abandoned pending outcome retains its own history rather than only one bounded reference.",
+      "trace": [
+        {
+          "kind": "entrypoint",
+          "file": "apps/api/src/auth/dto/publish-event.dto.ts",
+          "line": 13,
+          "scope": "PublishEventDto.id",
+          "description": "A Credential holder can choose a nonempty 180-character low-entropy alphabetic ID. The small envelope fits the API size limit and can use its bound service."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/api/src/auth/services/event-ingest.service.ts",
+          "line": 46,
+          "scope": "EventIngestService.ingest",
+          "description": "Preparation and publication retain the caller's ID after Project/service authorization. An unassigned Event audit key with this ID still fits the core 200-character audit-key contract."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/daemon/src/observations.ts",
+          "line": 99,
+          "scope": "observe outcome staging",
+          "description": "The watcher is mutated and its accepted outcomes are saved in pending before any durable Haunting write completes."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/watcher/src/pipeline.ts",
+          "line": 64,
+          "scope": "createGrouper.add",
+          "description": "Each accepted detection extends signalIds and detections, then returns a structured clone of the entire cumulative group. Ten-minute-spaced caller timestamps permit successive accepted detections."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/daemon/src/observations.ts",
+          "line": 120,
+          "scope": "processOutcome detection write",
+          "description": "The daemon derives eventId by adding :detected: and the rule name to the already 180-character Event ID."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/api/src/hauntings/dto/haunting.dto.ts",
+          "line": 35,
+          "scope": "RecordHauntingDto.eventId",
+          "description": "The internal record route rejects this derived value through MaxLength(180), which the global validation pipe reports as an unprocessable request."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/events/src/consumer.ts",
+          "line": 114,
+          "scope": "processQueued error recovery",
+          "description": "Failed observation processing requests redelivery; the declared consumer caps deliveries at five but has no terminal-outcome callback to the observation cache."
+        },
+        {
+          "kind": "sink",
+          "file": "apps/daemon/src/observations.ts",
+          "line": 202,
+          "scope": "observe completion and pending cleanup",
+          "description": "The rejected reduction bypasses pending.delete at line 206. Cached cloned histories remain reachable for the lifetime of the observation runtime after broker retry exhaustion."
+        }
+      ],
+      "evidence": [
+        {
+          "file": "apps/daemon/src/observations.ts",
+          "line": 52,
+          "description": "The pending Map has no declared size, expiry, cancellation or terminal-delivery eviction policy. Its only deletion is after successful processing."
+        },
+        {
+          "file": "packages/core/src/schemas.ts",
+          "line": 3,
+          "description": "The shared ID schema imposes only nonemptiness, so envelope preparation does not reject the public 180-character input."
+        },
+        {
+          "file": "apps/api/src/app.factory.ts",
+          "line": 27,
+          "description": "Global DTO validation applies the internal maximum and uses HTTP 422 for validation failures."
+        },
+        {
+          "file": "apps/daemon/src/api-client.ts",
+          "line": 38,
+          "description": "The private API client throws for the 422 response, propagating failure out of observation processing before cleanup."
+        },
+        {
+          "file": "packages/events/src/streams.ts",
+          "line": 34,
+          "description": "Five broker deliveries and bounded broker retention do not remove objects retained in the separate observation closure."
+        },
+        {
+          "file": "apps/api/src/auth/env.schema.ts",
+          "line": 35,
+          "description": "The default 65536-byte Event cap and 60-per-minute throttle bound individual input and arrival rate, but not lifetime cached outcomes. The proposed inputs are under one KiB each."
+        },
+        {
+          "file": "apps/daemon/src/main.ts",
+          "line": 115,
+          "description": "One observation runtime is passed to the shared granted-Project consumer, so retained state occupies the daemon used by other Projects."
+        }
+      ],
+      "blockers": [
+        "No bounded observation of retained pending entries, cloned-history growth or post-max-delivery cleanup was performed because complete memory and cumulative disk sandbox controls are unavailable.",
+        "Actual process-level resource impact and recovery have not been measured; the source trace does not establish a crash, outage or a deployed supervisor's behavior."
+      ],
+      "validation_plan": {
+        "local": "In a parent-approved sandbox, run createObservations with a Project-correct fake API that enforces the real RecordHauntingDto limit, a mocked gateway and no external Work action. Use at most six unique 180-character low-entropy IDs, one dummy Project/service, runtime.oom, and timestamps eleven minutes apart. Simulate no more than the five declared attempts per record. With a trusted inspection hook in a scratch-only copy, count pending entries and retained Detection instances after terminal attempts and after inputs stop; compare three versus six records without load testing. A regression should reject incompatible IDs before watcher mutation or use bounded derived keys, and must evict terminally refused cached outcomes. Also verify one unrelated dummy Project can still process a normal record."
+      }
+    },
+    {
+      "proposed_verdict": "needs_validation",
+      "fingerprint": "packages/watcher/src/rules.ts:unbounded-temporal-samples",
+      "title": "Caller timestamps can grow temporal watcher arrays without a bound",
+      "description": "A plugin Credential holder can submit unique small warning log.line or runtime.restart Events for its bound service while keeping observedAt at one valid timestamp. Each unique Event passes the replay set, and every saved timestamp remains inside inWindow because the comparison uses that same caller timestamp. The error/restart array is then filtered and copied on every input without saturation at the detection threshold. The downstream ten-minute dedupe prevents repeated emitted detections but runs after this work and does not cap sample retention. Source therefore gives linear retained samples and quadratic cumulative array work for a linear number of accepted Events, even when arrival rate respects the API throttle. The shared serial consumer makes this a possible cost imposed on other Projects; no measured delay or availability failure is claimed.",
+      "claimed_root_cause": "Temporal counting stores every matching timestamp in unbounded arrays and ages them only relative to the next untrusted observedAt. There is no count cap or independent expiration. The 10000-entry replay-ID set bounds only identity storage, and detection dedupe happens after the arrays have already grown and been copied.",
+      "trace": [
+        {
+          "kind": "entrypoint",
+          "file": "apps/api/src/auth/dto/publish-event.dto.ts",
+          "line": 43,
+          "scope": "PublishEventDto.observedAt",
+          "description": "The producer chooses an ISO timestamp; no freshness, advancement or maximum equal-timestamp sample count is enforced. Project/service binding still applies."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/daemon/src/observations.ts",
+          "line": 99,
+          "scope": "observe watcher intake",
+          "description": "The shared daemon forwards each newly identified warning Event to watcher.ingest with the producer timestamp unchanged."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/watcher/src/watcher.ts",
+          "line": 32,
+          "scope": "createWatcher.ingest",
+          "description": "observe(envelope) evaluates and mutates temporal rule state before createDedupe.accept is called at line 38."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/watcher/src/rules.ts",
+          "line": 60,
+          "scope": "createRules replay and time extraction",
+          "description": "Distinct IDs bypass replay suppression. The bounded observed Set does not limit per-service arrays, and at is parsed directly from observedAt."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/watcher/src/rules.ts",
+          "line": 23,
+          "scope": "inWindow",
+          "description": "All prior samples equal to at satisfy time > at-windowMs and time <= at, regardless of elapsed wall time. Every input scans the full retained array."
+        },
+        {
+          "kind": "sink",
+          "file": "packages/watcher/src/rules.ts",
+          "line": 111,
+          "scope": "log.line temporal accumulation",
+          "description": "The filtered array is copied and appended with no count limit. runtime.restart repeats the same pattern at line 94, retaining growing arrays in the shared watcher's per-service state."
+        }
+      ],
+      "evidence": [
+        {
+          "file": "packages/watcher/src/rules.ts",
+          "line": 32,
+          "description": "Per-Project/service temporal states have no independent expiry; their errors and restarts arrays survive downstream processing and dedupe."
+        },
+        {
+          "file": "packages/watcher/src/rules.ts",
+          "line": 94,
+          "description": "The restart-count variant filters and spreads all samples even after its threshold of three has been crossed."
+        },
+        {
+          "file": "packages/watcher/src/types.ts",
+          "line": 50,
+          "description": "The detector only needs small fixed thresholds: five errors or three restarts. No corresponding storage maximum accompanies the configured windows."
+        },
+        {
+          "file": "packages/watcher/src/pipeline.ts",
+          "line": 19,
+          "description": "Detection dedupe stores a last accepted timestamp and rejects repeated detections, but it cannot undo the preceding temporal-array mutation."
+        },
+        {
+          "file": "apps/api/src/auth/env.schema.ts",
+          "line": 35,
+          "description": "Body and rate limits exist. They do not impose a lifetime sample quota or require producer timestamps to track the arrival clock."
+        },
+        {
+          "file": "packages/events/src/consumer.ts",
+          "line": 139,
+          "description": "The one consumer awaits each Project's processing serially, making per-Event growing array work part of shared observation dispatch."
+        }
+      ],
+      "blockers": [
+        "No bounded retained-count or deterministic element-visit observation was performed because complete memory and cumulative disk sandbox controls are unavailable.",
+        "Meaningful shared-resource impact has not been measured. Any owner-managed aggregate intake quota or process isolation outside the repository must be inspected before assigning operational impact."
+      ],
+      "validation_plan": {
+        "local": "In a parent-approved sandbox, call the native createRules/createWatcher interfaces with eight and sixteen unique warning log.line Events containing line=ERROR and one fixed valid observedAt, then repeat the independent runtime.restart variant. Use deterministic inspection of retained counts and array-element visits in a trusted scratch copy, with no more than thirty-two records per variant and no timing-based saturation test. Advance only the fixture's arrival clock to establish whether sample cleanup occurs while observedAt stays fixed. Include a second dummy Project sentinel in the consumer harness. A regression should bound temporal storage and work by the rule threshold/window policy even when equal timestamps persist, while preserving existing threshold behavior.",
+        "deployment": "The owner can inspect aggregate quotas and daemon/Project process isolation to determine the actual shared blast radius. Do not generate load or send repeated stale-timestamp Events to a deployed service."
+      }
+    }
+  ],
+  "hardening": [
+    "The checked-in consumer declares max_deliver=5, but processQueued has no delivery-count surface or exhausted-processing DLQ handoff. This is a recovery/operability gap; the configuration does prevent a claim of unlimited broker redelivery for an ordinary permanently failing record.",
+    "The daemon uses one NATS connection for consuming and Collector publication. The checked-in read user lacks detection-publication permission, while the publication user lacks durable-consumer operations. Effective wiring needs a compatible identity or separate connections. This operator-wiring issue alone does not establish an unauthorized action or deployed exposure.",
+    "Docker event buffering has no explicit per-frame byte cap, and Docker/Kubernetes evidence reads primarily limit line counts rather than response bytes. The reviewed origins are operator-selected; no attacker-selected URL or file sink was established. Byte caps and read deadlines would harden these adapters, but upstream runtime limits and a meaningful independent boundary result were not established as a separate finding.",
+    "The legacy exported Docker/Kubernetes watch helpers retain abort listeners after a normal sleep resolves. Production Collectors import the shared integrations watch helper, whose sleep removes those listeners. No active daemon listener-leak finding is promoted from the legacy helpers."
+  ],
+  "uncovered": []
+}

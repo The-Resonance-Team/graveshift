@@ -1,0 +1,12 @@
+[
+  {
+    "alias": "daemon/observations/projectless-collector-log-context",
+    "canonical": "apps/daemon/src/reads.ts:collector-evidence-without-project",
+    "reason": "Shared Projectless collector evidence resolver; preserve both entry/output variants in one candidate."
+  },
+  {
+    "alias": "daemon/fix-context/service-only-repository-authorization",
+    "canonical": "daemon/fix-context/service-only-repository-selection",
+    "reason": "Service-only repository selection is one root cause surfaced at both the model-delegation and patch-execution boundaries."
+  }
+]

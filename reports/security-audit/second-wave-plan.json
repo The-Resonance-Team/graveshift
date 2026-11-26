@@ -1,0 +1,31 @@
+[
+  {
+    "id": "kiro-hooks",
+    "subsystem": ".kiro/hooks",
+    "surface": "Kiro development agents and command/save hooks",
+    "surfaceRef": ".kiro/hooks/block-dangerous-shell.json#hooks",
+    "boundary": "Lower-trust tool/save event data and restricted-agent source writes to developer-host hook commands and security-control decisions",
+    "boundaryRef": "scripts/kiro/guard-shell.mjs#run",
+    "paths": [
+      ".kiro/agents/chaos-witch.json",
+      ".kiro/agents/docs-scribe.json",
+      ".kiro/agents/sre-reviewer.json",
+      ".kiro/hooks/block-dangerous-shell.json",
+      ".kiro/hooks/secret-scan-on-save.json",
+      ".kiro/hooks/typecheck-on-save.json",
+      ".kiro/hooks/pbt-on-guardrails.json",
+      "scripts/kiro/guard-shell.mjs",
+      "scripts/kiro/secret-scan.mjs"
+    ],
+    "priority": 5,
+    "priorityReason": "A source-only baseline pass found a distinct developer-host boundary that is not covered by runtime HTTP, MCP or CI units; malformed or missing hook input may fail open.",
+    "consideredCompanions": ["DESKTOP-MOBILE-AND-LOCAL-IPC.md"],
+    "tasks": [
+      {
+        "label": "Kiro hook event-shape binding and fail-open enforcement",
+        "ordinary": "Wildcard",
+        "companion": ["SUPPLY-CHAIN-AND-RELEASE.md", "Plugin and extension trust expansion"]
+      }
+    ]
+  }
+]

@@ -1,0 +1,100 @@
+{
+  "run_id": "graveshift-2026-11-25-standard-01",
+  "repo": "graveshift",
+  "target": "/Users/xirothedev/workspace/graveshift",
+  "source_ref": "d99415203c22eccbefcbee8d7588ccb227534b53 (HEAD; worktree dirty, including untracked example config and research/report documents)",
+  "profile": "standard",
+  "scope_paths": [
+    "apps/**",
+    "packages/**",
+    "examples/**",
+    ".github/**",
+    ".kiro/**",
+    "powers/**",
+    "deploy/**",
+    "scripts/**",
+    "tests/**",
+    "root manifests, lockfiles, build and deployment configuration"
+  ],
+  "excluded_paths": [
+    "reports/Sentry organization project deployment model.md",
+    "research_notes/Sentry organization project deployment model/**"
+  ],
+  "budget": null,
+  "execution_policy": "sandboxed-source-and-local-only",
+  "selected_companion_files": [
+    "AI-AND-LLM.md",
+    "WEB-PROTOCOL-AND-AUTH.md",
+    "CLOUD-AND-DEPLOYMENT.md",
+    "PROTOCOLS-RPC-AND-MESSAGING.md",
+    "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md",
+    "DATA-ISOLATION-AND-LIFECYCLE.md",
+    "SUPPLY-CHAIN-AND-RELEASE.md",
+    "DESKTOP-MOBILE-AND-LOCAL-IPC.md"
+  ],
+  "prior_run_paths": [],
+  "prior_runs_status": "No prior audit directory found at /Users/xirothedev/security-audit-skill/graveshift.",
+  "source_manifest": "source-manifest.json",
+  "initial_coverage_plan": {
+    "units": 65,
+    "baseline_reconnaissance_calls": 4,
+    "first_wave_hunter_calls": 11,
+    "mandatory_critic_calls": 2,
+    "verification_reserve": "Two fresh verifier calls per unique surviving candidate; no strict agent budget is set.",
+    "budget_gate": "No user-set cap. Baseline reconnaissance, post-wave critic, distinct final-clean critic, and independent validation reserves are available."
+  },
+  "source_worktree_status": {
+    "tracked_changes": [],
+    "untracked_in_scope": ["examples/haunted-candy-shop/graveshift.config.yaml"],
+    "untracked_excluded": [
+      "reports/Sentry organization project deployment model.md",
+      "research_notes/Sentry organization project deployment model/auth_scopes.md",
+      "research_notes/Sentry organization project deployment model/org_users.md",
+      "research_notes/Sentry organization project deployment model/project_deployments.md"
+    ]
+  },
+  "shared_file_owners": {
+    "parent": [
+      "run-metadata.json",
+      "architecture.md",
+      "coverage-ledger.json",
+      "findings.json",
+      "REPORT.md",
+      "FINDINGS-DETAIL.md",
+      "NEEDS-VALIDATION.md"
+    ],
+    "agents": "Each agent receives a unique agents/<agent-id>/{scratch,artifacts} root; agents return source-only results and do not write shared files or target source."
+  },
+  "execution_constraints": {
+    "target_code_execution": "blocked",
+    "blocker": "A trusted audit sandbox has not established complete process-tree CPU, memory, process, file-size, aggregate disk, filesystem and hard wall-clock controls. Network/filesystem declarations in target code do not establish those controls for the audit. No target-controlled build, test, process, browser or fixture processing will run.",
+    "artifact_policy": "No target-controlled process is admitted; the promoted artifact allowlist is empty for every agent. Source-result JSON files are structured message copies, never local-execution evidence.",
+    "available_controls": [
+      "macOS sandbox-exec is installed",
+      "timeout is installed",
+      "ulimit can report process, CPU, and file-size controls"
+    ]
+  },
+  "reconnaissance_status": "All four mandatory source-only reconnaissance passes completed; no materially distinct unmapped deployment mode requires an extra reconnaissance assignment.",
+  "verification_status": {
+    "hunter_units_closed": 66,
+    "unique_candidates_after_deduplication": 19,
+    "phase3_candidate_verifiers": 19,
+    "phase3_outcomes": {"needs_validation": 19, "confirmed": 0, "rejected": 0},
+    "phase5_record_verifiers": 19,
+    "phase5_outcomes": {"verified": 19, "replace": 0},
+    "one_malformed_phase5_result_rerun_with_fresh_agent": "record-15 returned a prose-wrapped reply without a saved result file; it was re-run as record-15b and only that result was accepted.",
+    "coverage_critics": "The post-wave critic returned stop=true with no missing units or reassignments; the distinct final-clean critic independently returned stop=true with no accepted work.",
+    "evidence_policy": "The initial source-only pass could not confirm findings; a later bounded-validation phase established all 19 results under OS-enforced container controls."
+  },
+  "bounded_validation": {
+    "status": "complete",
+    "sandbox": "Linux container (oven/bun:1.4.4 cached image): --network none, --read-only, read-only target and harness mounts, 64 MiB scratch and 16 MiB /tmp tmpfs, 512 MiB memory, 1 CPU, 64 pids, nofile/nproc/fsize/cpu ulimits, timeout -s KILL 30s, explicit safe environment.",
+    "harnesses": 19,
+    "results": "validation/results/*.json and validation/validation-results.json",
+    "outcomes": {"confirmed": 19, "rejected": 0, "inconclusive": 0},
+    "independent_review": "One fresh confirmation verifier per confirmed record; file-capable reruns for ten verifiers whose agent type could not persist results.",
+    "compose_note": "The Compose overlap was resolved by a trusted parent-side `docker compose config` render of scratch copies with a dummy secret marker, not by a container harness."
+  },
+  "run_status": "complete"
+}
