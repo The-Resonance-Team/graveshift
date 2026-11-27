@@ -5,7 +5,7 @@ import type { Prisma } from '@prisma/client';
 
 import type { AuditPage, PolicyUsage, VerifyResult } from './audit.types';
 
-/** The caller-owned database unit an audit write can join. The in-memory adapter ignores it. */
+/** The caller-owned database unit an audit write can join so facts and entry commit together. */
 export type AuditTransaction = Prisma.TransactionClient;
 
 /**
@@ -18,9 +18,9 @@ export interface AuditRecord extends AuditDraft {
 
 /**
  * The one append seam for an audit write from a use case. `AUDIT_SINK` is its token.
- * `AuditRepo` is the Postgres adapter in production; `InMemoryAuditSink` is the adapter in
- * tests. Both own no chain of their own: the adapter behind the seam owns the chain, the
- * eventKey dedup, the serializable retry and the authenticated scope check.
+ * `AuditRepo` is the one adapter, in production and in database tests. The adapter behind the
+ * seam owns the chain, the eventKey dedup, the serializable retry and the scope check; use
+ * cases hold no chain of their own.
  */
 export interface AuditSink {
   /** Append one entry in its own serializable, retryable transaction. */

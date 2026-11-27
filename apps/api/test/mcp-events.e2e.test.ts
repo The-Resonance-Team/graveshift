@@ -5,7 +5,7 @@ import { JwtService } from '@nestjs/jwt';
 import { connectMcpClient } from '@nestjs/mcp/testing';
 import { Test, type TestingModule } from '@nestjs/testing';
 import { parsePolicy } from '@graveshift/policy';
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import request from 'supertest';
 import { z } from 'zod';
 
@@ -15,11 +15,17 @@ import { CREDENTIAL_CONFIG, CREDENTIAL_REPO } from '../src/auth/auth.types';
 import { IDENTITY_REPO } from '../src/identity/identity.types';
 import { InMemoryEventSource } from '../src/mcp/events/events.source';
 import { CLOSED_DEPLOYMENTS, MCP_EVENT_SOURCE } from '../src/mcp/events/events.types';
-import { MCP_BACKEND, MCP_POLICY } from '../src/mcp/mcp.types';
+import {
+  build,
+  type DaemonHarness,
+  openAuditRepo,
+  startDaemon,
+} from '../src/mcp/mcp-daemon-read.fixture';
+import { MCP_BACKEND, MCP_POLICY, type McpBackend } from '../src/mcp/mcp.types';
+import { setupAuthDatabase } from './database/auth.fixture';
+import { dbTestEnabled } from './database/fixtures';
 import { TEST_CONFIG } from './fakes/auth-test-config';
-import { FakeCredentialRepo } from './fakes/fake-credential-repo';
-import { accessToken, testIdentityRepo, validEnvelope } from './fakes/auth-test-helpers';
-import { FakeMcpBackend } from './fakes/fake-mcp-backend';
+import { accessToken, validEnvelope } from './fakes/auth-test-helpers';
 
 const policy = parsePolicy({
   version: 1,
@@ -88,7 +94,8 @@ async function errorCode(
   return typeof code === 'number' ? code : undefined;
 }
 
-describe('MCP Events extension through /mcp (e2e)', () => {
+describe.skipIf(!dbTestEnabled)('MCP Events extension through /mcp (e2e)', () => {
+  const fixture = setupAuthDatabase();
   let app!: INestApplication;
   let moduleRef!: TestingModule;
   let source!: InMemoryEventSource;
@@ -96,20 +103,26 @@ describe('MCP Events extension through /mcp (e2e)', () => {
   let other!: Client;
   let readerToken!: string;
   let persistedCursor!: string;
+  let backend!: McpBackend;
+  let daemon!: DaemonHarness;
+  let audit!: Awaited<ReturnType<typeof openAuditRepo>>;
 
   beforeAll(async () => {
+    daemon = startDaemon();
+    audit = await openAuditRepo();
+    ({ backend } = await build(daemon.client, audit.audit));
     source = new InMemoryEventSource();
     moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(MCP_BACKEND)
-      .useValue(new FakeMcpBackend())
+      .useValue(backend)
       .overrideProvider(MCP_POLICY)
       .useValue(policy)
       .overrideProvider(CREDENTIAL_CONFIG)
       .useValue(TEST_CONFIG)
       .overrideProvider(CREDENTIAL_REPO)
-      .useValue(new FakeCredentialRepo())
+      .useValue(fixture.repo)
       .overrideProvider(IDENTITY_REPO)
-      .useValue(testIdentityRepo())
+      .useValue(fixture.identity)
       .overrideProvider(MCP_EVENT_SOURCE)
       .useValue(source)
       .overrideProvider(CLOSED_DEPLOYMENTS)
@@ -118,7 +131,11 @@ describe('MCP Events extension through /mcp (e2e)', () => {
     app = moduleRef.createNestApplication();
     configureApp(app);
     await app.init();
+  });
 
+  // The fixture resets the database before each test, so credentials and the
+  // SDK clients that carry them are rebuilt after identity is seeded again.
+  beforeEach(async () => {
     const manage = accessToken(moduleRef.get(JwtService), [
       'tokens:manage',
       'incidents:read',
@@ -138,10 +155,15 @@ describe('MCP Events extension through /mcp (e2e)', () => {
     other = await connectMcpClient(moduleRef, { token: otherToken });
   });
 
-  afterAll(async () => {
+  afterEach(async () => {
     await client?.close();
     await other?.close();
+  });
+
+  afterAll(async () => {
     await app?.close();
+    daemon?.stop();
+    await audit?.close();
   });
 
   test('discovers six Event types with inputSchema, payloadSchema and poll delivery', async () => {

@@ -5,7 +5,7 @@ import request from 'supertest';
 import { dbTestEnabled, openTestDatabase } from '../../test/database/fixtures';
 import { AuditRepo } from '../audit/audit.repo';
 import { attemptFence, setupWorkDatabase, WORK_TEST_AGENTS } from './testing/work-db.fixture';
-import { workHttpApp } from './testing/work-http.fixture';
+import { DEFAULT_WORK_SCOPES, workHttpApp } from './testing/work-http.fixture';
 import { WorkItemRepo } from './work-item.repo';
 import { testProjectGrant } from '../internal/testing/project-grant.fixture';
 
@@ -17,9 +17,10 @@ describe.skipIf(!dbTestEnabled)('saved Work item question recovery through publi
     const persisted = await fixture.read();
     const originalId = persisted.activeAttempt?.id;
     const fresh = await openTestDatabase();
+    const audit = new AuditRepo(fresh);
     const restarted = new WorkItemRepo(
       fresh,
-      new AuditRepo(fresh),
+      audit,
       WORK_TEST_AGENTS,
       testProjectGrant(['project-1']),
     );
@@ -65,7 +66,7 @@ describe.skipIf(!dbTestEnabled)('saved Work item question recovery through publi
         });
       },
     };
-    const { app, token } = await workHttpApp(restarted, commands);
+    const { app, token } = await workHttpApp(restarted, commands, DEFAULT_WORK_SCOPES, audit);
     try {
       await request(app.getHttpServer()).get('/api/work-items/work-1/routing').expect(401);
       const recovered = await request(app.getHttpServer())

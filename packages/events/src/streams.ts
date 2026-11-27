@@ -42,24 +42,25 @@ export const DETECTION_CONSUMER = {
 } as const;
 
 /**
- * Deduplicate consumer deliveries by envelope id. A consumer calls `has`
- * before it handles an envelope, and `markDone` only after the handler succeeds
- * and the ack is sent. A failed handler leaves the id unrecorded, so JetStream
- * redelivery is processed again and can reach the dead-letter subject.
+ * A bounded set of completed delivery keys. The consumer keys each Event by
+ * Project and id, calls `has` before it handles the Event, and calls `markDone`
+ * only after the handler succeeds and the ack is sent. A failed handler leaves
+ * the key unrecorded, so JetStream redelivery is processed again and can reach
+ * the dead-letter subject.
  */
 export interface EnvelopeDeduplicator {
-  has(id: string): boolean;
-  markDone(id: string): void;
+  has(key: string): boolean;
+  markDone(key: string): void;
 }
 
 export function createEnvelopeDeduplicator(maxSize = 100_000): EnvelopeDeduplicator {
   const done = new Set<string>();
   return {
-    has(id) {
-      return done.has(id);
+    has(key) {
+      return done.has(key);
     },
-    markDone(id) {
-      done.add(id);
+    markDone(key) {
+      done.add(key);
       if (done.size > maxSize) {
         const oldest = done.values().next().value;
         if (oldest !== undefined) done.delete(oldest);

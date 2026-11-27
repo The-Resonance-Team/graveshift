@@ -1,8 +1,10 @@
 import { prepareRecordedHaunting, type RecordedHaunting } from '@graveshift/core/recorded';
-import { describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 
-import { FakeDeployRepo } from './testing/deploy-repo.fakes';
-import type { DeployRepo } from './deploy.repo';
+import { dbTestEnabled, openTestDatabase, resetDatabase } from '../../test/database/fixtures';
+import { AuditRepo } from '../audit/audit.repo';
+import type { PrismaService } from '../infra/prisma.service';
+import { DeployRepo } from './deploy.repo';
 import {
   DeploymentClosure,
   openingDeploymentPair,
@@ -32,50 +34,66 @@ const event = (deploymentId: string | null, environment: string): DeploymentClos
   view: view(deploymentId, environment),
 });
 
-async function setup() {
-  const deploys = new FakeDeployRepo();
-  await deploys.append({
-    projectId: 'project-1',
-    environment: 'production',
-    deploymentId: SHA,
-    title: 'deploy',
-    dateStarted: new Date(AT),
-    actor: 'daemon',
-  });
-  await deploys.append({
-    projectId: 'project-1',
-    environment: 'staging',
-    deploymentId: SHA,
-    title: 'deploy',
-    dateStarted: new Date(AT),
-    actor: 'daemon',
-  });
-  return { deploys, closure: new DeploymentClosure(deploys as unknown as DeployRepo) };
-}
+describe.skipIf(!dbTestEnabled)('Deployment closure owns ADR-0027', () => {
+  let db: PrismaService;
+  let deploys: DeployRepo;
+  let audit: AuditRepo;
 
-describe('Deployment closure owns ADR-0027', () => {
+  beforeAll(async () => {
+    db = await openTestDatabase();
+    audit = new AuditRepo(db);
+    deploys = new DeployRepo(db, audit);
+  });
+  beforeEach(async () => {
+    await resetDatabase(db);
+    const org = await db.organization.create({ data: { name: 'Closure', slug: 'closure' } });
+    await db.project.create({
+      data: { projectId: 'project-1', orgId: org.id, name: 'Closure', slug: 'closure' },
+    });
+  });
+  afterAll(async () => db?.onModuleDestroy());
+
+  async function setup(): Promise<DeploymentClosure> {
+    await Promise.all(
+      ['production', 'staging'].map((environment) =>
+        deploys.append({
+          projectId: 'project-1',
+          environment,
+          deploymentId: SHA,
+          title: 'deploy',
+          dateStarted: new Date(AT),
+          actor: 'daemon',
+        }),
+      ),
+    );
+    return new DeploymentClosure(deploys);
+  }
+
+  const closedEvents = () =>
+    db.auditEntry.findMany({ where: { projectId: 'project-1', type: 'deployment.closed' } });
+
   test('the opening pair closes its Deployment and appends deployment.closed', async () => {
-    const { deploys, closure } = await setup();
+    const closure = await setup();
     await closure.apply(view(SHA, 'production'), event(SHA, 'production'));
     expect(await deploys.listClosed('project-1')).toEqual([
       { deploymentId: SHA, environment: 'production' },
     ]);
-    expect(deploys.auditTypes).toContain('deployment.closed');
+    expect(await closedEvents()).toHaveLength(1);
   });
 
   test('another Environment with the same SHA closes nothing', async () => {
-    const { deploys, closure } = await setup();
+    const closure = await setup();
     await closure.apply(view(SHA, 'production'), event(SHA, 'staging'));
     expect(await deploys.listClosed('project-1')).toEqual([]);
-    expect(deploys.auditTypes).not.toContain('deployment.closed');
+    expect(await closedEvents()).toEqual([]);
   });
 
   test('another SHA or a missing pair closes nothing', async () => {
-    const { deploys, closure } = await setup();
+    const closure = await setup();
     await closure.apply(view(SHA, 'production'), event(OTHER_SHA, 'production'));
     await closure.apply(view(null), event(null, 'production'));
     expect(await deploys.listClosed('project-1')).toEqual([]);
-    expect(deploys.auditTypes).not.toContain('deployment.closed');
+    expect(await closedEvents()).toEqual([]);
   });
 
   test('a later Event cannot move the recorded opening pair', () => {
@@ -101,13 +119,13 @@ describe('Deployment closure owns ADR-0027', () => {
       deploymentId: SHA,
       deploymentEnvironment: 'staging',
     });
-    const { deploys, closure } = await setup();
+    const closure = await setup();
     await closure.apply(bound, {
       projectId: 'project-1',
       environment: 'production',
       view: unbound,
     });
     expect(await deploys.listClosed('project-1')).toEqual([]);
-    expect(deploys.auditTypes).not.toContain('deployment.closed');
+    expect(await closedEvents()).toEqual([]);
   });
 });

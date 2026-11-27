@@ -1,11 +1,12 @@
 import type { AuditDraft } from '@graveshift/core';
 import { createGateway, type ModelAdapter } from '@graveshift/gateway';
-import { describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import { z } from 'zod';
 
+import { dbTestEnabled } from '../../api/test/database/fixtures';
 import { gatewayAudit } from './audit';
+import { setupFlow } from './flow.fixture';
 import { agent, caller, withFixAuditScope } from './flow-fixtures';
-import { harness } from './flow-harness';
 import { withModelContext } from './model-context';
 
 describe('model audit context', () => {
@@ -74,12 +75,25 @@ describe('model audit context', () => {
     ]);
     expect(gateway.budgetSnapshot().global.spentUsd).toBeCloseTo(0.00003);
   });
+});
+
+describe.skipIf(!dbTestEnabled)('model audit context over Postgres', () => {
+  let flow: Awaited<ReturnType<typeof setupFlow>>;
+  beforeEach(async () => {
+    flow = await setupFlow({
+      agents: [agent({ prompt: 'Fix {{VERSION}}', params: [{ VERSION: '' }] })],
+    });
+  });
+  afterEach(async () => {
+    await flow?.close();
+  });
 
   test('routing and patch audits carry the verified Haunting context', async () => {
-    const flow = harness([agent({ prompt: 'Fix {{VERSION}}', params: [{ VERSION: '' }] })]);
     const result = await flow.commands().fixNow(caller, 'work-1', {});
-    const routing = flow.audit.find((entry) => entry.type === 'model.call');
+    const entries = await flow.platform.audit.list(caller.projectId);
+    const routing = entries.find((entry) => entry.payload.task === 'route_work');
     expect(routing).toMatchObject({
+      type: 'model.call',
       incidentId: 'incident-1',
       payload: { service: 'checkout', task: 'route_work' },
     });
@@ -90,7 +104,9 @@ describe('model audit context', () => {
       questionId: result.routing.questionId,
       params: { VERSION: 'v2' },
     });
-    const patch = flow.audit.filter((entry) => entry.type === 'model.call')[1];
+    const patch = (await flow.platform.audit.list(caller.projectId)).find(
+      (entry) => entry.payload.task === 'generate_patch',
+    );
     expect(patch).toMatchObject({
       incidentId: 'incident-1',
       payload: { service: 'checkout', task: 'generate_patch' },

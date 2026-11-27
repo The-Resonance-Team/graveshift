@@ -1,19 +1,13 @@
 import type { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
-import type { AuditDraft, AuditEntry, EventEnvelope } from '@graveshift/core';
+import type { EventEnvelope } from '@graveshift/core';
 import { createInMemoryPublisher, type InMemoryPublisher } from '@graveshift/events/testing';
 
 import { configureApp } from '../../src/app.factory';
 import { AppModule } from '../../src/app.module';
-import {
-  AUDIT_SINK,
-  type AuditRecord,
-  type AuditSink,
-  type AuditTransaction,
-} from '../../src/audit/audit.sink';
+import { AUDIT_READER, AUDIT_SINK } from '../../src/audit/audit.sink';
 import { DeployRepo } from '../../src/deploys/deploy.repo';
-import { FakeDeployRepo } from '../../src/deploys/testing/deploy-repo.fakes';
 import {
   CREDENTIAL_CONFIG,
   CREDENTIAL_REPO,
@@ -23,74 +17,30 @@ import {
   type CredentialVerifier,
 } from '../../src/auth/auth.types';
 import { BOOT_CONFIG } from '../../src/config/boot.config';
-import { DEFAULT_DAEMON_GRANT, IDENTITY_REPO } from '../../src/identity/identity.types';
-import { FakeIdentityRepo } from '../../src/identity/testing/fake-identity.repo';
-import { TEST_CONFIG, testBootConfig, testOAuthClients } from './auth-test-config';
-import { FakeCredentialRepo } from './fake-credential-repo';
-
-export { TEST_CONFIG };
-
-/** The in-memory adapter at the `AUDIT_SINK` seam. No network or database call is made. */
-export class FakeAuditRepo implements AuditSink {
-  readonly appended: AuditRecord[] = [];
-
-  append(projectId: string, draft: AuditDraft): Promise<AuditEntry> {
-    this.appended.push({ ...structuredClone(draft), projectId });
-    return Promise.resolve(this.entry());
-  }
-
-  appendInTx(_tx: AuditTransaction, projectId: string, draft: AuditDraft): Promise<AuditEntry> {
-    return this.append(projectId, draft);
-  }
-
-  transaction<Result>(work: (tx: AuditTransaction) => Promise<Result>): Promise<Result> {
-    return work(undefined as unknown as AuditTransaction);
-  }
-
-  private entry(): AuditEntry {
-    return {
-      seq: this.appended.length,
-      at: new Date().toISOString(),
-      actor: 'fixture',
-      type: 'fixture',
-      payload: {},
-      prevHash: '0'.repeat(64),
-      hash: '0'.repeat(64),
-    };
-  }
-}
+import { IDENTITY_REPO } from '../../src/identity/identity.types';
+import type { PrismaService } from '../../src/infra/prisma.service';
+import type { AuthFixture } from '../database/auth.fixture';
+import { TEST_CONFIG, testBootConfig } from './auth-test-config';
 
 export interface AuthTestApp {
   app: INestApplication;
   jwt: JwtService;
-  repo: FakeCredentialRepo;
-  identity: FakeIdentityRepo;
+  repo: AuthFixture['repo'];
+  identity: AuthFixture['identity'];
   publisher: InMemoryPublisher;
-  audit: FakeAuditRepo;
-  deploys: FakeDeployRepo;
+  audit: AuthFixture['audit'];
+  deploys: AuthFixture['deploys'];
+  db: PrismaService;
 }
 
-/** Seeds the in-memory OAuth client registry and the stored deployment grant. */
-export function testIdentityRepo(): FakeIdentityRepo {
-  const identity = new FakeIdentityRepo();
-  for (const client of testOAuthClients()) void identity.clients.set(client.clientId, client);
-  void identity.grants.set(DEFAULT_DAEMON_GRANT, {
-    id: 'test-grant',
-    name: DEFAULT_DAEMON_GRANT,
-    projectIds: ['12345', '12346'],
-  });
-  return identity;
-}
-
+/** Boots the full API over the guarded database fixture, with real repository seams. */
 export async function buildAuthApp(
+  fixture: AuthFixture,
   overrides: Partial<AuthConfig> = {},
   publisherOverride?: InMemoryPublisher,
   sentryVerifier?: CredentialVerifier,
 ): Promise<AuthTestApp> {
-  const repo = new FakeCredentialRepo();
-  const identity = testIdentityRepo();
-  const audit = new FakeAuditRepo();
-  const deploys = new FakeDeployRepo();
+  const { db, repo, identity, audit, deploys } = fixture;
   const publisher = publisherOverride ?? createInMemoryPublisher();
   const config = { ...TEST_CONFIG, ...overrides };
   const boot = { ...(await testBootConfig()), auth: config };
@@ -105,6 +55,8 @@ export async function buildAuthApp(
     .useValue(identity)
     .overrideProvider(AUDIT_SINK)
     .useValue(audit)
+    .overrideProvider(AUDIT_READER)
+    .useValue(audit)
     .overrideProvider(DeployRepo)
     .useValue(deploys)
     .overrideProvider(EVENT_PUBLISHER)
@@ -116,7 +68,7 @@ export async function buildAuthApp(
   const app = moduleRef.createNestApplication();
   configureApp(app);
   await app.init();
-  return { app, jwt: moduleRef.get(JwtService), repo, identity, publisher, audit, deploys };
+  return { app, jwt: moduleRef.get(JwtService), repo, identity, publisher, audit, deploys, db };
 }
 
 export function accessToken(

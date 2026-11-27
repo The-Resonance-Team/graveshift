@@ -8,13 +8,23 @@ import {
   type WorkCaller,
   type WorkCommands,
 } from '@graveshift/work';
+import type { Prisma } from '@prisma/client';
 
-import type { WorkListQuery } from '../../src/work-items/work-item.types';
+import { AuditRepo } from '../../src/audit/audit.repo';
+import { testProjectGrant } from '../../src/internal/testing/project-grant.fixture';
+import type { PrismaService } from '../../src/infra/prisma.service';
+import { WorkItemRepo } from '../../src/work-items/work-item.repo';
+import { workItemData } from '../database/fixtures';
 
 export const TEST_AGENTS = [
   { name: 'SRE Agent', autoFix: false },
   { name: 'Automatic Agent', autoFix: true },
 ];
+
+/** Work ids are global in Postgres. Only the first seeded Project keeps the short ids. */
+export function workId(projectId: string, id = 'work-1', primary = '12345'): string {
+  return projectId === primary ? id : `${projectId}-${id}`;
+}
 
 export function workItem(id = 'work-1', overrides: Partial<WorkItem> = {}): WorkItem {
   return {
@@ -43,8 +53,10 @@ export function workItem(id = 'work-1', overrides: Partial<WorkItem> = {}): Work
   };
 }
 
-/** Explicit HTTP test adapter. No production store or fix execution is replaced. */
+/** Explicit HTTP test adapter. The Work store is the real repository over the test database. */
 export function fakeWorkApi(
+  db: PrismaService,
+  audit: AuditRepo,
   options: {
     deny?: boolean;
     fail?: boolean;
@@ -56,32 +68,41 @@ export function fakeWorkApi(
 ) {
   const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
   const hold = (caller: WorkCaller) => sleep(options.delayMs?.(caller) ?? 0);
-  const allowed = new Set([options.projectId ?? '12345', ...(options.projectIds ?? [])]);
-  // The production store is keyed by Project, so the fake is too: one client's change can never
-  // be seen by another Project.
-  const store = (): Map<string, WorkItem> =>
-    new Map([
-      ['work-1', workItem()],
-      ['human', workItem('human', { assignee: 'needs_human' })],
-      ['done', workItem('done', { status: 'done' })],
-    ]);
-  const items = new Map<string, Map<string, WorkItem>>();
-  const itemsFor = (projectId: string): Map<string, WorkItem> => {
-    const existing = items.get(projectId);
-    if (existing !== undefined) return existing;
-    const created = store();
-    items.set(projectId, created);
-    return created;
-  };
+  const projects = [options.projectId ?? '12345', ...(options.projectIds ?? [])];
+  const allowed = new Set(projects);
+  // One durable row set per Project: a client's change is read by every later client, and a
+  // Project outside the grant cannot see another Project's Work.
+  // Work ids are globally unique in Postgres, so a second Project gets namespaced ids.
+  const seeded = Promise.all(
+    projects.map((projectId) =>
+      db.workItem.createMany({
+        data: [
+          {
+            ...workItemData(projectId, workId(projectId, 'work-1', projects[0])),
+            assignee: 'needs_agent_SRE Agent',
+          },
+          {
+            ...workItemData(projectId, workId(projectId, 'human', projects[0])),
+            assignee: 'needs_human',
+          },
+          { ...workItemData(projectId, workId(projectId, 'done', projects[0])), status: 'done' },
+        ],
+        skipDuplicates: true,
+      }),
+    ),
+  );
+  const repo = new WorkItemRepo(db, audit, [], testProjectGrant(projects));
   const calls: { method: string; caller: WorkCaller; id: string; input: unknown }[] = [];
   /** Start and done markers per daemon call, so a test can prove overlap, not timing luck. */
   const timeline: string[] = [];
   const receipts = new Map<string, { content: string; result: FixResult }>();
-  const read = (projectId: string, id: string) => {
+  const read = async (projectId: string, id: string): Promise<WorkItem> => {
     if (!allowed.has(projectId)) throw new WorkError('PROJECT_FORBIDDEN', 'Wrong project');
-    const item = itemsFor(projectId).get(id);
-    if (!item) throw new WorkError('WORK_NOT_FOUND', 'The Work item does not exist');
-    return item;
+    await seeded;
+    return (await repo.read({ projectId, id })).item;
+  };
+  const store = async (projectId: string, id: string, changes: Prisma.WorkItemUpdateInput) => {
+    await db.workItem.update({ where: { projectId_id: { projectId, id } }, data: changes });
   };
   const run = async (
     caller: WorkCaller,
@@ -96,10 +117,9 @@ export function fakeWorkApi(
       if (saved.content !== content) throw new WorkError('COMMAND_CONFLICT', 'Different content');
       return saved.result;
     }
-    const current = read(caller.projectId, id);
+    const current = await read(caller.projectId, id);
     assertFixEligible(current, trigger, TEST_AGENTS);
-    const item = trigger === 'fix_now' ? { ...current, fixPriority: 0 } : current;
-    itemsFor(caller.projectId).set(id, item);
+    if (trigger === 'fix_now') await store(caller.projectId, id, { fixPriority: 0 });
     const pr =
       options.deny || options.fail
         ? null
@@ -111,7 +131,7 @@ export function fakeWorkApi(
             headSha: 'head-sha',
           };
     const result: FixResult = {
-      item: pr === null ? item : { ...item, draftPr: pr },
+      item: pr === null ? current : { ...current, draftPr: pr },
       trigger,
       effect: pr === null ? 'deny' : 'allow',
       ok: pr !== null,
@@ -121,7 +141,10 @@ export function fakeWorkApi(
       routing: null,
       attemptId: `attempt-${id}`,
     };
-    itemsFor(caller.projectId).set(id, result.item);
+    if (pr !== null) {
+      // Prisma Json boundary: the recorded policy result is already plain JSON data.
+      await store(caller.projectId, id, { draftPr: pr as Prisma.InputJsonValue });
+    }
     receipts.set(key, { content, result });
     return result;
   };
@@ -130,8 +153,8 @@ export function fakeWorkApi(
       calls.push({ method: 'triage', caller, id, input });
       timeline.push(`triage:${caller.projectId}:start`);
       await hold(caller);
-      const decision = decideTriage(read(caller.projectId, id), input.assignee, TEST_AGENTS);
-      itemsFor(caller.projectId).set(id, decision.item);
+      const decision = decideTriage(await read(caller.projectId, id), input.assignee, TEST_AGENTS);
+      await store(caller.projectId, id, { assignee: decision.item.assignee });
       if (decision.trigger === null) {
         timeline.push(`triage:${caller.projectId}:done`);
         return { item: decision.item, autoFix: null };
@@ -152,29 +175,9 @@ export function fakeWorkApi(
       calls.push({ method: 'answer', caller, id, input });
       timeline.push(`answer:${caller.projectId}:start`);
       await hold(caller);
-      read(caller.projectId, id);
+      await read(caller.projectId, id);
       timeline.push(`answer:${caller.projectId}:done`);
       throw new WorkError('QUESTION_NOT_PENDING', 'This question is no longer pending');
-    },
-  };
-  const repo = {
-    async read(ref: { projectId: string; id: string }) {
-      return { item: read(ref.projectId, ref.id), version: 0 };
-    },
-    async list(projectId: string, query: WorkListQuery) {
-      read(projectId, 'work-1');
-      const { offset, limit, ...filters } = query;
-      const rows = [...itemsFor(projectId).values()]
-        .filter((item) =>
-          Object.entries(filters).every(([key, value]) => item[key as keyof WorkItem] === value),
-        )
-        .sort(
-          (left, right) =>
-            left.fixPriority - right.fixPriority ||
-            left.title.localeCompare(right.title) ||
-            left.id.localeCompare(right.id),
-        );
-      return { items: rows.slice(offset, offset + limit), total: rows.length, offset, limit };
     },
   };
   return { repo, commands, calls, timeline };

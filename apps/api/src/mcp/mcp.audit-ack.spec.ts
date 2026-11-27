@@ -2,7 +2,9 @@ import 'reflect-metadata';
 import { Test } from '@nestjs/testing';
 import type { AuditDraft } from '@graveshift/core';
 import { parsePolicy } from '@graveshift/policy';
-import { describe, expect, mock, test } from 'bun:test';
+import { afterAll, describe, expect, mock, test } from 'bun:test';
+
+import { dbTestEnabled } from '../../test/database/fixtures';
 
 import { HttpMcpBackend } from './mcp.backend';
 import { McpProjectContext } from './mcp-project-context';
@@ -15,7 +17,7 @@ import {
   type McpAuditWriter,
   type McpBackend,
 } from './mcp.types';
-import { FakeMcpBackend } from '../../test/fakes/fake-mcp-backend';
+import { build, openAuditRepo, startDaemon } from './mcp-daemon-read.fixture';
 
 const draft: AuditDraft = {
   key: 'mcp:proposal:1',
@@ -41,6 +43,7 @@ const policy = parsePolicy({
 });
 
 describe('MCP audit acknowledgement', () => {
+  let repo: Awaited<ReturnType<typeof openAuditRepo>> | undefined;
   test('with no Project bound the backend refuses and writes nothing', async () => {
     const append = mock(async () => ({}) as never);
     const sink = { append } as unknown as ConstructorParameters<typeof HttpMcpBackend>[1];
@@ -64,28 +67,42 @@ describe('MCP audit acknowledgement', () => {
     expect(append).toHaveBeenCalledWith('12345', draft);
   });
 
-  test('propose_fix withholds its result when the audit is not acknowledged', async () => {
-    const writer: McpAuditWriter = {
-      requireProject: () => {},
-      auditDecision: async () => ({ acknowledged: false, reason: 'no_project' }),
-    };
-    const moduleRef = await Test.createTestingModule({
-      providers: [
-        McpTools,
-        { provide: MCP_BACKEND, useValue: new FakeMcpBackend() },
-        { provide: MCP_AUDIT_WRITER, useValue: writer },
-        { provide: MCP_POLICY, useValue: policy },
-        { provide: MCP_ENV_MODE, useValue: undefined },
-      ],
-    }).compile();
-    try {
-      const tools = moduleRef.get(McpTools);
-      await expect(tools.proposeFix({ incidentId: 'inc1', action: 'open_pr' })).rejects.toThrow(
-        'Policy audit was not acknowledged',
-      );
-    } finally {
-      await moduleRef.close();
-    }
+  test.skipIf(!dbTestEnabled)(
+    'propose_fix withholds its result when the audit is not acknowledged',
+    async () => {
+      const writer: McpAuditWriter = {
+        requireProject: () => {},
+        auditDecision: async () => ({ acknowledged: false, reason: 'no_project' }),
+      };
+      const daemon = startDaemon();
+      try {
+        repo ??= await openAuditRepo();
+        const { backend } = await build(daemon.client, repo.audit);
+        const moduleRef = await Test.createTestingModule({
+          providers: [
+            McpTools,
+            { provide: MCP_BACKEND, useValue: backend },
+            { provide: MCP_AUDIT_WRITER, useValue: writer },
+            { provide: MCP_POLICY, useValue: policy },
+            { provide: MCP_ENV_MODE, useValue: undefined },
+          ],
+        }).compile();
+        try {
+          const tools = moduleRef.get(McpTools);
+          await expect(tools.proposeFix({ incidentId: 'inc1', action: 'open_pr' })).rejects.toThrow(
+            'Policy audit was not acknowledged',
+          );
+        } finally {
+          await moduleRef.close();
+        }
+      } finally {
+        daemon.stop();
+      }
+    },
+  );
+
+  afterAll(async () => {
+    await repo?.close();
   });
 
   test('an unbound Project refuses propose_fix at the guard before any read or write', async () => {

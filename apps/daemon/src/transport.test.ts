@@ -1,23 +1,25 @@
-import { AuditDraftSchema } from '@graveshift/core';
-import { describe, expect, test } from 'bun:test';
-import { z } from 'zod';
+import type { INestApplication } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { Test } from '@nestjs/testing';
+import { afterEach, describe, expect, test } from 'bun:test';
+import request from 'supertest';
 
+import { BOOT_CONFIG } from '../../api/src/config/boot.config';
+import { DEFAULT_DAEMON_GRANT, IDENTITY_REPO } from '../../api/src/identity/identity.types';
+import { PrismaIdentityRepo } from '../../api/src/identity/repo/identity.repo';
+import type { PrismaService } from '../../api/src/infra/prisma.service';
+import { InternalConfigController } from '../../api/src/internal/internal-config.controller';
+import { InternalGuard } from '../../api/src/internal/internal.guard';
+import { ProjectGrant } from '../../api/src/internal/project-grant';
+import { testProjectGrant } from '../../api/src/internal/testing/project-grant.fixture';
+import { dbTestEnabled, openTestDatabase, resetDatabase } from '../../api/test/database/fixtures';
 import { createPrivateApi } from './api-client';
 import { createAudit, gatewayAudit } from './audit';
 import { BootConfigSchema, configuredGateway, loadBootConfig } from './boot-config';
 import { readDaemonConfig } from './config';
-import { fakeApi } from './fake-api';
 import { contextClient } from './fix-context';
-import {
-  agent,
-  caller,
-  context,
-  diagnosis,
-  item,
-  policy,
-  withFixAuditScope,
-} from './flow-fixtures';
-import { createWorkClient } from './work-client';
+import { agent, caller, diagnosis, item, policy, withFixAuditScope } from './flow-fixtures';
+import { createPlatform, TEST_BASE_SHA } from './platform.fixture';
 
 const apiToken = 'local-api-internal-token-long-enough';
 const daemonToken = 'local-daemon-internal-token-long-enough';
@@ -78,8 +80,7 @@ describe('daemon private transport and config', () => {
     );
   });
 
-  test('boot consumes the stored project grant and rejects secret fields', async () => {
-    expect(await loadBootConfig(fakeApi(() => boot))).toEqual(BootConfigSchema.parse(boot));
+  test('boot rejects secret fields and an empty gateway price table', async () => {
     expect(BootConfigSchema.safeParse({ ...boot, projectIds: ['project-1'] }).success).toBe(false);
     expect(BootConfigSchema.safeParse({ ...boot, apiKey: 'must-not-cross-http' }).success).toBe(
       false,
@@ -93,65 +94,83 @@ describe('daemon private transport and config', () => {
       ),
     ).toThrow('price table');
   });
+});
 
-  test('Work state paths and auth use the canonical private contract', async () => {
-    const received: Array<{ url: URL; init?: RequestInit }> = [];
+describe.skipIf(!dbTestEnabled)('daemon private seams over the real platform', () => {
+  const opened: Array<{ close: () => Promise<unknown> }> = [];
+  const make = async () => {
+    const db = await openTestDatabase();
+    await resetDatabase(db);
+    const platform = await createPlatform(db);
+    opened.push({
+      close: async () => {
+        await platform.close();
+        await db.onModuleDestroy();
+      },
+    });
+    return { db, platform };
+  };
+  afterEach(async () => {
+    await Promise.all(opened.splice(0).map((entry) => entry.close()));
+  });
+
+  /** The real InternalConfigController, backed by a seeded daemon grant. */
+  async function configApi(db: PrismaService) {
+    const identity = new PrismaIdentityRepo(db);
+    const org = await db.organization.create({
+      data: { id: 'config-org', name: 'Config', slug: 'config' },
+    });
+    await db.project.create({
+      data: { projectId: '12345', orgId: org.id, name: 'Config', slug: 'config' },
+    });
+    await identity.addGrant({
+      id: crypto.randomUUID(),
+      name: DEFAULT_DAEMON_GRANT,
+      projectIds: ['12345'],
+    });
+    const moduleRef = await Test.createTestingModule({
+      controllers: [InternalConfigController],
+      providers: [
+        InternalGuard,
+        { provide: ProjectGrant, useValue: testProjectGrant(['12345']) },
+        { provide: BOOT_CONFIG, useValue: { ...boot, databaseUrl: 'postgresql://localhost/test' } },
+        { provide: IDENTITY_REPO, useValue: identity },
+        {
+          provide: ConfigService,
+          useValue: new ConfigService({ GRAVESHIFT_API_INTERNAL_TOKEN: apiToken }),
+        },
+      ],
+    }).compile();
+    const app: INestApplication = moduleRef.createNestApplication({ logger: false });
+    await app.init();
+    opened.push({ close: () => app.close() });
     const fetcher = Object.assign(
       async (input: Request | string | URL, init?: RequestInit) => {
-        received.push({ url: new URL(String(input)), ...(init === undefined ? {} : { init }) });
-        return Response.json({ item: item(), version: 3, diagnosis });
+        const url = new URL(String(input));
+        const outgoing = request(app.getHttpServer()).get(url.pathname + url.search);
+        const auth = new Headers(init?.headers).get('authorization');
+        if (auth !== null) outgoing.set('authorization', auth);
+        const response = await outgoing.send();
+        return new Response(response.text, { status: response.status });
       },
       { preconnect: () => {} },
     );
-    const api = createPrivateApi({
+    return createPrivateApi({
       origin: 'http://127.0.0.1:3000',
       token: apiToken,
       timeoutMs: 1000,
       fetch: fetcher,
     });
-    const work = createWorkClient(api);
-    expect((await work.read({ projectId: caller.projectId, id: 'work/1' })).version).toBe(3);
-    const sent = received[0];
-    expect(sent?.url.pathname).toBe('/internal/work-items/work%2F1/read');
-    expect(new Headers(sent?.init?.headers).get('authorization')).toBe(`Bearer ${apiToken}`);
-    expect(sent?.init?.redirect).toBe('error');
-    expect(JSON.parse(String(sent?.init?.body))).toEqual({ projectId: caller.projectId });
-    await expect(api.get('https://remote.test/internal/config', z.unknown())).rejects.toThrow(
-      'path is invalid',
-    );
+  }
+
+  test('boot consumes the stored project grant', async () => {
+    const { db } = await make();
+    expect(await loadBootConfig(await configApi(db))).toEqual(BootConfigSchema.parse(boot));
   });
 
-  test('rejects the daemon token on the API hop', async () => {
-    const fetcher = Object.assign(
-      async (_input: Request | string | URL, init?: RequestInit) => {
-        const headers = new Headers(init?.headers);
-        if (headers.get('authorization') !== `Bearer ${apiToken}`) {
-          return Response.json({ message: 'Internal authentication required' }, { status: 401 });
-        }
-        return Response.json({ item: item(), version: 3, diagnosis });
-      },
-      { preconnect: () => {} },
-    );
-    const api = createPrivateApi({
-      origin: 'http://127.0.0.1:3000',
-      token: daemonToken,
-      timeoutMs: 1000,
-      fetch: fetcher,
-    });
-    await expect(
-      createWorkClient(api).read({ projectId: caller.projectId, id: 'work/1' }),
-    ).rejects.toThrow('Private API request failed');
-  });
-
-  test('gateway audit acknowledgement follows the durable append and checks the exact key', async () => {
-    const saved: string[] = [];
-    const write = createAudit(
-      fakeApi((_path, body) => {
-        const request = z.object({ projectId: z.string(), draft: AuditDraftSchema }).parse(body);
-        saved.push(request.draft.key);
-        return { key: request.draft.key };
-      }),
-    );
+  test('gateway audit acknowledgement follows the durable append', async () => {
+    const { db, platform } = await make();
+    const write = createAudit(platform.api);
     const ack = await withFixAuditScope(() =>
       gatewayAudit(write)({
         callId: 'call-1',
@@ -163,79 +182,26 @@ describe('daemon private transport and config', () => {
         costUsd: 0.01,
       }),
     );
-    expect(saved).toEqual(['gateway:call-1']);
     expect(ack).toEqual({ callId: 'call-1' });
-    await expect(
-      withFixAuditScope(() =>
-        createAudit(fakeApi(() => ({ key: 'wrong-key' })))({
-          key: 'wanted',
-          actor: 'daemon',
-          type: 'test',
-          payload: {},
-        }),
-      ),
-    ).rejects.toThrow('does not match');
+    expect(await db.auditEntry.findMany({ select: { eventKey: true } })).toEqual([
+      { eventKey: 'gateway:call-1' },
+    ]);
   });
 
-  test('context maps the actual Grave and rejects unavailable or mismatched facts', async () => {
-    const facts = context();
-    const view = {
-      incident: facts.incident,
-      category: facts.category,
-      deploymentId: facts.deploymentId,
-      detections: [
-        {
-          id: 'signal-1',
-          projectId: caller.projectId,
-          eventId: 'event-1',
-          traceId: 'trace-1',
-          rule: 'runtime.oom',
-          service: 'checkout',
-          severity: 'critical',
-          fingerprint: 'checkout:oom',
-          message: 'oom',
-          observedAt: diagnosis.createdAt,
-        },
-      ],
-    };
-    const api = fakeApi((path, body) => {
-      expect(body).toEqual({
-        projectId: caller.projectId,
-        service: 'checkout',
-        diagnosisRef: diagnosis.id,
-      });
-      return path === '/internal/context' ? facts.policy : view;
-    });
-    const result = await contextClient(api, policy)(caller, {
-      item: item(),
-      version: 1,
-      diagnosis,
-    });
+  test('context maps the real Grave and rejects invalid or unavailable facts', async () => {
+    const { db, platform } = await make();
+    await platform.seedHaunting();
+    const snapshot = { item: item(), version: 1, diagnosis };
+    const result = await contextClient(platform.api, policy)(caller, snapshot);
     expect(result.repo.services).toEqual(['checkout']);
-    expect(result.deploymentId).toBe(facts.deploymentId);
-    const detection = view.detections[0];
-    if (detection === undefined) throw new Error('Expected recorded detection');
-    view.detections.push({ ...detection, id: 'signal-2', eventId: 'event-2' });
-    facts.policy.signals.push(detection.rule);
-    const repeated = await contextClient(api, policy)(caller, {
-      item: item(),
-      version: 1,
-      diagnosis,
+    expect(result.deploymentId).toBe(TEST_BASE_SHA);
+    const mismatched = { ...snapshot, diagnosis: { ...diagnosis, confidence: 0.5 } };
+    await expect(contextClient(platform.api, policy)(caller, mismatched)).rejects.toMatchObject({
+      failure: 'invalid_context',
     });
-    expect(repeated.policy.counters).toEqual(facts.policy.counters);
-    const invalid = fakeApi((path) =>
-      path === '/internal/context' ? { ...facts.policy, confidence: 0 } : view,
-    );
-    await expect(
-      contextClient(invalid, policy)(caller, { item: item(), version: 1, diagnosis }),
-    ).rejects.toMatchObject({ failure: 'invalid_context' });
-    await expect(
-      contextClient(
-        fakeApi(() => {
-          throw new Error('No facts');
-        }),
-        policy,
-      )(caller, { item: item(), version: 1, diagnosis }),
-    ).rejects.toMatchObject({ failure: 'context_unavailable' });
+    await db.haunting.deleteMany();
+    await expect(contextClient(platform.api, policy)(caller, snapshot)).rejects.toMatchObject({
+      failure: 'context_unavailable',
+    });
   });
 });

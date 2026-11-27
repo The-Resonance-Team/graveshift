@@ -1,10 +1,9 @@
 import type { IncidentView, LimitCounters, ProposeFixResult, ServiceView } from '../schemas';
 
 /**
- * Fixture data for the fake MCP server. It mirrors `apps/api/test/fakes/
- * fake-mcp-backend.ts` so a test that passes here exercises the same shapes
- * the real endpoint serves. The token value is a fixed test sample, never a
- * live secret.
+ * Fixture data for the fake MCP server. Its shapes mirror the real MCP
+ * endpoint responses. The token value is a fixed test sample, never a live
+ * secret.
  */
 
 export const FAKE_SECRET = 'AKIAIOSFODNN7EXAMPLE';

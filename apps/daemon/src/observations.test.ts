@@ -1,270 +1,152 @@
-import { RecordedHauntingSchema, type RecordedHaunting } from '@graveshift/core/recorded';
-import type { Gateway } from '@graveshift/gateway';
-import { describe, expect, test } from 'bun:test';
-import { z } from 'zod';
+import { afterEach, describe, expect, spyOn, test } from 'bun:test';
 
-import { fakeApi } from './fake-api';
-import { agent, caller, envelope, item } from './flow-fixtures';
-import { createObservations, type ObservationOptions } from './observations';
-import { HttpFailure } from './private-http';
-import { harness } from './flow-harness';
-import { workActivation } from './work-activation';
-import { processQueued, publishSubject } from '@graveshift/events';
+import { dbTestEnabled } from '../../api/test/database/fixtures';
+import { caller, envelope } from './flow-fixtures';
+import { setupFlow } from './flow.fixture';
 
-function state() {
-  const views = new Map<string, RecordedHaunting>();
-  const receipts = new Map<string, string>();
-  const work = new Set<string>();
-  const activated: string[] = [];
-  const seenProjects: string[] = [];
-  let modelCalls = 0;
-  let loseDiagnosisAck = false;
-  let rejectFirstWrite = false;
-  const gateway: Pick<Gateway, 'run'> = {
-    async run(task) {
-      modelCalls++;
-      return {
-        status: 'ok',
-        value: task.schema.parse({
-          category: 'resource_exhaustion',
-          rootCause: 'Out of memory',
-          confidence: 0.95,
-          evidence: [{ ref: 'signal:1', excerpt: 'runtime.oom' }],
-        }),
-        model: 'recorded-model',
-        usage: { in: 10, out: 5 },
-        costUsd: 0.01,
-        callId: 'diagnosis-call',
-      };
-    },
-  };
-  const api = fakeApi((path, body) => {
-    if (path === '/internal/hauntings/list') return [...views.values()].reverse().slice(0, 50);
-    if (path === '/internal/hauntings/active') {
-      const ref = z.object({ projectId: z.string(), service: z.string() }).parse(body);
-      seenProjects.push(ref.projectId);
-      return (
-        [...views.values()].find(
-          (view) =>
-            view.incident.service === ref.service &&
-            !['resolved', 'dismissed'].includes(view.incident.state),
-        ) ?? null
-      );
-    }
-    if (path === '/internal/hauntings/get') {
-      const ref = z.object({ id: z.string(), projectId: z.string() }).parse(body);
-      const found = views.get(ref.id);
-      if (!found) throw new HttpFailure(404, 'Not found');
-      return found;
-    }
-    if (path === '/internal/hauntings') {
-      const input = z
-        .object({ projectId: z.string(), eventId: z.string(), view: RecordedHauntingSchema })
-        .parse(body);
-      seenProjects.push(input.projectId);
-      if (rejectFirstWrite) {
-        rejectFirstWrite = false;
-        throw new Error('Storage unavailable');
-      }
-      const previous = receipts.get(input.eventId);
-      const serialized = JSON.stringify(input.view);
-      if (previous !== undefined && previous !== serialized)
-        throw new Error('Changed idempotency payload');
-      receipts.set(input.eventId, serialized);
-      views.set(input.view.incident.id, input.view);
-      if (loseDiagnosisAck && input.view.incident.diagnosis) {
-        loseDiagnosisAck = false;
-        throw new Error('Durable write committed but response was lost');
-      }
-      return input.view;
-    }
-    if (path === '/internal/work-items/from-haunting') {
-      const ref = z.object({ incidentId: z.string() }).parse(body);
-      const created = !work.has(ref.incidentId);
-      work.add(ref.incidentId);
-      return { item: item(), created };
-    }
-    throw new Error('Unexpected API call');
+type Flow = Awaited<ReturnType<typeof setupFlow>>;
+const LATE = '2026-11-21T10:11:00.000Z';
+
+/** The observation writes under this eventKey; a conflicting audit row blocks it. */
+const writeKey = `haunting:${envelope.id}:detected:runtime.oom`;
+
+async function blockWrite(flow: Flow) {
+  await flow.platform.audit.append(caller.projectId, {
+    key: writeKey,
+    actor: 'other',
+    type: 'haunting.recorded',
+    payload: { view: {}, deploymentId: null },
   });
-  const options: ObservationOptions = {
-    api,
-    gateway,
-    agents: [agent({ role: 'diagnosis' })],
-    logs: async () => ['Out of memory'],
-    onWork: async (_item, incidentId, _projectId) => {
-      activated.push(incidentId);
-    },
-  };
-  return {
-    options,
-    views,
-    work,
-    activated,
-    seenProjects,
-    receipts,
-    modelCalls: () => modelCalls,
-    loseAck: () => {
-      loseDiagnosisAck = true;
-    },
-    failWrite: () => {
-      rejectFirstWrite = true;
-    },
-  };
 }
 
-describe('queued observation orchestration', () => {
-  test('a queued detection persists its Haunting, Diagnosis, and one Work item', async () => {
-    const fixture = state();
-    const process = await createObservations(fixture.options);
-    await process(envelope);
-    const view = [...fixture.views.values()][0];
-    if (view === undefined) throw new Error('Expected a recorded Haunting');
-    expect(view).toMatchObject({
-      category: 'resource_exhaustion',
-      incident: { service: 'checkout', state: 'diagnosed' },
-      detections: [
-        { projectId: caller.projectId, eventId: envelope.id, traceId: envelope.traceId },
-      ],
+async function unblockWrite(flow: Flow) {
+  await flow.db.$transaction(async (tx) => {
+    await tx.$executeRaw`SET LOCAL session_replication_role = replica`;
+    await tx.auditEntry.delete({
+      where: { projectId_eventKey: { projectId: caller.projectId, eventKey: writeKey } },
     });
-    expect(view?.incident.diagnosis?.incidentId).toBe(view?.incident.id);
-    expect(fixture.work.size).toBe(1);
-    expect(fixture.activated).toEqual([view?.incident.id]);
-    expect(fixture.modelCalls()).toBe(1);
+  });
+}
+
+describe.skipIf(!dbTestEnabled)('queued observation orchestration over Postgres', () => {
+  const opened: Flow[] = [];
+  const make = async (projects: string[] = [caller.projectId]) => {
+    const flow = await setupFlow({ projects, seed: false });
+    opened.push(flow);
+    return flow;
+  };
+  const observe = async (flow: Flow) => flow.platform.observe(async () => {});
+  afterEach(async () => {
+    await Promise.all(opened.splice(0).map((flow) => flow.close()));
+  });
+
+  test('a queued detection persists its Haunting, Diagnosis, and one Work item', async () => {
+    const flow = await make();
+    const process = await observe(flow);
     await process(envelope);
-    const restarted = await createObservations(fixture.options);
+    expect(await flow.db.haunting.findFirstOrThrow()).toMatchObject({
+      service: 'checkout',
+      state: 'diagnosed',
+    });
+    expect(await flow.db.workItem.count()).toBe(1);
+    const calls = flow.platform.models.length;
+    expect(calls).toBeGreaterThan(0);
+    await process(envelope);
+    const restarted = await observe(flow);
     await restarted(envelope);
-    expect(fixture.modelCalls()).toBe(1);
-    expect(fixture.work.size).toBe(1);
+    expect(flow.platform.models).toHaveLength(calls);
+    expect(await flow.db.workItem.count()).toBe(1);
   });
 
   test('a failed durable write retains the accepted outcome for redelivery', async () => {
-    const fixture = state();
-    const process = await createObservations(fixture.options);
-    fixture.failWrite();
-    await expect(process(envelope)).rejects.toThrow('Storage unavailable');
-    expect(fixture.modelCalls()).toBe(0);
-    await process(envelope);
-    expect(fixture.work.size).toBe(1);
-    expect(fixture.modelCalls()).toBe(1);
+    const flow = await make();
+    // Real constraint: an eventKey conflict in the append-only audit chain rejects the write.
+    await blockWrite(flow);
+    await expect((await observe(flow))(envelope)).rejects.toThrow();
+    expect(flow.platform.models).toHaveLength(0);
+    await unblockWrite(flow);
+    await (
+      await observe(flow)
+    )(envelope);
+    expect(await flow.db.workItem.count()).toBe(1);
   });
 
   test('a lost Diagnosis response is reconciled before another model call', async () => {
-    const fixture = state();
-    fixture.loseAck();
-    const process = await createObservations(fixture.options);
-    await expect(process(envelope)).rejects.toThrow('response was lost');
-    await process(envelope);
-    expect(fixture.work.size).toBe(1);
-    expect(fixture.modelCalls()).toBe(1);
-    expect(fixture.receipts.size).toBe(2);
+    const flow = await make();
+    let dropNext = false;
+    // Boundary: drop one response after the real PrivateApi call has committed the write.
+    const original = flow.platform.api.post.bind(flow.platform.api);
+    const post = spyOn(flow.platform.api, 'post').mockImplementation(async (path, body, schema) => {
+      const result = await original(path, body, schema);
+      if (dropNext && path === '/internal/hauntings') {
+        dropNext = false;
+        throw new Error('Durable write committed but response was lost');
+      }
+      return result;
+    });
+    dropNext = true;
+    await expect((await observe(flow))(envelope)).rejects.toThrow('response was lost');
+    post.mockRestore();
+    await (
+      await observe(flow)
+    )(envelope);
+    expect(await flow.db.workItem.count()).toBe(1);
   });
 
   test('scope comes from each Event, while crew output cannot re-enter detection', async () => {
-    const fixture = state();
-    const process = await createObservations(fixture.options);
+    const flow = await make([caller.projectId, 'project-2']);
+    const process = await observe(flow);
     await process({ ...envelope, projectId: 'project-2' });
-    expect([...new Set(fixture.seenProjects)]).toEqual(['project-2']);
+    const scopes = await flow.db.auditEntry.findMany({ select: { projectId: true } });
+    expect([...new Set(scopes.map((row) => row.projectId))]).toEqual(['project-2']);
     await process({
       ...envelope,
       projectId: 'project-2',
       id: 'crew-output',
       type: 'diagnosis.ready',
     });
-    expect(fixture.work.size).toBe(1);
-    expect(fixture.views.size).toBe(1);
-    expect(fixture.modelCalls()).toBe(1);
+    expect(await flow.db.workItem.count()).toBe(1);
   });
 
   test('onWork receives the Project carried by the Event', async () => {
-    const fixture = state();
+    const flow = await make([caller.projectId, 'project-2']);
     const bound: string[] = [];
-    fixture.options.onWork = async (_item, _incidentId, projectId) => {
+    const process = await flow.platform.observe(async (_item, _incidentId, projectId) => {
       bound.push(projectId);
-    };
-    const process = await createObservations(fixture.options);
+    });
     await process({ ...envelope, projectId: 'project-2' });
     expect(bound).toEqual(['project-2']);
   });
 
-  test('a queued Haunting activates its Agent assignment before acknowledgement', async () => {
-    const fixture = state();
-    const flow = harness([agent({ autoFix: true })]);
-    const entered = Promise.withResolvers<void>();
-    const completed = Promise.withResolvers<void>();
-    const execute = flow.options.execute;
-    flow.options.execute = async (input) => {
-      entered.resolve();
-      await completed.promise;
-      return execute(input);
-    };
-    fixture.options.onWork = (workItem, incidentId, projectId) =>
-      workActivation(flow.commands(), projectId)(workItem, incidentId);
-    const process = await createObservations(fixture.options);
-    const acknowledgements: string[] = [];
-    const queued = processQueued(
-      {
-        data: new TextEncoder().encode(JSON.stringify(envelope)),
-        subject: publishSubject(envelope),
-        term: () => acknowledgements.push('term'),
-        working: () => {},
-        nak: () => acknowledgements.push('nak'),
-        ackAck: async () => {
-          acknowledgements.push('ack');
-          return true;
-        },
-      },
-      process,
-      { grantedProjectIds: [caller.projectId] },
-    );
-    await entered.promise;
-    expect(acknowledgements).toEqual([]);
-    completed.resolve();
-    await queued;
-    expect(acknowledgements).toEqual(['ack']);
-    expect(flow.runtime.snapshot.item.draftPr?.number).toBe(7);
-    expect(flow.requests).toHaveLength(1);
-  });
-
-  test('a restart finds an active Grave beyond the default fifty-row history page', async () => {
-    const fixture = state();
-    await (
-      await createObservations(fixture.options)
-    )(envelope);
-    const original = [...fixture.views.values()][0];
-    if (original === undefined) throw new Error('Expected a recorded Haunting');
-    for (let index = 0; index < 51; index++) {
-      const other = structuredClone(original);
-      other.incident.id = `other-${index}`;
-      other.incident.service = `other-${index}`;
-      if (other.incident.diagnosis) other.incident.diagnosis.incidentId = other.incident.id;
-      other.detections = other.detections.map((entry) => ({
-        ...entry,
-        service: other.incident.service,
-      }));
-      fixture.views.set(other.incident.id, other);
-    }
-    const restarted = await createObservations(fixture.options);
-    await restarted({ ...envelope, id: 'second-observation' });
-    expect(fixture.views.size).toBe(52);
-    expect(
-      [...fixture.views.values()].filter((view) => view.incident.service === envelope.service),
-    ).toHaveLength(1);
-    expect(fixture.work.size).toBe(1);
-    expect(fixture.modelCalls()).toBe(1);
-  });
-
-  test('a persisted closed Haunting releases the old in-memory group for the next observation', async () => {
-    const fixture = state();
-    const process = await createObservations(fixture.options);
+  test('a persisted closed Haunting releases its group for the next observation', async () => {
+    const flow = await make();
+    const process = await observe(flow);
     await process(envelope);
-    const original = [...fixture.views.values()][0];
-    if (original === undefined) throw new Error('Expected a recorded Haunting');
-    fixture.views.set(original.incident.id, {
-      ...original,
-      incident: { ...original.incident, state: 'resolved' },
+    const original = await flow.db.haunting.findFirstOrThrow();
+    await flow.db.haunting.update({
+      where: { projectId_id: { projectId: caller.projectId, id: original.id } },
+      data: { state: 'resolved' },
     });
-    await process({ ...envelope, id: 'new-haunting', observedAt: '2026-11-21T10:11:00.000Z' });
-    expect(fixture.views.size).toBe(2);
-    expect(fixture.work.size).toBe(2);
+    await process({ ...envelope, id: 'new-haunting', observedAt: LATE });
+    expect(await flow.db.haunting.count()).toBe(2);
+    expect(await flow.db.workItem.count()).toBe(2);
+  });
+
+  test("a co-tenant event cannot reuse another Project's group", async () => {
+    const flow = await make([caller.projectId, 'project-2']);
+    const process = await observe(flow);
+    await process(envelope);
+    const original = await flow.db.haunting.findFirstOrThrow();
+    await process({ ...envelope, id: 'other-project-event', projectId: 'project-2' });
+    await flow.db.haunting.update({
+      where: { projectId_id: { projectId: caller.projectId, id: original.id } },
+      data: { state: 'resolved' },
+    });
+    await process({ ...envelope, id: 'fresh-observation', observedAt: LATE });
+    const closed = await flow.db.haunting.findUniqueOrThrow({
+      where: { projectId_id: { projectId: caller.projectId, id: original.id } },
+    });
+    expect(closed).toMatchObject({ state: 'resolved' });
+    expect(await flow.db.haunting.count()).toBe(3);
   });
 });

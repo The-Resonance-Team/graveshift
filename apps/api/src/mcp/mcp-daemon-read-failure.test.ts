@@ -1,76 +1,81 @@
-import { HttpNetworkError } from '@nestjs/http-client';
-import { describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
+
+import { dbTestEnabled, resetDatabase } from '../../test/database/fixtures';
 
 import { HttpMcpBackend } from './mcp.backend';
 import { DaemonUnavailableError } from './mcp.errors';
-import {
-  build,
-  fakeAuditReader,
-  fakeDaemon,
-  httpError,
-  ZERO_COUNTERS,
-} from './mcp-daemon-read.fixture';
+import { build, openAuditRepo, startDaemon, ZERO_COUNTERS } from './mcp-daemon-read.fixture';
 
-describe('the private read adapter fails closed', () => {
+describe.skipIf(!dbTestEnabled)('the private read adapter fails closed', () => {
+  let repo: Awaited<ReturnType<typeof openAuditRepo>>;
+  beforeAll(async () => {
+    repo = await openAuditRepo();
+  });
+  beforeEach(async () => resetDatabase(repo.db));
+  afterAll(async () => repo.close());
   test('a malformed counters body makes the fix unavailable', async () => {
-    const malformed = [
+    const malformed: unknown[] = [
       { source: 'wired', counters: { openPrsLastHour: 0, actionsLast10Min: 0 } },
       { source: 'wired', counters: { ...ZERO_COUNTERS, llmSpentTodayUsd: -1 } },
       { source: 'wired', counters: { ...ZERO_COUNTERS, diagnosisLoops: Number.NaN } },
     ];
     await Promise.all(
       malformed.map(async (body) => {
-        const { tools } = await build(fakeDaemon({ '/internal/read/counters': body }).client);
-        await expect(tools.proposeFix({ incidentId: 'inc1', action: 'open_pr' })).rejects.toThrow(
-          DaemonUnavailableError,
-        );
+        const daemon = startDaemon({ rawCounters: body });
+        try {
+          const { tools } = await build(daemon.client, repo.audit);
+          await expect(tools.proposeFix({ incidentId: 'inc1', action: 'open_pr' })).rejects.toThrow(
+            DaemonUnavailableError,
+          );
+        } finally {
+          daemon.stop();
+        }
       }),
     );
   });
 
   test('a null incident from the private read means the Haunting is absent', async () => {
-    const { backend } = await build(fakeDaemon({ '/internal/read/incident': null }).client);
-    expect(await backend.getIncident('nope')).toBeUndefined();
+    const daemon = startDaemon({ missingIncident: true });
+    try {
+      const { backend } = await build(daemon.client, repo.audit);
+      expect(await backend.getIncident('nope')).toBeUndefined();
+    } finally {
+      daemon.stop();
+    }
   });
 
   test('a read error without a valid body fails closed', async () => {
-    const { backend } = await build(
-      fakeDaemon({
-        '/internal/read/incident': httpError(404, { message: 'Private read not found' }),
-      }).client,
-    );
-    await expect(backend.getIncident('nope')).rejects.toThrow(DaemonUnavailableError);
+    const daemon = startDaemon({ failIncident: true });
+    try {
+      const { backend } = await build(daemon.client, repo.audit);
+      await expect(backend.getIncident('inc1')).rejects.toThrow(DaemonUnavailableError);
+    } finally {
+      daemon.stop();
+    }
   });
 
-  test('a token error gets the daemon_auth code and still fails closed', async () => {
+  test('a token or scope rejection gets the daemon_auth code and fails closed', async () => {
+    const seeds = [{ bearer: 'wrong-token' }, { projectIds: [] }];
     await Promise.all(
-      [401, 403].map(async (status) => {
-        const { backend } = await build(
-          fakeDaemon({
-            '/internal/read/incident': httpError(status, {
-              message: 'Internal authentication required',
-            }),
-          }).client,
-        );
-        await expect(backend.getIncident('inc1')).rejects.toMatchObject({
-          code: 'daemon_auth',
-          name: 'DaemonUnavailableError',
-        });
+      seeds.map(async (seed) => {
+        const daemon = startDaemon(seed);
+        try {
+          const { backend } = await build(daemon.client, repo.audit);
+          await expect(backend.getIncident('inc1')).rejects.toMatchObject({
+            code: 'daemon_auth',
+            name: 'DaemonUnavailableError',
+          });
+        } finally {
+          daemon.stop();
+        }
       }),
     );
   });
 
   test('the unavailable path fails closed when the daemon is down', async () => {
-    const down = {
-      post: async () => {
-        throw new HttpNetworkError({
-          method: 'POST',
-          url: '/internal/read/services',
-          cause: new Error('ECONNREFUSED'),
-        });
-      },
-    };
-    const { backend, tools } = await build(down);
+    const daemon = startDaemon();
+    const { backend, tools } = await build(daemon.client, repo.audit);
+    daemon.stop();
     await expect(backend.listServices()).rejects.toThrow(DaemonUnavailableError);
     await expect(backend.listIncidents()).rejects.toThrow(DaemonUnavailableError);
     await expect(backend.getIncident('inc1')).rejects.toThrow(DaemonUnavailableError);
@@ -119,27 +124,36 @@ describe('the private read adapter fails closed', () => {
       },
     ];
     await Promise.all(
-      cases.map(async ({ path, body, read }) => {
-        const { backend } = await build(fakeDaemon({ [path]: body }).client);
-        await expect(read(backend)).rejects.toThrow(DaemonUnavailableError);
+      cases.map(async ({ body, read }) => {
+        const daemon = startDaemon({ malformed: body });
+        try {
+          const { backend } = await build(daemon.client, repo.audit);
+          await expect(read(backend)).rejects.toThrow(DaemonUnavailableError);
+        } finally {
+          daemon.stop();
+        }
       }),
     );
   });
 
   test('a read without an authenticated Project fails closed before any daemon call', async () => {
-    const daemon = fakeDaemon();
-    const backend = new HttpMcpBackend(
-      daemon.client as never,
-      { append: async () => ({}) } as never,
-      {
-        projectId: undefined,
-        require: () => {
-          throw new Error('An authenticated Project is required');
-        },
-      } as never,
-      fakeAuditReader() as never,
-    );
-    await expect(backend.listServices()).rejects.toThrow('authenticated Project');
-    expect(daemon.calls).toEqual([]);
+    const daemon = startDaemon();
+    try {
+      const backend = new HttpMcpBackend(
+        daemon.client,
+        { append: async () => ({}) } as never,
+        {
+          projectId: undefined,
+          require: () => {
+            throw new Error('An authenticated Project is required');
+          },
+        } as never,
+        { list: async () => [], verifyChain: async () => ({ ok: true, length: 0 }) } as never,
+      );
+      await expect(backend.listServices()).rejects.toThrow('authenticated Project');
+      expect(daemon.calls).toEqual([]);
+    } finally {
+      daemon.stop();
+    }
   });
 });

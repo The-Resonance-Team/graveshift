@@ -176,6 +176,9 @@ describe.skipIf(!dbTestEnabled)('Postgres API and daemon composition over privat
         dateStarted: new Date('2026-11-21T10:00:00.000Z'),
       },
     });
+    // Regression: the Deployment pair starts open and only the haunting flow may close it.
+    expect(await db.deploy.findFirstOrThrow()).toMatchObject({ closedAt: null });
+    expect(await db.auditEntry.count({ where: { type: 'deployment.closed' } })).toBe(0);
     const observe = await platform.observe();
     const acknowledgements: string[] = [];
     const delivery = {

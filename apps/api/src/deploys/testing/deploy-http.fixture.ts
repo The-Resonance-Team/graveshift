@@ -4,25 +4,31 @@ import { createInMemoryPublisher } from '@graveshift/events/testing';
 import type { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
+import { afterAll, beforeAll, beforeEach } from 'bun:test';
 import request from 'supertest';
 
-import { FakeCredentialRepo } from '../../../test/fakes/fake-credential-repo';
 import { TEST_CONFIG, testBootConfig } from '../../../test/fakes/auth-test-config';
+import { openTestDatabase, resetDatabase } from '../../../test/database/fixtures';
 import { configureApp } from '../../app.factory';
 import { AppModule } from '../../app.module';
+import { AUDIT_READER, AUDIT_SINK } from '../../audit/audit.sink';
+import { AuditRepo } from '../../audit/audit.repo';
 import { CREDENTIAL_CONFIG, CREDENTIAL_REPO, EVENT_PUBLISHER } from '../../auth/auth.types';
 import { expandScopes } from '../../auth/scopes';
+import { PrismaCredentialRepo } from '../../auth/repo/credential.repo';
 import { BOOT_CONFIG } from '../../config/boot.config';
 import { IDENTITY_REPO } from '../../identity/identity.types';
-import { FakeIdentityRepo } from '../../identity/testing/fake-identity.repo';
+import { PrismaIdentityRepo } from '../../identity/repo/identity.repo';
+import type { PrismaService } from '../../infra/prisma.service';
 import { DeployRepo } from '../deploy.repo';
-import { FakeDeployRepo } from './deploy-repo.fakes';
 
 export interface DeployTestContext {
   app: INestApplication;
-  identity: FakeIdentityRepo;
+  identity: PrismaIdentityRepo;
   jwt: JwtService;
-  deploys: FakeDeployRepo;
+  deploys: DeployRepo;
+  db: PrismaService;
+  audit: AuditRepo;
   orgA: string;
   orgB: string;
   projectA: string;
@@ -35,73 +41,83 @@ export interface DeployTestContext {
   orgCiClient: string;
 }
 
-/** Builds the real HTTP app with in-memory stores. No database or network is used. */
-export async function buildDeployTestApp(): Promise<DeployTestContext> {
-  const identity = new FakeIdentityRepo();
-  const orgA = (await identity.addOrganization({ name: 'Alpha', slug: 'alpha' })).id;
-  const orgB = (await identity.addOrganization({ name: 'Beta', slug: 'beta' })).id;
-  const projectA = (
-    await identity.addProject({ projectId: '1001', orgId: orgA, name: 'First', slug: 'first' })
-  ).projectId;
-  const projectA2 = (
-    await identity.addProject({ projectId: '1002', orgId: orgA, name: 'Second', slug: 'second' })
-  ).projectId;
-  const projectB = (
-    await identity.addProject({ projectId: '2001', orgId: orgB, name: 'Foreign', slug: 'foreign' })
-  ).projectId;
-  const clientA = 'deploy-client-a';
-  const clientA2 = 'deploy-client-a2';
-  const clientB = 'deploy-client-b';
-  const ciClient = 'deploy-client-ci';
-  const orgCiClient = 'deploy-client-org-ci';
-  await identity.addOAuthClient({
-    clientId: clientA,
-    secretHash: 'test-hash-only',
-    orgId: orgA,
-    projectId: projectA,
-    scopes: expandScopes(['org:read', 'project:read', 'project:write', 'org:ci']),
-  });
-  await identity.addOAuthClient({
-    clientId: clientB,
-    secretHash: 'test-hash-only',
-    orgId: orgB,
-    projectId: projectB,
-    scopes: expandScopes(['org:read', 'project:read', 'project:write', 'org:ci']),
-  });
-  await identity.addOAuthClient({
-    clientId: ciClient,
-    secretHash: 'test-hash-only',
-    orgId: orgA,
-    projectId: projectA,
-    scopes: expandScopes(['org:ci']),
-  });
-  await identity.addOAuthClient({
-    clientId: clientA2,
-    secretHash: 'test-hash-only',
-    orgId: orgA,
-    projectId: projectA2,
-    scopes: expandScopes(['project:read']),
-  });
-  await identity.addOAuthClient({
-    clientId: orgCiClient,
-    secretHash: 'test-hash-only',
-    orgId: orgA,
-    projectId: projectA,
-    scopes: expandScopes(['org:read', 'org:ci', 'project:read', 'project:write']),
-  });
+let db: PrismaService;
+let audit: AuditRepo;
+let identity: PrismaIdentityRepo;
+let deploys: DeployRepo;
+const ORG_A = '11111111-1111-4111-8111-111111111111';
+const ORG_B = '22222222-2222-4222-8222-222222222222';
 
-  const deploys = new FakeDeployRepo();
+/** One guarded database per suite; every repo shares that client. */
+export function setupDeployDatabase(): void {
+  beforeAll(async () => {
+    db = await openTestDatabase();
+    audit = new AuditRepo(db);
+    identity = new PrismaIdentityRepo(db);
+    deploys = new DeployRepo(db, audit);
+  });
+  beforeEach(async () => {
+    await resetDatabase(db);
+    await db.organization.createMany({
+      data: [
+        { id: ORG_A, name: 'Alpha', slug: 'alpha' },
+        { id: ORG_B, name: 'Beta', slug: 'beta' },
+      ],
+    });
+    const projects = [
+      ['1001', ORG_A, 'First', 'first'],
+      ['1002', ORG_A, 'Second', 'second'],
+      ['2001', ORG_B, 'Foreign', 'foreign'],
+    ] as const;
+    await Promise.all(
+      projects.map(([projectId, orgId, name, slug]) =>
+        db.project.create({ data: { projectId, orgId, name, slug } }),
+      ),
+    );
+    const clients = [
+      ['deploy-client-a', ORG_A, '1001', ['org:read', 'project:read', 'project:write', 'org:ci']],
+      ['deploy-client-b', ORG_B, '2001', ['org:read', 'project:read', 'project:write', 'org:ci']],
+      ['deploy-client-ci', ORG_A, '1001', ['org:ci']],
+      ['deploy-client-a2', ORG_A, '1002', ['project:read']],
+      [
+        'deploy-client-org-ci',
+        ORG_A,
+        '1001',
+        ['org:read', 'org:ci', 'project:read', 'project:write'],
+      ],
+    ] as const;
+    await Promise.all(
+      clients.map(([clientId, orgId, projectId, scopes]) =>
+        identity.addOAuthClient({
+          clientId,
+          secretHash: 'test-hash-only',
+          orgId,
+          projectId,
+          scopes: expandScopes([...scopes]),
+        }),
+      ),
+    );
+  });
+  afterAll(async () => db?.onModuleDestroy());
+}
+
+/** Builds the real HTTP app over the guarded database. No in-memory store is used. */
+export async function buildDeployTestApp(): Promise<DeployTestContext> {
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(BOOT_CONFIG)
     .useValue(await testBootConfig())
     .overrideProvider(CREDENTIAL_CONFIG)
     .useValue(TEST_CONFIG)
     .overrideProvider(CREDENTIAL_REPO)
-    .useValue(new FakeCredentialRepo())
+    .useValue(new PrismaCredentialRepo(db, audit))
     .overrideProvider(EVENT_PUBLISHER)
     .useValue(createInMemoryPublisher())
     .overrideProvider(IDENTITY_REPO)
     .useValue(identity)
+    .overrideProvider(AUDIT_SINK)
+    .useValue(audit)
+    .overrideProvider(AUDIT_READER)
+    .useValue(audit)
     .overrideProvider(DeployRepo)
     .useValue(deploys)
     .compile();
@@ -114,16 +130,18 @@ export async function buildDeployTestApp(): Promise<DeployTestContext> {
     identity,
     jwt: moduleRef.get(JwtService),
     deploys,
-    orgA,
-    orgB,
-    projectA,
-    projectA2,
-    projectB,
-    clientA,
-    clientA2,
-    clientB,
-    ciClient,
-    orgCiClient,
+    db,
+    audit,
+    orgA: ORG_A,
+    orgB: ORG_B,
+    projectA: '1001',
+    projectA2: '1002',
+    projectB: '2001',
+    clientA: 'deploy-client-a',
+    clientA2: 'deploy-client-a2',
+    clientB: 'deploy-client-b',
+    ciClient: 'deploy-client-ci',
+    orgCiClient: 'deploy-client-org-ci',
   };
 }
 

@@ -3,14 +3,17 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import request from 'supertest';
 
 import { accessToken, buildAuthApp, rawToken, type AuthTestApp } from './fakes/auth-test-helpers';
+import { setupAuthDatabase } from './database/auth.fixture';
+import { dbTestEnabled } from './database/fixtures';
 
-describe('credential routes (e2e)', () => {
+describe.skipIf(!dbTestEnabled)('credential routes (e2e)', () => {
+  const fixture = setupAuthDatabase();
   let ctx!: AuthTestApp;
   let app!: INestApplication;
   let manageToken!: string;
 
   beforeAll(async () => {
-    ctx = await buildAuthApp();
+    ctx = await buildAuthApp(fixture);
     app = ctx.app;
     manageToken = accessToken(ctx.jwt, [
       'tokens:manage',
@@ -191,7 +194,7 @@ describe('credential routes (e2e)', () => {
   });
 
   test('the 11th active credential fails and a revoke frees a slot', async () => {
-    const fresh = await buildAuthApp();
+    const fresh = await buildAuthApp(fixture);
     const token = accessToken(fresh.jwt, ['tokens:manage', 'incidents:read']);
     const issue = () =>
       request(fresh.app.getHttpServer())
@@ -215,7 +218,7 @@ describe('credential routes (e2e)', () => {
   });
 
   test('credential routes are throttled by client id', async () => {
-    const limited = await buildAuthApp({ eventRateLimit: 2 });
+    const limited = await buildAuthApp(fixture, { eventRateLimit: 2 });
     // Two different JWTs for client-1 share one throttle bucket.
     const tokens = [
       rawToken(limited.jwt, { scope: ['tokens:manage', 'incidents:read'] }),

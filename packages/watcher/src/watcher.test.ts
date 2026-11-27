@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test';
 
 import { harness, health, log, metric, observation, signal } from './test-helpers';
+import { createWatcher } from './watcher';
 
 describe('Wraith observation thresholds through ingest', () => {
   test('requires five error log lines in 60 seconds and ignores ordinary lines', () => {
@@ -134,5 +135,19 @@ describe('Wraith observation thresholds through ingest', () => {
     expect(captured.outcomes).toHaveLength(0);
     captured.watcher.ingest(signal('restart', 2));
     expect(captured.accepted()).toHaveLength(1);
+  });
+
+  test('releasing one Project leaves a co-tenant group with the same incident id open', () => {
+    const watcher = createWatcher({ newId: () => 'shared-incident', dedupeMs: 0 });
+    watcher.ingest(signal('oom', 0, 'api', 'project-1'));
+    watcher.ingest(signal('oom', 0, 'api', 'project-2'));
+    expect(
+      watcher
+        .openIncidents()
+        .map((entry) => entry.projectId)
+        .sort(),
+    ).toEqual(['project-1', 'project-2']);
+    watcher.release('project-1', 'shared-incident');
+    expect(watcher.openIncidents().map((entry) => entry.projectId)).toEqual(['project-2']);
   });
 });

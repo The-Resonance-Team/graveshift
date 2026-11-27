@@ -36,10 +36,68 @@ function stableId(value: string): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+/** Groups belong to one Project and Grave, never to the service name alone. */
+const serviceKey = (projectId: string, service: string) => JSON.stringify([projectId, service]);
+
+/** A retained outcome belongs to the Project of the Event that produced it. */
+const eventKey = (projectId: string, id: string) => JSON.stringify([projectId, id]);
+
+const MAX_PENDING = 32;
+const PENDING_TTL_MS = 10 * 60 * 1000;
+const MAX_PENDING_FAILURES = 3;
+
+/** ADR 0030: every process-local cache has a size, an age and a FIFO bound. */
+const MAX_VIEWS = 64;
+const MAX_SERVICES = 128;
+const CACHE_TTL_MS = 30 * 60 * 1000;
+
+/** FIFO cache keyed by Project; age is measured from the Event's observedAt. */
+export class BoundedCache<Value> {
+  private readonly rows = new Map<string, { value: Value; at: number }>();
+  private readonly max: number;
+  private readonly ttlMs: number;
+  constructor(max: number, ttlMs: number) {
+    this.max = max;
+    this.ttlMs = ttlMs;
+  }
+  get(key: string, now: number): Value | undefined {
+    const entry = this.rows.get(key);
+    if (entry === undefined || now - entry.at > this.ttlMs) {
+      this.rows.delete(key);
+      return undefined;
+    }
+    return entry.value;
+  }
+  set(key: string, value: Value, at: number): void {
+    this.rows.delete(key);
+    this.rows.set(key, { value, at });
+    this.prune(at);
+    while (this.rows.size > this.max) {
+      const oldest = this.rows.keys().next().value;
+      if (oldest === undefined) break;
+      this.rows.delete(oldest);
+    }
+  }
+  delete(key: string): void {
+    this.rows.delete(key);
+  }
+  prune(now: number): void {
+    for (const [key, entry] of this.rows) {
+      if (now - entry.at > this.ttlMs) this.rows.delete(key);
+    }
+  }
+}
+
+interface Pending {
+  at: number;
+  failures: number;
+  outcomes: WatcherOutcome[];
+}
+
 export async function createObservations(options: ObservationOptions) {
   const { api } = options;
-  const views = new Map<string, RecordedHaunting>();
-  const byService = new Map<string, string>();
+  const views = new BoundedCache<RecordedHaunting>(MAX_VIEWS, CACHE_TTL_MS);
+  const byService = new BoundedCache<string>(MAX_SERVICES, CACHE_TTL_MS);
   const medium =
     options.agents.find((agent) => agent.role === 'diagnosis') ??
     selectAgentByKeywords(options.agents, 'diagnose incident outage root cause');
@@ -47,9 +105,12 @@ export async function createObservations(options: ObservationOptions) {
   let current: EventEnvelope;
   const watcher = createWatcher({
     newId: () =>
-      byService.get(current.service) ?? stableId(JSON.stringify([current.projectId, current.id])),
+      byService.get(
+        serviceKey(current.projectId, current.service),
+        Date.parse(current.observedAt),
+      ) ?? stableId(JSON.stringify([current.projectId, current.id])),
   });
-  const pending = new Map<string, WatcherOutcome[]>();
+  const pending = new Map<string, Pending>();
   const write = async (eventId: string, input: RecordedHaunting, projectId: string) => {
     const view = prepareRecordedHaunting(input);
     const persisted = await api.post(
@@ -65,8 +126,9 @@ export async function createObservations(options: ObservationOptions) {
       },
       RecordedHauntingSchema,
     );
-    views.set(persisted.incident.id, persisted);
-    byService.set(persisted.incident.service, persisted.incident.id);
+    const at = Date.parse(current.observedAt);
+    views.set(eventKey(projectId, persisted.incident.id), persisted, at);
+    byService.set(serviceKey(projectId, persisted.incident.service), persisted.incident.id, at);
     return persisted;
   };
   const observe = async (event: EventEnvelope): Promise<void> => {
@@ -74,7 +136,14 @@ export async function createObservations(options: ObservationOptions) {
     // is a host bootstrap for Collectors, not the scope of an observation.
     const projectId = event.projectId;
     current = event;
-    let outcomes = pending.get(event.id);
+    const now = Date.parse(event.observedAt);
+    for (const [key, entry] of pending) {
+      if (now - entry.at > PENDING_TTL_MS) pending.delete(key);
+    }
+    views.prune(now);
+    byService.prune(now);
+    const pendingKey = eventKey(projectId, event.id);
+    let outcomes = pending.get(pendingKey)?.outcomes;
     if (outcomes === undefined) {
       const active = await api.post(
         '/internal/hauntings/active',
@@ -89,20 +158,29 @@ export async function createObservations(options: ObservationOptions) {
       ) {
         throw new HttpFailure(502, 'Invalid active Haunting response');
       }
-      const old = byService.get(event.service);
+      const key = serviceKey(projectId, event.service);
+      const old = byService.get(key, now);
       if (old !== undefined && old !== active?.incident.id) watcher.release(projectId, old);
-      if (active === null) byService.delete(event.service);
+      if (active === null) byService.delete(key);
       else {
-        views.set(active.incident.id, active);
-        byService.set(event.service, active.incident.id);
+        views.set(eventKey(projectId, active.incident.id), active, now);
+        byService.set(key, active.incident.id, now);
       }
       outcomes = watcher.ingest(event);
-      pending.set(event.id, outcomes);
+      pending.set(pendingKey, {
+        at: Date.parse(event.observedAt),
+        failures: 0,
+        outcomes,
+      });
+      if (pending.size > MAX_PENDING) {
+        const oldest = pending.keys().next().value;
+        if (oldest !== undefined) pending.delete(oldest);
+      }
     }
     const processOutcome = async (outcome: WatcherOutcome) => {
       if (outcome.status !== 'accepted') return;
       const { change } = outcome;
-      let prior = views.get(change.incident.id);
+      let prior = views.get(eventKey(projectId, change.incident.id), now);
       try {
         prior = await api.post(
           '/internal/hauntings/get',
@@ -199,11 +277,19 @@ export async function createObservations(options: ObservationOptions) {
       );
       await options.onWork(created.item, diagnosed.incident.id, projectId);
     };
-    await outcomes.reduce(
-      (chain, outcome) => chain.then(() => processOutcome(outcome)),
-      Promise.resolve(),
-    );
-    pending.delete(event.id);
+    try {
+      await outcomes.reduce(
+        (chain, outcome) => chain.then(() => processOutcome(outcome)),
+        Promise.resolve(),
+      );
+    } catch (error) {
+      const entry = pending.get(pendingKey);
+      if (entry !== undefined && ++entry.failures >= MAX_PENDING_FAILURES) {
+        pending.delete(pendingKey);
+      }
+      throw error;
+    }
+    pending.delete(pendingKey);
   };
   // A Collector event carries no OAuth principal. The daemon acts on it as itself, inside the
   // Project carried by that Event; the transport has already checked the grant. A model call

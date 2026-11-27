@@ -14,20 +14,20 @@ import {
   CLIENTS,
   CONFIG_EXPORT_ROUTE,
   FAKE_CONFIG_PATH,
-  FakeAuditRepo,
   appFromConfigFile,
   bearerToken,
   restoreEnv,
 } from './config-test-helpers';
+import { setupAuthDatabase } from './database/auth.fixture';
+import { dbTestEnabled } from './database/fixtures';
 
 // The guards in front of the one config endpoint: ThrottlerGuard and the scope catalog.
-describe('config guards (e2e)', () => {
+describe.skipIf(!dbTestEnabled)('config guards (e2e)', () => {
+  const fixture = setupAuthDatabase();
   let app: INestApplication;
-  let audit: FakeAuditRepo;
 
   beforeEach(async () => {
-    audit = new FakeAuditRepo();
-    const built = await appFromConfigFile(FAKE_CONFIG_PATH, audit);
+    const built = await appFromConfigFile(fixture, FAKE_CONFIG_PATH);
     app = built.app;
   });
 
@@ -40,8 +40,7 @@ describe('config guards (e2e)', () => {
     // An export takes a serialized audit transaction, so ThrottlerGuard must cap the
     // surface. With a limit of three, the fourth call in the window is denied by the
     // guard and never reaches AuditRepo.
-    const throttledAudit = new FakeAuditRepo();
-    const built = await appFromConfigFile(FAKE_CONFIG_PATH, throttledAudit, {
+    const built = await appFromConfigFile(fixture, FAKE_CONFIG_PATH, fixture.audit, {
       eventRateLimit: 3,
       eventRateTtlMs: 60_000,
     });
@@ -58,7 +57,11 @@ describe('config guards (e2e)', () => {
       expect(statuses.filter((status) => status === 200).length).toBe(3);
       expect(statuses.filter((status) => status === 429).length).toBe(3);
       // Only the three allowed calls reached the handler and its audit append.
-      expect(throttledAudit.appended.length).toBe(3);
+      expect(
+        await fixture.db.auditEntry.count({
+          where: { projectId: '12345', type: 'config.exported' },
+        }),
+      ).toBe(3);
     } finally {
       await built.app.close();
     }

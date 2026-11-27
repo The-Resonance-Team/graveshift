@@ -10,22 +10,24 @@ import request from 'supertest';
 
 import { CREDENTIAL_CONFIG } from '../src/auth/auth.types';
 import { OAuthClientCredentialsStrategy } from '../src/auth/oauth-client-credentials.strategy';
-import { AUDIT_SINK } from '../src/audit/audit.sink';
-import { InMemoryAuditSink } from '../src/audit/testing/in-memory-audit.sink';
+import { AUDIT_READER, AUDIT_SINK } from '../src/audit/audit.sink';
 import { AuditedWorkCommands, WORK_COMMANDS_INNER } from '../src/fix/audited-work.commands';
 import { IDENTITY_REPO } from '../src/identity/identity.types';
 import { WorkItemsController } from '../src/work-items/controllers/work-items.controller';
 import { WorkItemRepo } from '../src/work-items/work-item.repo';
+import { setupWorkHttpDatabase } from '../src/work-items/testing/work-http.fixture';
+import { dbTestEnabled } from './database/fixtures';
 import { TEST_CONFIG, TEST_ROOT_ENV } from './fakes/auth-test-config';
-import { testIdentityRepo } from './fakes/auth-test-helpers';
 import { fakeWorkApi } from './fakes/fake-fix-deps';
 
 /**
  * The stored client-1 holds `fix:trigger` and `tokens:manage`. A test token selects which of
  * the held scopes it actually carries, so a denial proves the route gate, not the registry.
  */
+let fixture: ReturnType<typeof setupWorkHttpDatabase>;
+
 async function boot(options: { readonly fail?: boolean } = {}) {
-  const adapter = fakeWorkApi({ projectId: '12345', ...options });
+  const adapter = fakeWorkApi(fixture.db, fixture.audit, { projectId: '12345', ...options });
   const moduleRef = await Test.createTestingModule({
     imports: [
       PassportModule,
@@ -38,9 +40,10 @@ async function boot(options: { readonly fail?: boolean } = {}) {
       AuditedWorkCommands,
       { provide: WORK_COMMANDS, useExisting: AuditedWorkCommands },
       { provide: WORK_COMMANDS_INNER, useValue: adapter.commands },
-      { provide: AUDIT_SINK, useValue: new InMemoryAuditSink() },
+      { provide: AUDIT_SINK, useValue: fixture.audit },
+      { provide: AUDIT_READER, useValue: fixture.audit },
       { provide: CREDENTIAL_CONFIG, useValue: TEST_CONFIG },
-      { provide: IDENTITY_REPO, useValue: testIdentityRepo() },
+      { provide: IDENTITY_REPO, useValue: fixture.identity },
       { provide: ConfigService, useValue: new ConfigService(TEST_ROOT_ENV) },
       { provide: WorkItemRepo, useValue: adapter.repo },
     ],
@@ -68,7 +71,8 @@ async function boot(options: { readonly fail?: boolean } = {}) {
   return { adapter, app, sign };
 }
 
-describe('work item Fix route scopes', () => {
+describe.skipIf(!dbTestEnabled)('work item Fix route scopes', () => {
+  fixture = setupWorkHttpDatabase();
   let app: INestApplication | undefined;
 
   afterEach(async () => {

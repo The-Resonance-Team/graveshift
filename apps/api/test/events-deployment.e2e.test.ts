@@ -8,14 +8,17 @@ import {
   validEnvelope,
   type AuthTestApp,
 } from './fakes/auth-test-helpers';
+import { setupAuthDatabase } from './database/auth.fixture';
+import { dbTestEnabled } from './database/fixtures';
 
-describe('POST /api/events deployment binding (e2e)', () => {
+describe.skipIf(!dbTestEnabled)('POST /api/events deployment binding (e2e)', () => {
+  const fixture = setupAuthDatabase();
   let ctx: AuthTestApp;
   let app: INestApplication;
   let manageToken: string;
 
   beforeAll(async () => {
-    ctx = await buildAuthApp();
+    ctx = await buildAuthApp(fixture);
     app = ctx.app;
     manageToken = accessToken(ctx.jwt, ['tokens:manage', 'events:publish']);
   });
@@ -39,6 +42,9 @@ describe('POST /api/events deployment binding (e2e)', () => {
       .set('authorization', `Bearer ${key}`)
       .send(body);
 
+  const unassignedEntries = () =>
+    ctx.db.auditEntry.findMany({ where: { projectId: '12345', type: 'event.unassigned' } });
+
   test('stamps a known Deployment and writes no unassigned audit entry', async () => {
     const key = await pluginKey('bound-deploy');
     const sha = 'a'.repeat(40);
@@ -57,7 +63,7 @@ describe('POST /api/events deployment binding (e2e)', () => {
     const published = ctx.publisher.envelopes.find((item) => item.id === 'evt-bound-deploy');
     expect(published?.deploymentId).toBe(sha);
     expect(published?.environment).toBe('production');
-    expect(ctx.audit.appended.some((entry) => entry.type === 'event.unassigned')).toBe(false);
+    expect(await unassignedEntries()).toEqual([]);
   });
 
   test('an unknown SHA or Environment nulls both fields and writes one audit entry', async () => {
@@ -75,9 +81,10 @@ describe('POST /api/events deployment binding (e2e)', () => {
       expect(envelope.deploymentId).toBeNull();
       expect(envelope.environment).toBeNull();
     }
-    const entries = ctx.audit.appended.filter((entry) => entry.type === 'event.unassigned');
+    const entries = await unassignedEntries();
     expect(entries).toHaveLength(2);
-    expect(entries[0]).toMatchObject({
+    const bound = entries.find((entry) => entry.eventKey === 'event:unassigned:evt-unassigned');
+    expect(bound).toMatchObject({
       projectId: '12345',
       payload: { projectId: '12345', deploymentId: 'b'.repeat(40), environment: 'sandbox' },
     });

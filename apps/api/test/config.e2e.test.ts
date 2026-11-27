@@ -10,7 +10,7 @@ import {
   FAKE_CONFIG,
   FAKE_CONFIG_PATH,
   FAKE_ENV_VALUES,
-  FakeAuditRepo,
+  FailingAudit,
   appFromConfigFile,
   bearerToken,
   restoreEnv,
@@ -18,14 +18,19 @@ import {
   wire,
   withTempConfigFile,
 } from './config-test-helpers';
+import { setupAuthDatabase } from './database/auth.fixture';
+import { dbTestEnabled } from './database/fixtures';
 
-describe('config export endpoint (e2e)', () => {
+describe.skipIf(!dbTestEnabled)('config export endpoint (e2e)', () => {
+  const fixture = setupAuthDatabase();
   let app!: INestApplication;
-  let audit!: FakeAuditRepo;
+  const exports = () =>
+    fixture.db.auditEntry.findMany({
+      where: { projectId: '12345', type: 'config.exported' },
+    });
 
   beforeEach(async () => {
-    audit = new FakeAuditRepo();
-    const built = await appFromConfigFile(FAKE_CONFIG_PATH, audit);
+    const built = await appFromConfigFile(fixture, FAKE_CONFIG_PATH);
     app = built.app;
   });
 
@@ -41,13 +46,13 @@ describe('config export endpoint (e2e)', () => {
       'config.anonymous.yaml',
       await Bun.file(FAKE_CONFIG).text(),
       async (path) => {
-        const built = await appFromConfigFile(path);
+        const built = await appFromConfigFile(fixture, path);
         try {
           await unlink(path);
           const response = await request(built.app.getHttpServer()).get(CONFIG_EXPORT_ROUTE);
           expect(response.status).toBe(401);
           expect(JSON.stringify(response.body)).not.toContain('Test Agent');
-          expect(built.audit.appended.length).toBe(0);
+          expect(await exports()).toEqual([]);
         } finally {
           await built.app.close();
         }
@@ -99,7 +104,7 @@ describe('config export endpoint (e2e)', () => {
       .set('Authorization', `Bearer ${exportToken}`)
       .expect(200);
     // Only the authorized export wrote an audit entry.
-    expect(audit.appended.length).toBe(1);
+    expect(await exports()).toHaveLength(1);
   });
 
   test('one export writes exactly one audit event with identifiers only', async () => {
@@ -113,13 +118,12 @@ describe('config export endpoint (e2e)', () => {
       .get(CONFIG_EXPORT_ROUTE)
       .set('Authorization', `Bearer ${token}`)
       .expect(200);
-    expect(audit.appended.length).toBe(2);
-    for (const entry of audit.appended) {
+    expect(await exports()).toHaveLength(2);
+    for (const entry of await exports()) {
       expect(entry.type).toBe('config.exported');
       expect(entry.actor).toBe(CLIENTS.export.id);
       expect(entry.projectId).toBe('12345');
       expect(entry.payload).toEqual({ exported: 'config' });
-      expect(Object.keys(entry.payload)).toEqual(['exported']);
       // No config content enters the payload.
       expect(JSON.stringify(entry.payload)).not.toContain('Test Agent');
       expect(JSON.stringify(entry.payload)).not.toContain('fake/ghost-repo');
@@ -127,9 +131,8 @@ describe('config export endpoint (e2e)', () => {
   });
 
   test('a failed audit append fails the export closed and serves no config', async () => {
-    const failingAudit = new FakeAuditRepo();
-    failingAudit.failure = new Error('audit chain unavailable');
-    const built = await appFromConfigFile(FAKE_CONFIG_PATH, failingAudit);
+    const failingAudit = new FailingAudit(fixture.db);
+    const built = await appFromConfigFile(fixture, FAKE_CONFIG_PATH, failingAudit);
     try {
       const token = await bearerToken(built.app, CLIENTS.export.id, CLIENTS.export.secret);
       const response = await request(built.app.getHttpServer())
@@ -141,7 +144,7 @@ describe('config export endpoint (e2e)', () => {
     } finally {
       await built.app.close();
     }
-    expect(failingAudit.appended.length).toBe(0);
+    expect(await exports()).toEqual([]);
   });
 
   test('the endpoint serves the boot snapshot and never re-reads the YAML file', async () => {

@@ -3,6 +3,8 @@ import { afterAll, describe, expect, test } from 'bun:test';
 
 import type { CredentialVerifier, VerifiedCredential } from '../src/auth/auth.types';
 import { EVENTS_PUBLISH_SCOPE } from '../src/auth/scopes';
+import { setupAuthDatabase } from './database/auth.fixture';
+import { dbTestEnabled } from './database/fixtures';
 import { buildAuthApp, type AuthTestApp } from './fakes/auth-test-helpers';
 
 const TEST_KEY = 'c'.repeat(64);
@@ -22,7 +24,8 @@ const verifier: CredentialVerifier = {
   },
 };
 
-describe.skipIf(process.env.CI === 'true')('Sentry SDK loopback ingest', () => {
+describe.skipIf(!dbTestEnabled || process.env.CI === 'true')('Sentry SDK loopback ingest', () => {
+  const fixture = setupAuthDatabase();
   let ctx: AuthTestApp | undefined;
 
   afterAll(async () => {
@@ -31,7 +34,7 @@ describe.skipIf(process.env.CI === 'true')('Sentry SDK loopback ingest', () => {
   });
 
   test('sends a real SDK event to the local Nest app', async () => {
-    ctx = await buildAuthApp({}, undefined, verifier);
+    ctx = await buildAuthApp(fixture, {}, undefined, verifier);
     const server = await ctx.app.listen(0, '127.0.0.1');
     const address = server.address();
     if (address === null || typeof address === 'string') throw new Error('Loopback did not bind');

@@ -2,7 +2,7 @@ import type { INestApplication } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Test } from '@nestjs/testing';
 import { parsePolicy } from '@graveshift/policy';
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
+import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:test';
 import request from 'supertest';
 
 import { configureApp } from '../src/app.factory';
@@ -11,12 +11,18 @@ import { CREDENTIAL_CONFIG, CREDENTIAL_REPO } from '../src/auth/auth.types';
 import { IDENTITY_REPO } from '../src/identity/identity.types';
 import { InMemoryEventSource } from '../src/mcp/events/events.source';
 import { CLOSED_DEPLOYMENTS, MCP_EVENT_SOURCE } from '../src/mcp/events/events.types';
-import { MCP_BACKEND, MCP_POLICY } from '../src/mcp/mcp.types';
+import {
+  build,
+  type DaemonHarness,
+  openAuditRepo,
+  startDaemon,
+} from '../src/mcp/mcp-daemon-read.fixture';
+import { MCP_BACKEND, MCP_POLICY, type McpBackend } from '../src/mcp/mcp.types';
 import { McpTokenVerifierService } from '../src/mcp/mcp-token.verifier';
+import { setupAuthDatabase } from './database/auth.fixture';
+import { dbTestEnabled } from './database/fixtures';
 import { TEST_CONFIG } from './fakes/auth-test-config';
-import { FakeCredentialRepo } from './fakes/fake-credential-repo';
-import { accessToken, testIdentityRepo, validEnvelope } from './fakes/auth-test-helpers';
-import { FakeMcpBackend } from './fakes/fake-mcp-backend';
+import { accessToken, validEnvelope } from './fakes/auth-test-helpers';
 
 const rpc = { jsonrpc: '2.0', id: 1, method: 'tools/list' };
 
@@ -36,7 +42,8 @@ const policy = parsePolicy({
   default: 'deny',
 });
 
-describe('POST /mcp bearer auth (e2e)', () => {
+describe.skipIf(!dbTestEnabled)('POST /mcp bearer auth (e2e)', () => {
+  const fixture = setupAuthDatabase();
   let app!: INestApplication;
   let jwtService!: JwtService;
   let mcpToken!: string;
@@ -45,20 +52,26 @@ describe('POST /mcp bearer auth (e2e)', () => {
   let eventSource!: InMemoryEventSource;
   let managementToken!: string;
   let verifier!: McpTokenVerifierService;
+  let backend!: McpBackend;
+  let daemon!: DaemonHarness;
+  let audit!: Awaited<ReturnType<typeof openAuditRepo>>;
 
   beforeAll(async () => {
+    daemon = startDaemon();
+    audit = await openAuditRepo();
+    ({ backend } = await build(daemon.client, audit.audit));
     eventSource = new InMemoryEventSource();
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(MCP_BACKEND)
-      .useValue(new FakeMcpBackend())
+      .useValue(backend)
       .overrideProvider(MCP_POLICY)
       .useValue(policy)
       .overrideProvider(CREDENTIAL_CONFIG)
       .useValue(TEST_CONFIG)
       .overrideProvider(CREDENTIAL_REPO)
-      .useValue(new FakeCredentialRepo())
+      .useValue(fixture.repo)
       .overrideProvider(IDENTITY_REPO)
-      .useValue(testIdentityRepo())
+      .useValue(fixture.identity)
       .overrideProvider(MCP_EVENT_SOURCE)
       .useValue(eventSource)
       .overrideProvider(CLOSED_DEPLOYMENTS)
@@ -70,12 +83,20 @@ describe('POST /mcp bearer auth (e2e)', () => {
     configureApp(app);
     await app.init();
 
-    const token = accessToken(jwtService, ['tokens:manage', 'incidents:read', 'events:publish']);
-    managementToken = token;
-    const create = async (kind: 'mcp' | 'plugin', scopes: string[]) => {
+    managementToken = accessToken(jwtService, [
+      'tokens:manage',
+      'incidents:read',
+      'events:publish',
+    ]);
+  });
+
+  // The fixture resets the database before each test, so opaque credentials are
+  // issued there, after the OAuth clients have been seeded again.
+  beforeEach(async () => {
+    const create = async (jwt: string, kind: 'mcp' | 'plugin', scopes: string[]) => {
       const response = await request(app.getHttpServer())
         .post('/api/credentials')
-        .set('authorization', `Bearer ${token}`)
+        .set('authorization', `Bearer ${jwt}`)
         .send(
           kind === 'plugin'
             ? { kind, name: `${kind}-key`, scopes, service: 'api' }
@@ -84,19 +105,16 @@ describe('POST /mcp bearer auth (e2e)', () => {
         .expect(201);
       return response.body.value as string;
     };
-    mcpToken = await create('mcp', ['incidents:read']);
-    pluginKey = await create('plugin', ['events:publish']);
-    const metricsJwt = accessToken(moduleRef.get(JwtService), ['tokens:manage', 'metrics:read']);
-    const metricsResponse = await request(app.getHttpServer())
-      .post('/api/credentials')
-      .set('authorization', `Bearer ${metricsJwt}`)
-      .send({ kind: 'mcp', name: 'metrics-key', scopes: ['metrics:read'] })
-      .expect(201);
-    metricsToken = metricsResponse.body.value as string;
+    mcpToken = await create(managementToken, 'mcp', ['incidents:read']);
+    pluginKey = await create(managementToken, 'plugin', ['events:publish']);
+    const metricsJwt = accessToken(jwtService, ['tokens:manage', 'metrics:read']);
+    metricsToken = await create(metricsJwt, 'mcp', ['metrics:read']);
   });
 
   afterAll(async () => {
     await app.close();
+    daemon?.stop();
+    await audit?.close();
   });
 
   const post = (token?: string) => {

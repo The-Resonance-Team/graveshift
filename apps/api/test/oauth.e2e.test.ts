@@ -4,13 +4,16 @@ import request from 'supertest';
 
 import { TEST_CLIENT_SECRET } from './fakes/auth-test-config';
 import { buildAuthApp, rawToken, type AuthTestApp } from './fakes/auth-test-helpers';
+import { setupAuthDatabase } from './database/auth.fixture';
+import { dbTestEnabled } from './database/fixtures';
 
-describe('OAuth 2.1 client credentials (e2e)', () => {
+describe.skipIf(!dbTestEnabled)('OAuth 2.1 client credentials (e2e)', () => {
+  const fixture = setupAuthDatabase();
   let ctx!: AuthTestApp;
   let app!: INestApplication;
 
   beforeAll(async () => {
-    ctx = await buildAuthApp();
+    ctx = await buildAuthApp(fixture);
     app = ctx.app;
   });
 
@@ -66,7 +69,7 @@ describe('OAuth 2.1 client credentials (e2e)', () => {
   });
 
   test('throttles the token endpoint', async () => {
-    const limited = await buildAuthApp({ eventRateLimit: 2 });
+    const limited = await buildAuthApp(fixture, { eventRateLimit: 2 });
     const attempt = () =>
       request(limited.app.getHttpServer())
         .post('/api/oauth/token')

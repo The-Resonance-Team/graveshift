@@ -11,8 +11,15 @@ import { McpHttpService } from '@nestjs/mcp';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 
 import { AppModule } from '../src/app.module';
-import { MCP_BACKEND, MCP_ENV_MODE, MCP_POLICY } from '../src/mcp/mcp.types';
-import { FakeMcpBackend, SECRET } from './fakes/fake-mcp-backend';
+import {
+  build,
+  type DaemonHarness,
+  openAuditRepo,
+  SECRET,
+  startDaemon,
+} from '../src/mcp/mcp-daemon-read.fixture';
+import { MCP_BACKEND, MCP_ENV_MODE, MCP_POLICY, type McpBackend } from '../src/mcp/mcp.types';
+import { dbTestEnabled } from './database/fixtures';
 
 /**
  * Evidence for ticket #46: one import of `@graveshift/mcp-client` calls one
@@ -40,18 +47,6 @@ const policy = parsePolicy({
 
 const TOKEN = 'sdk-e2e-token-not-a-secret';
 
-/**
- * The fixture backend still supplies the daemon's GraveInfo shape (`runtime`),
- * but the API's wire contract for `list_services` is `@graveshift/core`'s
- * ServiceView (`status`), which the SDK catalog validates. Keep the seam honest
- * by adapting only this tool reply; every other method stays the real fixture.
- */
-const backend = Object.assign(new FakeMcpBackend(), {
-  listServices: async (): Promise<Array<{ name: string; status: string }>> => [
-    { name: 'api', status: 'healthy' },
-  ],
-});
-
 /** Route the SDK's fetch to the real endpoint handler, as `@nestjs/mcp/testing` does. */
 function endpointFetch(http: McpHttpService): FetchLike {
   return async (input, init) => {
@@ -70,10 +65,16 @@ function endpointFetch(http: McpHttpService): FetchLike {
   };
 }
 
-describe('MCP client SDK against the real API endpoint (in-memory)', () => {
+describe.skipIf(!dbTestEnabled)('MCP client SDK against the real API endpoint', () => {
   let moduleRef!: TestingModule;
+  let backend!: McpBackend;
+  let daemon!: DaemonHarness;
+  let audit!: Awaited<ReturnType<typeof openAuditRepo>>;
 
   beforeAll(async () => {
+    daemon = startDaemon();
+    audit = await openAuditRepo();
+    ({ backend } = await build(daemon.client, audit.audit));
     moduleRef = await Test.createTestingModule({ imports: [AppModule] })
       .overrideProvider(MCP_BACKEND)
       .useValue(backend)
@@ -86,6 +87,8 @@ describe('MCP client SDK against the real API endpoint (in-memory)', () => {
 
   afterAll(async () => {
     await moduleRef?.close();
+    daemon?.stop();
+    await audit?.close();
   });
 
   test('one import calls one tool and gets a typed result', async () => {
@@ -102,7 +105,7 @@ describe('MCP client SDK against the real API endpoint (in-memory)', () => {
       expect(services).toEqual([{ name: 'api', status: 'healthy' }]);
 
       const incidents = await mcp.listIncidents({ limit: 3 });
-      expect(incidents).toHaveLength(3);
+      expect(incidents).toHaveLength(1);
       expect(incidents[0]?.incident.service).toBe('api');
 
       const proposal = await mcp.proposeFix({ incidentId: 'inc1', action: 'open_pr' });

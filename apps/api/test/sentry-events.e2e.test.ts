@@ -6,6 +6,8 @@ import request from 'supertest';
 import type { CredentialVerifier, VerifiedCredential } from '../src/auth/auth.types';
 import { EVENTS_PUBLISH_SCOPE } from '../src/auth/scopes';
 import { readFile } from 'node:fs/promises';
+import { setupAuthDatabase } from './database/auth.fixture';
+import { dbTestEnabled } from './database/fixtures';
 import { buildAuthApp, type AuthTestApp } from './fakes/auth-test-helpers';
 
 const TEST_KEY = 'a'.repeat(64);
@@ -29,12 +31,13 @@ const sessionFixture = await readFile(
   new URL('./fixtures/sentry-session.envelope', import.meta.url),
 );
 
-describe('POST /api/:projectId/envelope (e2e)', () => {
+describe.skipIf(!dbTestEnabled)('POST /api/:projectId/envelope (e2e)', () => {
+  const authFixture = setupAuthDatabase();
   let ctx!: AuthTestApp;
   let app!: INestApplication;
 
   beforeAll(async () => {
-    ctx = await buildAuthApp({}, undefined, verifier);
+    ctx = await buildAuthApp(authFixture, {}, undefined, verifier);
     app = ctx.app;
   });
 
@@ -125,7 +128,7 @@ describe('POST /api/:projectId/envelope (e2e)', () => {
         return { ...TEST_CREDENTIAL, projectId: 'acme' };
       },
     };
-    const looseCtx = await buildAuthApp({}, undefined, loose);
+    const looseCtx = await buildAuthApp(authFixture, {}, undefined, loose);
     await request(looseCtx.app.getHttpServer())
       .post('/api/acme/envelope/')
       .query({ sentry_key: TEST_KEY })
@@ -151,7 +154,7 @@ describe('POST /api/:projectId/envelope (e2e)', () => {
         return { ...TEST_CREDENTIAL, service: null };
       },
     };
-    const withoutGrave = await buildAuthApp({}, undefined, unbound);
+    const withoutGrave = await buildAuthApp(authFixture, {}, undefined, unbound);
     try {
       await request(withoutGrave.app.getHttpServer())
         .post('/api/12345/envelope/')
@@ -223,7 +226,7 @@ describe('POST /api/:projectId/envelope (e2e)', () => {
   });
 
   test('returns Retry-After when the Sentry key reaches its rate limit', async () => {
-    const limited = await buildAuthApp({ eventRateLimit: 1 }, undefined, verifier);
+    const limited = await buildAuthApp(authFixture, { eventRateLimit: 1 }, undefined, verifier);
     try {
       const send = () =>
         request(limited.app.getHttpServer())

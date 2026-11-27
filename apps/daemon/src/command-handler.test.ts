@@ -1,10 +1,11 @@
-import { describe, expect, test } from 'bun:test';
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 
+import { dbTestEnabled } from '../../api/test/database/fixtures';
+import { WorkError } from '@graveshift/work';
 import { createCommandHandler } from './command-handler';
 import { drainCommands } from './command-lifetime';
+import { setupFlow } from './flow.fixture';
 import { caller } from './flow-fixtures';
-import { harness } from './flow-harness';
-import { createWorkCommands } from './work-flow';
 
 const token = 'local-daemon-internal-token-32-characters';
 const apiToken = 'local-api-internal-token-32-characters';
@@ -21,23 +22,26 @@ function request(
   });
 }
 
-const granted = [caller.projectId, 'project-2'];
-
-function handler() {
-  const flow = harness();
-  const handle = createCommandHandler({
-    commands: createWorkCommands({ ...flow.options, projectIds: granted }),
-    projectIds: granted,
-    token,
-    maxBytes: 1024,
-    timeoutMs: 1000,
+describe.skipIf(!dbTestEnabled)('private Work command Request boundary', () => {
+  let flow: Awaited<ReturnType<typeof setupFlow>>;
+  const granted = [caller.projectId, 'project-2'];
+  beforeEach(async () => {
+    flow = await setupFlow({ projects: granted });
   });
-  return { handle, flow };
-}
+  afterEach(async () => {
+    await flow?.close();
+  });
+  const handler = () =>
+    createCommandHandler({
+      commands: flow.commands({ projectIds: granted }),
+      projectIds: granted,
+      token,
+      maxBytes: 1024,
+      timeoutMs: 1000,
+    });
 
-describe('private Work command Request boundary', () => {
   test('requires the dedicated bearer token and verified project before state access', async () => {
-    const { handle, flow } = handler();
+    const handle = handler();
     const unauthenticated = await handle(
       request('fix-now', undefined, 'Bearer public-oauth-token'),
     );
@@ -48,22 +52,23 @@ describe('private Work command Request boundary', () => {
       request('fix-now', { caller: { ...caller, projectId: 'foreign' }, id: 'work-1', input: {} }),
     );
     expect(foreign.status).toBe(403);
-    expect(flow.runtime.calls).toEqual([]);
+    expect(flow.calls).toEqual([]);
   });
 
   test('a second granted Project runs its command under its own Project', async () => {
-    const { handle, flow } = handler();
+    await flow.seedIn('project-2', 'work-2');
+    const handle = handler();
     const second = { ...caller, projectId: 'project-2', commandId: 'command-second-project' };
-    const response = await handle(request('fix-now', { caller: second, id: 'work-1', input: {} }));
+    const response = await handle(request('fix-now', { caller: second, id: 'work-2', input: {} }));
     expect(response.status).toBe(200);
-    const receipt = [...flow.runtime.receipts.values()][0];
-    expect(receipt?.caller.projectId).toBe('project-2');
-    expect(flow.audit.length).toBeGreaterThan(0);
-    expect(flow.audit.every((entry) => entry.projectId === 'project-2')).toBe(true);
+    expect(await flow.db.auditEntry.count({ where: { projectId: 'project-2' } })).toBeGreaterThan(
+      0,
+    );
+    expect(await flow.db.fixAttempt.findFirstOrThrow()).toMatchObject({ projectId: 'project-2' });
   });
 
   test('validates canonical commands, methods, content type, and unknown routes', async () => {
-    const { handle } = handler();
+    const handle = handler();
     expect((await handle(request('missing'))).status).toBe(404);
     expect(
       (await handle(request('fix-now', { caller, id: 'work-1', input: {}, injected: true })))
@@ -92,7 +97,7 @@ describe('private Work command Request boundary', () => {
   });
 
   test('bounds both declared and streamed request bodies and rejects malformed JSON', async () => {
-    const { handle, flow } = handler();
+    const handle = handler();
     const large = request('fix-now', { caller, id: 'work-1', input: { note: 'x'.repeat(2000) } });
     expect((await handle(large)).status).toBe(413);
     const declared = request();
@@ -104,31 +109,28 @@ describe('private Work command Request boundary', () => {
       body: '{',
     });
     expect((await handle(malformed)).status).toBe(400);
-    expect(flow.runtime.calls).toEqual([]);
+    expect(flow.calls).toEqual([]);
   });
 
   test('returns the complete fix result and canonical Work errors', async () => {
-    const { handle } = handler();
-    const completed = await handle(request());
+    const completed = await handler()(request());
     expect(completed.status).toBe(200);
     expect(completed.headers.get('cache-control')).toBe('no-store');
-    expect(await completed.json()).toMatchObject({
-      ok: true,
-      attemptId: 'attempt-1',
-      pr: { number: 7 },
-    });
-    const missing = handler();
-    missing.flow.options.runtime.read = async () => {
-      const { WorkError } = await import('@graveshift/work');
+    expect(await completed.json()).toMatchObject({ ok: true, pr: { number: 8 } });
+    flow.options.runtime.read = async () => {
       throw new WorkError('WORK_NOT_FOUND', 'The Work item does not exist');
     };
-    const response = await missing.handle(request());
+    const missing = request('fix-now', {
+      caller: { ...caller, commandId: 'missing-work' },
+      id: 'work-1',
+      input: {},
+    });
+    const response = await handler()(missing);
     expect(response.status).toBe(404);
     expect(await response.json()).toMatchObject({ code: 'WORK_NOT_FOUND', status: 404 });
   });
 
   test('a command timeout stays bounded while shutdown drains the running command', async () => {
-    const flow = harness();
     const entered = Promise.withResolvers<void>();
     const release = Promise.withResolvers<void>();
     const original = flow.options.execute;
@@ -137,10 +139,10 @@ describe('private Work command Request boundary', () => {
       await release.promise;
       return original(input);
     };
-    const lifetime = drainCommands(flow.commands());
+    const lifetime = drainCommands(flow.commands({ projectIds: granted }));
     const handle = createCommandHandler({
       commands: lifetime.commands,
-      projectIds: [caller.projectId, 'project-2'],
+      projectIds: granted,
       token,
       maxBytes: 1024,
       timeoutMs: 5,
@@ -157,6 +159,6 @@ describe('private Work command Request boundary', () => {
     release.resolve();
     await closing;
     expect(drained).toBe(true);
-    expect(flow.runtime.snapshot.item.draftPr?.number).toBe(7);
+    expect((await flow.db.workItem.findFirstOrThrow()).draftPr).toMatchObject({ number: 8 });
   });
 });

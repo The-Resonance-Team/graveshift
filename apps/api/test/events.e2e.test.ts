@@ -9,14 +9,17 @@ import {
   validEnvelope,
   type AuthTestApp,
 } from './fakes/auth-test-helpers';
+import { setupAuthDatabase } from './database/auth.fixture';
+import { dbTestEnabled } from './database/fixtures';
 
-describe('POST /api/events (e2e)', () => {
+describe.skipIf(!dbTestEnabled)('POST /api/events (e2e)', () => {
+  const fixture = setupAuthDatabase();
   let ctx!: AuthTestApp;
   let app!: INestApplication;
   let manageToken!: string;
 
   beforeAll(async () => {
-    ctx = await buildAuthApp();
+    ctx = await buildAuthApp(fixture);
     app = ctx.app;
     manageToken = accessToken(ctx.jwt, [
       'tokens:manage',
@@ -72,10 +75,8 @@ describe('POST /api/events (e2e)', () => {
 
   test('rejects a plugin key without events:publish', async () => {
     const key = await createKey({ kind: 'plugin', name: 'no-scope', scopes: ['events:publish'] });
-    const record = ctx.repo.records.find(
-      (item) => item.prefix.length > 0 && item.name === 'no-scope',
-    );
-    if (record) record.scopes = [];
+    const record = await ctx.db.credential.findFirstOrThrow({ where: { name: 'no-scope' } });
+    await ctx.db.credential.update({ where: { id: record.id }, data: { scopes: [] } });
     await push(key, validEnvelope()).expect(403);
   });
 
@@ -116,7 +117,7 @@ describe('POST /api/events (e2e)', () => {
   });
 
   test('an unbound plugin key publishes for any service in its project', async () => {
-    const fresh = await buildAuthApp();
+    const fresh = await buildAuthApp(fixture);
     const token = accessToken(fresh.jwt, ['tokens:manage', 'events:publish']);
     const created = await request(fresh.app.getHttpServer())
       .post('/api/credentials')
@@ -137,7 +138,7 @@ describe('POST /api/events (e2e)', () => {
 
   test('rejects a revoked key', async () => {
     const key = await createKey({ kind: 'plugin', name: 'revoked', scopes: ['events:publish'] });
-    const id = ctx.repo.records.find((item) => item.name === 'revoked')?.id;
+    const id = (await ctx.db.credential.findFirstOrThrow({ where: { name: 'revoked' } })).id;
     await request(app.getHttpServer())
       .delete(`/api/credentials/${id}`)
       .set('authorization', `Bearer ${manageToken}`)
@@ -147,8 +148,11 @@ describe('POST /api/events (e2e)', () => {
 
   test('rejects an expired key', async () => {
     const key = await createKey({ kind: 'plugin', name: 'expired', scopes: ['events:publish'] });
-    const record = ctx.repo.records.find((item) => item.name === 'expired');
-    if (record) record.expiresAt = '2020-01-01T00:00:00.000Z';
+    const record = await ctx.db.credential.findFirstOrThrow({ where: { name: 'expired' } });
+    await ctx.db.credential.update({
+      where: { id: record.id },
+      data: { expiresAt: new Date('2020-01-01T00:00:00.000Z') },
+    });
     await push(key, validEnvelope()).expect(401);
   });
 
@@ -182,7 +186,8 @@ describe('POST /api/events (e2e)', () => {
     });
     const published = ctx.publisher.envelopes.filter((item) => ids.includes(item.id));
     expect(published).toHaveLength(2);
-    expect(published.map((item) => item.id)).toEqual(ids);
+    // Parallel requests finish in an arbitrary order; only the set of ids is stable.
+    expect(published.map((item) => item.id).sort()).toEqual([...ids].sort());
     for (const envelope of published) {
       expect(envelope.traceId).toBe(ids[0]);
       expect(envelope.fingerprint).toBe('api:oom');
@@ -213,7 +218,7 @@ describe('POST /api/events (e2e)', () => {
     failing.publish = async () => {
       throw new ServiceUnavailableException('NATS is not configured');
     };
-    const down = await buildAuthApp({}, failing);
+    const down = await buildAuthApp(fixture, {}, failing);
     const token = accessToken(down.jwt, ['tokens:manage', 'events:publish']);
     const created = await request(down.app.getHttpServer())
       .post('/api/credentials')
@@ -229,7 +234,7 @@ describe('POST /api/events (e2e)', () => {
   });
 
   test('rotating invalid tokens share one throttle bucket', async () => {
-    const limited = await buildAuthApp({ eventRateLimit: 3 });
+    const limited = await buildAuthApp(fixture, { eventRateLimit: 3 });
     const call = (token: string) =>
       request(limited.app.getHttpServer())
         .post('/api/events')
@@ -244,7 +249,7 @@ describe('POST /api/events (e2e)', () => {
   });
 
   test('event traffic does not consume the credential route throttle bucket', async () => {
-    const limited = await buildAuthApp({ eventRateLimit: 2 });
+    const limited = await buildAuthApp(fixture, { eventRateLimit: 2 });
     const call = (token: string) =>
       request(limited.app.getHttpServer())
         .post('/api/events')
@@ -261,7 +266,7 @@ describe('POST /api/events (e2e)', () => {
   });
 
   test('bounds the request rate', async () => {
-    const limited = await buildAuthApp({ eventRateLimit: 3 });
+    const limited = await buildAuthApp(fixture, { eventRateLimit: 3 });
     const token = accessToken(limited.jwt, ['tokens:manage', 'events:publish']);
     const created = await request(limited.app.getHttpServer())
       .post('/api/credentials')

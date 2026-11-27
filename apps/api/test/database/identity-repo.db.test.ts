@@ -3,16 +3,7 @@ import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import { IdentityConflictError } from '../../src/identity/identity.types';
 import { PrismaIdentityRepo } from '../../src/identity/repo/identity.repo';
 import type { PrismaService } from '../../src/infra/prisma.service';
-import { dbTestEnabled, openTestDatabase } from './fixtures';
-
-async function clearIdentity(db: PrismaService): Promise<void> {
-  await db.$executeRawUnsafe('DELETE FROM "oauth_clients"');
-  await db.$executeRawUnsafe('DELETE FROM "projects"');
-  await db.$executeRawUnsafe('DELETE FROM "memberships"');
-  await db.$executeRawUnsafe('DELETE FROM "daemon_grants"');
-  await db.$executeRawUnsafe('DELETE FROM "organizations"');
-  await db.$executeRawUnsafe('DELETE FROM "accounts"');
-}
+import { clearIdentity, dbTestEnabled, openTestDatabase, resetDatabase } from './fixtures';
 
 describe.skipIf(!dbTestEnabled)('identity repository over PostgreSQL', () => {
   let db: PrismaService;
@@ -26,6 +17,29 @@ describe.skipIf(!dbTestEnabled)('identity repository over PostgreSQL', () => {
   afterAll(async () => {
     await clearIdentity(db);
     await db?.onModuleDestroy();
+  });
+
+  test('the shared reset clears identity tables too, so suites cannot leak clients', async () => {
+    const org = await repo.addOrganization({ name: 'Reset', slug: 'reset-org' });
+    await repo.addProject({
+      projectId: '9001',
+      orgId: org.id,
+      name: 'Reset Project',
+      slug: 'reset-project',
+    });
+    await repo.addOAuthClient({
+      clientId: 'reset-client',
+      secretHash: 'test-hash-only',
+      orgId: org.id,
+      projectId: '9001',
+      scopes: [],
+    });
+    expect(await db.oAuthClient.count()).toBe(1);
+    await resetDatabase(db);
+    expect(await db.oAuthClient.count()).toBe(0);
+    expect(await db.project.count()).toBe(0);
+    expect(await db.organization.count()).toBe(0);
+    expect(await db.account.count()).toBe(0);
   });
 
   test('bootstrapRoot rolls back every write when one statement fails', async () => {

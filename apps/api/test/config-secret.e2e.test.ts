@@ -18,8 +18,11 @@ import {
   wire,
   withTempConfigFile,
 } from './config-test-helpers';
+import { setupAuthDatabase } from './database/auth.fixture';
+import { dbTestEnabled } from './database/fixtures';
 
-describe('config secret hygiene (e2e)', () => {
+describe.skipIf(!dbTestEnabled)('config secret hygiene (e2e)', () => {
+  const fixture = setupAuthDatabase();
   let app: INestApplication | undefined;
 
   afterEach(async () => {
@@ -57,7 +60,7 @@ describe('config secret hygiene (e2e)', () => {
     );
     expect(text).not.toBe(source);
     await withTempConfigFile('config.unknown-policy-key.yaml', text, async (path) => {
-      const built = await appFromConfigFile(path);
+      const built = await appFromConfigFile(fixture, path);
       app = built.app;
       const token = await bearerToken(built.app, CLIENTS.export.id, CLIENTS.export.secret);
       const response = await request(built.app.getHttpServer())

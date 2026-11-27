@@ -6,22 +6,23 @@ import { ThrottlerModule } from '@nestjs/throttler';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import request from 'supertest';
 
+import { WORK_COMMANDS } from '@graveshift/work';
 import { CREDENTIAL_CONFIG } from '../src/auth/auth.types';
 import { OAuthClientCredentialsStrategy } from '../src/auth/oauth-client-credentials.strategy';
-import { AUDIT_SINK } from '../src/audit/audit.sink';
-import { InMemoryAuditSink } from '../src/audit/testing/in-memory-audit.sink';
+import { AUDIT_READER, AUDIT_SINK } from '../src/audit/audit.sink';
 import { AuditedWorkCommands, WORK_COMMANDS_INNER } from '../src/fix/audited-work.commands';
 import { IDENTITY_REPO } from '../src/identity/identity.types';
-import { WORK_COMMANDS } from '@graveshift/work';
 import { WorkItemsController } from '../src/work-items/controllers/work-items.controller';
 import { WorkItemRepo } from '../src/work-items/work-item.repo';
+import { setupWorkHttpDatabase } from '../src/work-items/testing/work-http.fixture';
+import { dbTestEnabled } from './database/fixtures';
 import { TEST_CONFIG } from './fakes/auth-test-config';
-import { testIdentityRepo } from './fakes/auth-test-helpers';
 import { fakeWorkApi } from './fakes/fake-fix-deps';
 
 const PATHS = ['/api/work-items', '/api/work-items/work-1', '/api/work-items/work-1/routing'];
 
-describe('Work-item read scope', () => {
+describe.skipIf(!dbTestEnabled)('Work-item read scope', () => {
+  const fixture = setupWorkHttpDatabase();
   let app: INestApplication;
   let jwt: JwtService;
 
@@ -37,7 +38,7 @@ describe('Work-item read scope', () => {
     );
 
   beforeEach(async () => {
-    const adapter = fakeWorkApi({ projectId: '12345' });
+    const adapter = fakeWorkApi(fixture.db, fixture.audit, { projectId: '12345' });
     const moduleRef = await Test.createTestingModule({
       imports: [
         PassportModule,
@@ -48,12 +49,13 @@ describe('Work-item read scope', () => {
       providers: [
         OAuthClientCredentialsStrategy,
         { provide: CREDENTIAL_CONFIG, useValue: TEST_CONFIG },
-        { provide: IDENTITY_REPO, useValue: testIdentityRepo() },
+        { provide: IDENTITY_REPO, useValue: fixture.identity },
         { provide: WorkItemRepo, useValue: adapter.repo },
         AuditedWorkCommands,
         { provide: WORK_COMMANDS, useExisting: AuditedWorkCommands },
         { provide: WORK_COMMANDS_INNER, useValue: adapter.commands },
-        { provide: AUDIT_SINK, useValue: new InMemoryAuditSink() },
+        { provide: AUDIT_SINK, useValue: fixture.audit },
+        { provide: AUDIT_READER, useValue: fixture.audit },
       ],
     }).compile();
     app = moduleRef.createNestApplication({ logger: false });

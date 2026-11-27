@@ -10,31 +10,32 @@ import request from 'supertest';
 
 import { CREDENTIAL_CONFIG } from '../src/auth/auth.types';
 import { OAuthClientCredentialsStrategy } from '../src/auth/oauth-client-credentials.strategy';
-import { AUDIT_SINK, type AuditRecord } from '../src/audit/audit.sink';
-import { InMemoryAuditSink } from '../src/audit/testing/in-memory-audit.sink';
+import { AUDIT_READER, AUDIT_SINK } from '../src/audit/audit.sink';
 import { AuditedWorkCommands, WORK_COMMANDS_INNER } from '../src/fix/audited-work.commands';
 import { IDENTITY_REPO } from '../src/identity/identity.types';
 import { WorkItemsController } from '../src/work-items/controllers/work-items.controller';
 import { WorkItemRepo } from '../src/work-items/work-item.repo';
+import { setupWorkHttpDatabase } from '../src/work-items/testing/work-http.fixture';
+import { dbTestEnabled } from './database/fixtures';
 import { TEST_CONFIG, TEST_ROOT_ENV } from './fakes/auth-test-config';
-import { testIdentityRepo } from './fakes/auth-test-helpers';
-import { fakeWorkApi } from './fakes/fake-fix-deps';
+import { fakeWorkApi, workId } from './fakes/fake-fix-deps';
 
 const SECRET = 'fake-ghp-token';
 
-/** One boot per test, with its own sink and its own daemon adapter. */
+let fixture: ReturnType<typeof setupWorkHttpDatabase>;
+
+/** One boot per test, sharing the suite's real audit chain and its own daemon adapter. */
 async function start(
   options: {
     readonly unauthenticatedPrincipal?: boolean;
     readonly delayMs?: (caller: WorkCaller) => number;
   } = {},
 ) {
-  const adapter = fakeWorkApi({
+  const adapter = fakeWorkApi(fixture.db, fixture.audit, {
     projectId: '12345',
     projectIds: ['12346'],
     ...(options.delayMs === undefined ? {} : { delayMs: options.delayMs }),
   });
-  const audit = new InMemoryAuditSink();
   const moduleRef = await Test.createTestingModule({
     imports: [
       PassportModule,
@@ -47,9 +48,10 @@ async function start(
       AuditedWorkCommands,
       { provide: WORK_COMMANDS, useExisting: AuditedWorkCommands },
       { provide: WORK_COMMANDS_INNER, useValue: adapter.commands },
-      { provide: AUDIT_SINK, useValue: audit },
+      { provide: AUDIT_SINK, useValue: fixture.audit },
+      { provide: AUDIT_READER, useValue: fixture.audit },
       { provide: CREDENTIAL_CONFIG, useValue: TEST_CONFIG },
-      { provide: IDENTITY_REPO, useValue: testIdentityRepo() },
+      { provide: IDENTITY_REPO, useValue: fixture.identity },
       { provide: ConfigService, useValue: new ConfigService(TEST_ROOT_ENV) },
       { provide: WorkItemRepo, useValue: adapter.repo },
     ],
@@ -91,12 +93,20 @@ async function start(
         expiresIn: 300,
       },
     );
-  return { app, adapter, audit, token };
+  return { app, adapter, token };
 }
 
-const types = (records: AuditRecord[]): string[] => records.map((record) => record.type);
+/** Read through the real audit reader; no in-memory record store exists. */
+const entries = (projectId: string) => fixture.audit.list(projectId);
+const projects = async (): Promise<string[]> => {
+  const rows = await fixture.db.auditEntry.findMany({ select: { projectId: true } });
+  return [...new Set(rows.map((row) => row.projectId))].sort();
+};
+const types = async (projectId: string): Promise<string[]> =>
+  (await entries(projectId)).map((entry) => entry.type);
 
-describe('work item fix audit', () => {
+describe.skipIf(!dbTestEnabled)('work item fix audit', () => {
+  fixture = setupWorkHttpDatabase();
   let app: INestApplication | undefined;
 
   afterEach(async () => {
@@ -123,7 +133,7 @@ describe('work item fix audit', () => {
         .send({})
         .expect(200),
       request(app.getHttpServer())
-        .post('/api/work-items/work-1/fix-now')
+        .post(`/api/work-items/${workId('12346')}/fix-now`)
         .auth(second, { type: 'bearer' })
         .send({})
         .expect(200),
@@ -138,31 +148,30 @@ describe('work item fix audit', () => {
     expect(fix.adapter.timeline[2]).toBe('fixNow:12346:done');
     expect(fix.adapter.timeline[3]).toBe('fixNow:12345:done');
 
-    expect(fix.audit.projects().sort()).toEqual(['12345', '12346']);
-    expect(fix.audit.entries('12345')).toHaveLength(1);
-    expect(fix.audit.entries('12346')).toHaveLength(1);
-    expect(fix.audit.entries('12345')[0]).toMatchObject({
-      projectId: '12345',
+    expect(await projects()).toEqual(['12345', '12346']);
+    expect(await entries('12345')).toHaveLength(1);
+    expect(await entries('12346')).toHaveLength(1);
+    expect((await entries('12345'))[0]).toMatchObject({
       actor: 'client-1',
       type: 'fix.outcome',
       payload: { workItemId: 'work-1', ok: true, failure: 'none' },
     });
-    expect(fix.audit.entries('12346')[0]).toMatchObject({
-      projectId: '12346',
+    expect((await entries('12346'))[0]).toMatchObject({
       actor: 'client-2',
       type: 'fix.outcome',
+      payload: { workItemId: workId('12346') },
     });
     // Each chain holds only its own caller: no entry leaked across Projects.
-    expect(new Set(fix.audit.entries('12345').map((record) => record.actor))).toEqual(
+    expect(new Set((await entries('12345')).map((record) => record.actor))).toEqual(
       new Set(['client-1']),
     );
-    expect(new Set(fix.audit.entries('12346').map((record) => record.actor))).toEqual(
+    expect(new Set((await entries('12346')).map((record) => record.actor))).toEqual(
       new Set(['client-2']),
     );
-    expect(fix.adapter.calls.map((call) => [call.method, call.caller.projectId])).toEqual([
-      ['fixNow', '12345'],
-      ['fixNow', '12346'],
-    ]);
+    // Both daemon calls are observed; their arrival order is a scheduler detail.
+    expect(
+      new Set(fix.adapter.calls.map((call) => `${call.method}:${call.caller.projectId}`)),
+    ).toEqual(new Set(['fixNow:12345', 'fixNow:12346']));
   });
 
   test('one outcome entry per attempt, and a replay of the command audits it once', async () => {
@@ -182,8 +191,10 @@ describe('work item fix audit', () => {
       .set('Idempotency-Key', 'command-fixed')
       .send({})
       .expect(200);
-    expect(fix.audit.ofType('fix.outcome')).toHaveLength(1);
-    expect(types(fix.audit.entries('12345'))).toEqual(['fix.outcome']);
+    expect((await entries('12345')).filter((entry) => entry.type === 'fix.outcome')).toHaveLength(
+      1,
+    );
+    expect(await types('12345')).toEqual(['fix.outcome']);
   });
 
   test('a note with a secret never enters an audit payload', async () => {
@@ -196,7 +207,7 @@ describe('work item fix audit', () => {
       .expect(200);
     // The daemon adapter received the note; the audit chain never saw it.
     expect(JSON.stringify(fix.adapter.calls)).toContain(SECRET);
-    expect(JSON.stringify(fix.audit.entries('12345'))).not.toContain(SECRET);
+    expect(JSON.stringify(await entries('12345'))).not.toContain(SECRET);
   });
 
   test('a request with no authenticated audit scope is denied before the daemon is called', async () => {
@@ -210,7 +221,7 @@ describe('work item fix audit', () => {
     expect(denied.body.message).toBe('The request has no authenticated audit scope');
     // No daemon call: no policy gate, no model call, no GitHub call, and no audit entry.
     expect(fix.adapter.calls).toEqual([]);
-    expect(fix.audit.projects()).toEqual([]);
+    expect(await projects()).toEqual([]);
   });
 
   test('a Fix denial writes no outcome entry', async () => {
@@ -221,7 +232,7 @@ describe('work item fix audit', () => {
       .auth(fix.token('client-1', '12345'), { type: 'bearer' })
       .send({})
       .expect(403);
-    expect(fix.audit.projects()).toEqual([]);
+    expect(await projects()).toEqual([]);
   });
 
   test('no boot key names a Project for the audit chain', async () => {
@@ -240,6 +251,6 @@ describe('work item fix audit', () => {
       .auth(fix.token('client-1', '12345'), { type: 'bearer' })
       .send({})
       .expect(200);
-    expect(fix.audit.entries('12345')).toHaveLength(1);
+    expect(await entries('12345')).toHaveLength(1);
   });
 });

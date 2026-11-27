@@ -7,14 +7,16 @@ import request from 'supertest';
 
 import { CREDENTIAL_CONFIG, CREDENTIAL_REPO, EVENT_PUBLISHER } from '../../src/auth/auth.types';
 import { expandScopes } from '../../src/auth/scopes';
+import { PrismaCredentialRepo } from '../../src/auth/repo/credential.repo';
 import { configureApp } from '../../src/app.factory';
 import { AppModule } from '../../src/app.module';
+import { AUDIT_READER, AUDIT_SINK } from '../../src/audit/audit.sink';
+import { AuditRepo } from '../../src/audit/audit.repo';
 import { BOOT_CONFIG } from '../../src/config/boot.config';
 import { IDENTITY_REPO } from '../../src/identity/identity.types';
-import { FakeIdentityRepo } from '../../src/identity/testing/fake-identity.repo';
+import { PrismaIdentityRepo } from '../../src/identity/repo/identity.repo';
 import type { PrismaService } from '../../src/infra/prisma.service';
 import { TEST_CONFIG, testBootConfig } from '../fakes/auth-test-config';
-import { FakeCredentialRepo } from '../fakes/fake-credential-repo';
 import { dbTestEnabled, openTestDatabase, resetDatabase } from './fixtures';
 
 const SHA = 'a'.repeat(40);
@@ -22,10 +24,12 @@ const STARTED = '2026-11-22T07:00:00.000Z';
 
 describe.skipIf(!dbTestEnabled)('v3 deployment HTTP with real stores', () => {
   let db: PrismaService;
+  let audit: AuditRepo;
   let app: INestApplication | undefined;
 
   beforeAll(async () => {
     db = await openTestDatabase();
+    audit = new AuditRepo(db);
   });
 
   beforeEach(async () => {
@@ -40,14 +44,7 @@ describe.skipIf(!dbTestEnabled)('v3 deployment HTTP with real stores', () => {
     await db.project.create({
       data: { projectId: '1001', orgId: org.id, name: 'First', slug: 'first' },
     });
-    const identity = new FakeIdentityRepo();
-    identity.organizations.set(org.id, {
-      id: org.id,
-      name: 'Alpha',
-      slug: 'alpha',
-      createdAt: new Date().toISOString(),
-    });
-    await identity.addProject({ projectId: '1001', orgId: org.id, name: 'First', slug: 'first' });
+    const identity = new PrismaIdentityRepo(db);
     await identity.addOAuthClient({
       clientId: 'real-client',
       secretHash: 'test-hash-only',
@@ -61,11 +58,15 @@ describe.skipIf(!dbTestEnabled)('v3 deployment HTTP with real stores', () => {
       .overrideProvider(CREDENTIAL_CONFIG)
       .useValue(TEST_CONFIG)
       .overrideProvider(CREDENTIAL_REPO)
-      .useValue(new FakeCredentialRepo())
+      .useValue(new PrismaCredentialRepo(db, audit))
       .overrideProvider(EVENT_PUBLISHER)
       .useValue(createInMemoryPublisher())
       .overrideProvider(IDENTITY_REPO)
       .useValue(identity)
+      .overrideProvider(AUDIT_SINK)
+      .useValue(audit)
+      .overrideProvider(AUDIT_READER)
+      .useValue(audit)
       .compile();
     app = moduleRef.createNestApplication({ logger: false });
     configureApp(app);
@@ -118,7 +119,7 @@ describe.skipIf(!dbTestEnabled)('v3 deployment HTTP with real stores', () => {
   });
 
   test('a cross-Organization Project cannot be used through the Deployment routes', async () => {
-    const { org, identity, token, close } = await boot();
+    const { org, token, close } = await boot();
     const running = app;
     if (running === undefined) throw new Error('Test application did not boot');
     try {
@@ -126,18 +127,6 @@ describe.skipIf(!dbTestEnabled)('v3 deployment HTTP with real stores', () => {
       const foreign = await db.organization.create({ data: { name: 'Beta', slug: 'beta' } });
       await db.project.create({
         data: { projectId: '2001', orgId: foreign.id, name: 'Foreign', slug: 'foreign' },
-      });
-      identity.organizations.set(foreign.id, {
-        id: foreign.id,
-        name: 'Beta',
-        slug: 'beta',
-        createdAt: new Date().toISOString(),
-      });
-      await identity.addProject({
-        projectId: '2001',
-        orgId: foreign.id,
-        name: 'Foreign',
-        slug: 'foreign',
       });
 
       const ownOrgRoute = `/api/organizations/${org.id}/projects/2001/deployments`;

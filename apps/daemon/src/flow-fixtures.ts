@@ -6,13 +6,14 @@ import {
   type WorkItem,
 } from '@graveshift/core';
 import { PolicySchema } from '@graveshift/policy';
+import type { ClaimResult, FixAttempt } from '@graveshift/work';
 
 import { withAuditScope } from './audit';
 import type { FixContext } from './fix-context';
 
 export const at = '2026-11-21T10:00:00.000Z';
 export const caller = { projectId: 'project-1', actor: 'person-1', commandId: 'command-1' };
-export const DEPLOYMENT_SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+const DEPLOYMENT_SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 
 /**
  * Binds the authenticated audit scope a real Work command carries, so a test can call a fix or
@@ -126,6 +127,35 @@ export const policy = PolicySchema.parse({
   rules: [{ id: 'fix', action: 'open_pr', when: { services: ['checkout'] }, effect: 'allow' }],
   default: 'deny',
 });
+
+/** A claimed attempt built from plain data, for seams that need no stateful runtime. */
+export function claimedAttempt(): Extract<ClaimResult, { kind: 'claimed' }> {
+  const attempt: FixAttempt = {
+    id: 'attempt-1',
+    projectId: caller.projectId,
+    workItemId: 'work-1',
+    commandId: caller.commandId,
+    workerId: null,
+    leaseUntil: null,
+    agent: 'Assigned Agent',
+    trigger: 'fix_now',
+    state: 'claimed',
+    routingProgress: null,
+    params: {},
+    questionId: null,
+    result: null,
+    publication: null,
+    baseSha: null,
+    version: 0,
+    createdAt: at,
+    updatedAt: at,
+  };
+  return {
+    kind: 'claimed',
+    snapshot: { item: item(), version: 1, activeAttempt: attempt, diagnosis },
+    attempt,
+  };
+}
 
 export function context(): FixContext {
   const repo = policy.github.repos[0];

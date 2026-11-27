@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 
+import { dbTestEnabled } from './database/fixtures';
 import { TEST_CONFIG, TEST_ROOT_ENV } from './fakes/auth-test-config';
 import {
   bearer,
@@ -8,12 +9,15 @@ import {
   http,
   IDENTITY_ROOT,
   registerAndLogin,
+  setupIdentityDatabase,
 } from './fakes/identity-app.fixture';
 import { IdentityService } from '../src/identity/services/identity.service';
 
 afterEach(closeIdentityApps);
 
-describe('account and organization identity (e2e)', () => {
+describe.skipIf(!dbTestEnabled)('account and organization identity (e2e)', () => {
+  setupIdentityDatabase();
+
   test('register creates an Account with no Organization and no admin role', async () => {
     const context = await buildIdentityApp();
     const token = await registerAndLogin(context, 'new@identity.test');

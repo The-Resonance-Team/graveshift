@@ -1,10 +1,10 @@
 import { WorkError, type FixResult, type TriageResult, type WorkCaller } from '@graveshift/work';
-import { ServiceUnavailableException } from '@nestjs/common';
 import { describe, expect, test } from 'bun:test';
 
+import { dbTestEnabled } from '../../test/database/fixtures';
 import { workItem } from '../../test/fakes/fake-fix-deps';
+import { setupWorkHttpDatabase } from '../work-items/testing/work-http.fixture';
 import { currentAuditScope, withAuditScope, type AuditScope } from '../audit/audit.sink';
-import { InMemoryAuditSink } from '../audit/testing/in-memory-audit.sink';
 import { AuditedWorkCommands } from './audited-work.commands';
 
 const SECRET = 'fake-ghp-token';
@@ -27,32 +27,29 @@ const open: FixResult = {
   attemptId: 'attempt-1',
 };
 
-const completed = (): FixResult => structuredClone(open);
-
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * One independent boundary per call: its own sink, its own daemon call log and its own reply.
- * Nothing is shared between two fixtures, so a test of two Projects proves separation by
- * construction rather than by the order the tests happen to run in. A test can give each
- * boundary its own in-call delay and a shared timeline, so two clients genuinely overlap and
- * the slower one finishes last.
+ * One independent boundary per call: its own daemon log and reply. Two Projects share only the
+ * durable audit chain, so separation is proved by that chain, not by test order. A test can give
+ * each boundary its own delay and a shared timeline, so two clients genuinely overlap.
  */
 function boundary(options: {
   readonly projectId: string;
   readonly clientId: string;
   readonly reply?: () => Promise<FixResult>;
   readonly triage?: () => Promise<TriageResult>;
-  readonly audit?: InMemoryAuditSink;
   /** How long the fake daemon stays inside the call, so two calls really overlap. */
   readonly delayMs?: number;
   /** Shared order record: start and done per call, to prove interleaving, not timing luck. */
   readonly timeline?: string[];
   /** The audit scope each call sees while it runs: its own request scope or nothing. */
   readonly seenScopes?: Array<{ tag: string; scope: AuditScope | undefined }>;
+  /** The real audit adapter the suite opened. */
+  readonly audit: ReturnType<typeof setupWorkHttpDatabase>['audit'];
 }) {
   const calls: string[] = [];
-  const reply = options.reply ?? (async () => completed());
+  const reply = options.reply ?? (async () => structuredClone(open));
   const enter = (tag: string, caller: WorkCaller, id: string) => {
     options.timeline?.push(`${tag}:start`);
     options.seenScopes?.push({ tag, scope: currentAuditScope() });
@@ -78,8 +75,7 @@ function boundary(options: {
       return (options.triage ?? (async () => ({ item: workItem(id), autoFix: null })))();
     },
   };
-  const audit = options.audit ?? new InMemoryAuditSink();
-  const commands = new AuditedWorkCommands(inner, audit);
+  const commands = new AuditedWorkCommands(inner, options.audit);
   const caller = (commandId = 'command-1'): WorkCaller => ({
     projectId: options.projectId,
     actor: options.clientId,
@@ -87,10 +83,17 @@ function boundary(options: {
   });
   const run = <Value>(work: () => Promise<Value>): Promise<Value> =>
     withAuditScope({ projectId: options.projectId, actor: options.clientId }, work);
-  return { calls, audit, caller, commands, run };
+  return { calls, audit: options.audit, caller, commands, run };
 }
 
-describe('audited fix commands', () => {
+describe.skipIf(!dbTestEnabled)('audited fix commands', () => {
+  const fixture = setupWorkHttpDatabase();
+  const projects = async (): Promise<string[]> => {
+    const rows = await fixture.db.auditEntry.findMany({ select: { projectId: true } });
+    return [...new Set(rows.map((row) => row.projectId))].sort();
+  };
+  const entries = (projectId: string) => fixture.audit.list(projectId);
+
   test('writes the one outcome entry after the daemon call, never before it', async () => {
     // Observed from inside the daemon call: the attempt is not yet audited while the draft
     // pull request is still being made, and audited exactly once after the result returned.
@@ -98,9 +101,10 @@ describe('audited fix commands', () => {
     const fix = boundary({
       projectId: '12345',
       clientId: 'client-1',
+      audit: fixture.audit,
       reply: async () => {
-        seen.push(fix.audit.projects().length);
-        return completed();
+        seen.push(await fixture.db.auditEntry.count());
+        return structuredClone(open);
       },
     });
     const result = await fix.run(() =>
@@ -109,19 +113,20 @@ describe('audited fix commands', () => {
     expect(result.ok).toBe(true);
     expect(seen).toEqual([0]);
     expect(fix.calls).toEqual(['daemon:12345:work-1']);
-    expect(fix.audit.entries('12345').map((entry) => entry.type)).toEqual(['fix.outcome']);
-    expect(fix.audit.entries('12345')[0]).toMatchObject({
-      projectId: '12345',
+    expect((await entries('12345')).map((entry) => entry.type)).toEqual(['fix.outcome']);
+    expect((await entries('12345'))[0]).toMatchObject({
       actor: 'client-1',
       payload: { workItemId: 'work-1', ok: true, failure: 'none' },
     });
   });
 
   test('a replay of the same command audits the attempt once', async () => {
-    const fix = boundary({ projectId: '12345', clientId: 'client-1' });
+    const fix = boundary({ projectId: '12345', clientId: 'client-1', audit: fixture.audit });
     await fix.run(() => fix.commands.fixNow(fix.caller('command-1'), 'work-1', {}));
     await fix.run(() => fix.commands.fixNow(fix.caller('command-1'), 'work-1', {}));
-    expect(fix.audit.ofType('fix.outcome')).toHaveLength(1);
+    expect((await entries('12345')).filter((entry) => entry.type === 'fix.outcome')).toHaveLength(
+      1,
+    );
   });
 
   test('two concurrent OAuth clients of different Projects write to different chains', async () => {
@@ -132,6 +137,7 @@ describe('audited fix commands', () => {
     const first = boundary({
       projectId: '12345',
       clientId: 'client-1',
+      audit: fixture.audit,
       delayMs: 40,
       timeline,
       seenScopes,
@@ -139,6 +145,7 @@ describe('audited fix commands', () => {
     const second = boundary({
       projectId: '12346',
       clientId: 'client-2',
+      audit: fixture.audit,
       delayMs: 5,
       timeline,
       seenScopes,
@@ -164,38 +171,37 @@ describe('audited fix commands', () => {
     ]);
 
     // Each chain holds only its own actor and only its own commands: nothing leaked across.
-    expect(first.audit.projects()).toEqual(['12345']);
-    expect(second.audit.projects()).toEqual(['12346']);
-    expect(first.audit.entries('12345').map((entry) => entry.actor)).toEqual(['client-1']);
-    expect(second.audit.entries('12346').map((entry) => entry.actor)).toEqual(['client-2']);
-    expect(first.audit.entries('12346')).toEqual([]);
-    expect(second.audit.entries('12345')).toEqual([]);
+    expect(await projects()).toEqual(['12345', '12346']);
+    expect((await entries('12345')).map((entry) => entry.actor)).toEqual(['client-1']);
+    expect((await entries('12346')).map((entry) => entry.actor)).toEqual(['client-2']);
+    expect(await entries('12346')).toHaveLength(1);
+    expect(await entries('12345')).toHaveLength(1);
     expect(first.calls).toEqual(['daemon:12345:work-1']);
     expect(second.calls).toEqual(['daemon:12346:work-2']);
   });
 
   test('a command outside an authenticated scope is denied before the daemon is called', async () => {
-    const fix = boundary({ projectId: '12345', clientId: 'client-1' });
+    const fix = boundary({ projectId: '12345', clientId: 'client-1', audit: fixture.audit });
     await expect(fix.commands.fixNow(fix.caller(), 'work-1', {})).rejects.toMatchObject({
       status: 403,
       message: 'The request has no authenticated audit scope',
     });
     // No daemon call means no policy gate, no model call and no GitHub call downstream.
     expect(fix.calls).toEqual([]);
-    expect(fix.audit.projects()).toEqual([]);
+    expect(await projects()).toEqual([]);
   });
 
   test('a forged caller is denied before the daemon is called', async () => {
-    const fix = boundary({ projectId: '12345', clientId: 'client-1' });
+    const fix = boundary({ projectId: '12345', clientId: 'client-1', audit: fixture.audit });
     await expect(
       fix.run(() => fix.commands.fixNow({ ...fix.caller(), projectId: '99999' }, 'work-1', {})),
     ).rejects.toMatchObject({ status: 403 });
     expect(fix.calls).toEqual([]);
-    expect(fix.audit.projects()).toEqual([]);
+    expect(await projects()).toEqual([]);
   });
 
   test('a blank authenticated project is denied before the daemon is called', async () => {
-    const fix = boundary({ projectId: '12345', clientId: 'client-1' });
+    const fix = boundary({ projectId: '12345', clientId: 'client-1', audit: fixture.audit });
     await expect(
       fix.run(() => fix.commands.fixNow({ ...fix.caller(), projectId: '  ' }, 'work-1', {})),
     ).rejects.toMatchObject({ status: 403 });
@@ -203,17 +209,18 @@ describe('audited fix commands', () => {
   });
 
   test('a note with a secret never enters an audit payload', async () => {
-    const fix = boundary({ projectId: '12345', clientId: 'client-1' });
+    const fix = boundary({ projectId: '12345', clientId: 'client-1', audit: fixture.audit });
     await fix.run(() =>
       fix.commands.fixNow(fix.caller(), 'work-1', { note: `rotate ${SECRET} now` }),
     );
-    expect(JSON.stringify(fix.audit.entries('12345'))).not.toContain(SECRET);
+    expect(JSON.stringify(await entries('12345'))).not.toContain(SECRET);
   });
 
   test('a command the daemon rejected writes no outcome entry', async () => {
     const fix = boundary({
       projectId: '12345',
       clientId: 'client-1',
+      audit: fixture.audit,
       reply: async () => {
         throw new WorkError('MANUAL_ASSIGNMENT', 'A person must fix this Work item');
       },
@@ -221,24 +228,36 @@ describe('audited fix commands', () => {
     await expect(
       fix.run(() => fix.commands.fixNow(fix.caller(), 'work-1', {})),
     ).rejects.toMatchObject({ code: 'MANUAL_ASSIGNMENT' });
-    expect(fix.audit.projects()).toEqual([]);
+    expect(await projects()).toEqual([]);
   });
 
-  test('withholds the result and fails closed when the outcome audit is unavailable', async () => {
-    const fix = boundary({
-      projectId: '12345',
-      clientId: 'client-1',
-      audit: new InMemoryAuditSink({ failWith: new Error('chain unavailable') }),
-    });
-    await expect(
-      fix.run(() => fix.commands.fixNow(fix.caller(), 'work-1', {})),
-    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+  test('withholds the result when the outcome append hits a real SQL error', async () => {
+    const fix = boundary({ projectId: '12345', clientId: 'client-1', audit: fixture.audit });
+    await fixture.db.$executeRawUnsafe(`
+      CREATE FUNCTION reject_fix_outcome() RETURNS trigger AS $$
+      BEGIN
+        IF NEW.type = 'fix.outcome' THEN RAISE EXCEPTION 'chain unavailable'; END IF;
+        RETURN NEW;
+      END;
+      $$ LANGUAGE plpgsql
+    `);
+    await fixture.db.$executeRawUnsafe(
+      'CREATE TRIGGER reject_fix_outcome BEFORE INSERT ON audit_entries FOR EACH ROW EXECUTE FUNCTION reject_fix_outcome()',
+    );
+    try {
+      await expect(fix.run(() => fix.commands.fixNow(fix.caller(), 'work-1', {}))).rejects.toThrow(
+        'The Fix outcome audit is unavailable',
+      );
+    } finally {
+      await fixture.db.$executeRawUnsafe('DROP TRIGGER reject_fix_outcome ON audit_entries');
+      await fixture.db.$executeRawUnsafe('DROP FUNCTION reject_fix_outcome()');
+    }
     expect(fix.calls).toEqual(['daemon:12345:work-1']);
-    expect(fix.audit.entries('12345')).toEqual([]);
+    expect(await entries('12345')).toEqual([]);
   });
 
   test('an answer that resumes an attempt audits its own outcome', async () => {
-    const fix = boundary({ projectId: '12345', clientId: 'client-1' });
+    const fix = boundary({ projectId: '12345', clientId: 'client-1', audit: fixture.audit });
     await fix.run(() =>
       fix.commands.answer(fix.caller('command-2'), 'work-1', {
         attemptId: 'attempt-1',
@@ -246,21 +265,21 @@ describe('audited fix commands', () => {
         params: { INCIDENT: 'OOM' },
       }),
     );
-    expect(fix.audit.entries('12345').map((entry) => entry.key)).toEqual([
-      'fix:attempt-1:fix_now:outcome',
-    ]);
+    const rows = await fixture.db.auditEntry.findMany({ select: { eventKey: true } });
+    expect(rows.map((row) => row.eventKey)).toEqual(['fix:attempt-1:fix_now:outcome']);
   });
 
   test('a triage that starts no attempt writes no outcome entry', async () => {
-    const fix = boundary({ projectId: '12345', clientId: 'client-1' });
+    const fix = boundary({ projectId: '12345', clientId: 'client-1', audit: fixture.audit });
     await fix.run(() => fix.commands.triage(fix.caller(), 'work-1', { assignee: 'needs_human' }));
-    expect(fix.audit.projects()).toEqual([]);
+    expect(await projects()).toEqual([]);
   });
 
   test('a triage that starts the automatic trigger audits that attempt', async () => {
     const fix = boundary({
       projectId: '12345',
       clientId: 'client-1',
+      audit: fixture.audit,
       triage: async () => ({
         item: structuredClone(open.item),
         autoFix: {
@@ -276,6 +295,6 @@ describe('audited fix commands', () => {
     await fix.run(() =>
       fix.commands.triage(fix.caller(), 'work-1', { assignee: 'needs_agent_SRE Agent' }),
     );
-    expect(fix.audit.entries('12345').map((entry) => entry.type)).toEqual(['fix.outcome']);
+    expect((await entries('12345')).map((entry) => entry.type)).toEqual(['fix.outcome']);
   });
 });

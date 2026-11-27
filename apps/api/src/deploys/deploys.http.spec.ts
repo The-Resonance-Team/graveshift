@@ -1,10 +1,12 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 
+import { dbTestEnabled } from '../../test/database/fixtures';
 import {
   bearer,
   buildDeployTestApp,
   clientToken,
   http,
+  setupDeployDatabase,
   type DeployTestContext,
 } from './testing/deploy-http.fixture';
 
@@ -13,7 +15,8 @@ const SHA_A = 'a'.repeat(40);
 const SHA_B = 'b'.repeat(40);
 const SHA_C = 'c'.repeat(40);
 
-describe('deployment routes (HTTP)', () => {
+describe.skipIf(!dbTestEnabled)('deployment routes (HTTP)', () => {
+  setupDeployDatabase();
   let context: DeployTestContext;
 
   beforeAll(async () => {
@@ -32,6 +35,21 @@ describe('deployment routes (HTTP)', () => {
 
   const ciToken = () =>
     clientToken(context, context.orgCiClient, context.projectA, ['org:ci', 'project:write']);
+
+  /** Seed Deployment rows directly: a 403 or a read test must not depend on earlier tests. */
+  const seedRows = async (
+    rows: ReadonlyArray<readonly [projectId: string, deploymentId: string, environment: string]>,
+  ) => {
+    await context.db.deploy.createMany({
+      data: rows.map(([projectId, deploymentId, environment]) => ({
+        projectId,
+        deploymentId,
+        environment,
+        title: 'seed',
+        dateStarted: new Date(STARTED),
+      })),
+    });
+  };
 
   test('POST appends a Deployment with a commit SHA and no internal row id', async () => {
     const result = await create(await ciToken(), context.orgA, context.projectA, {
@@ -55,7 +73,7 @@ describe('deployment routes (HTTP)', () => {
     expect(result.body.id).toBeUndefined();
     expect(result.body.releaseId).toBeUndefined();
     expect(result.body.projectIds).toBeUndefined();
-    expect(context.deploys.rows.size).toBe(1);
+    expect(await context.db.deploy.count()).toBe(1);
   });
 
   test('POST with org:ci targets another Project in the same Organization', async () => {
@@ -80,6 +98,11 @@ describe('deployment routes (HTTP)', () => {
   });
 
   test('a bound client targeting another Project returns 403', async () => {
+    await seedRows([
+      [context.projectA, SHA_A, 'production'],
+      [context.projectA, SHA_B, 'bound-env'],
+      [context.projectA2, 'd'.repeat(40), 'staging'],
+    ]);
     const token = await clientToken(context, context.clientA, context.projectA, ['project:write']);
     await create(token, context.orgA, context.projectA2, {
       deploymentId: SHA_C,
@@ -87,7 +110,7 @@ describe('deployment routes (HTTP)', () => {
       environment: 'canary',
       dateStarted: STARTED,
     }).expect(403);
-    expect(context.deploys.rows.size).toBe(3);
+    expect(await context.db.deploy.count()).toBe(3);
   });
 
   test('a foreign Organization returns 403', async () => {
@@ -100,13 +123,18 @@ describe('deployment routes (HTTP)', () => {
   });
 
   test('a Project outside the caller Organization returns 403', async () => {
+    await seedRows([
+      [context.projectA, SHA_A, 'production'],
+      [context.projectA, SHA_B, 'bound-env'],
+      [context.projectA2, 'd'.repeat(40), 'staging'],
+    ]);
     await create(await ciToken(), context.orgA, context.projectB, {
       deploymentId: SHA_C,
       title: 'foreign-project',
       environment: 'production',
       dateStarted: STARTED,
     }).expect(403);
-    expect(context.deploys.rows.size).toBe(3);
+    expect(await context.db.deploy.count()).toBe(3);
   });
 
   test('a missing scope returns 403', async () => {
@@ -172,18 +200,25 @@ describe('deployment routes (HTTP)', () => {
       dateStarted: STARTED,
     };
     const first = await create(token, context.orgA, context.projectA, body).expect(201);
-    const rowsAfterFirst = context.deploys.rows.size;
-    const entriesAfterFirst = context.deploys.auditTypes.length;
+    const rowsAfterFirst = await context.db.deploy.count();
+    const entriesAfterFirst = await context.db.auditEntry.count();
     const second = await create(token, context.orgA, context.projectA, {
       ...body,
       title: 'changed title',
     }).expect(200);
     expect(second.body).toEqual(first.body);
-    expect(context.deploys.rows.size).toBe(rowsAfterFirst);
-    expect(context.deploys.auditTypes.length).toBe(entriesAfterFirst);
+    expect(await context.db.deploy.count()).toBe(rowsAfterFirst);
+    expect(await context.db.auditEntry.count()).toBe(entriesAfterFirst);
   });
 
   test('GET lists only the route Project Deployments even for org:read', async () => {
+    await seedRows([
+      [context.projectA, SHA_A, 'production'],
+      [context.projectA, SHA_B, 'bound-env'],
+      [context.projectA, SHA_C, 'production'],
+      [context.projectA2, 'd'.repeat(40), 'staging'],
+      [context.projectB, 'f'.repeat(40), 'production'],
+    ]);
     const token = await clientToken(context, context.clientA, context.projectA, ['org:read']);
     const result = await http(context)
       .get(route(context.orgA, context.projectA))
@@ -197,6 +232,7 @@ describe('deployment routes (HTTP)', () => {
   });
 
   test('GET with project:read returns only the bound Project', async () => {
+    await seedRows([[context.projectA2, 'd'.repeat(40), 'staging']]);
     const token = await clientToken(context, context.clientA2, context.projectA2, ['project:read']);
     const result = await http(context)
       .get(route(context.orgA, context.projectA2))
@@ -207,6 +243,11 @@ describe('deployment routes (HTTP)', () => {
   });
 
   test('GET filters by deploymentId and Environment', async () => {
+    await seedRows([
+      [context.projectA, SHA_A, 'production'],
+      [context.projectA, SHA_B, 'production'],
+      [context.projectA, 'c'.repeat(40), 'staging'],
+    ]);
     const token = await clientToken(context, context.clientA, context.projectA, ['org:read']);
     const bySha = await http(context)
       .get(route(context.orgA, context.projectA))
@@ -234,6 +275,12 @@ describe('deployment routes (HTTP)', () => {
   });
 
   test('Environment is a string on the Deployment, not a separate row', async () => {
+    await seedRows([
+      [context.projectA, SHA_A, 'production'],
+      [context.projectA, SHA_B, 'bound-env'],
+      [context.projectA, SHA_C, 'canary'],
+      [context.projectA2, 'd'.repeat(40), 'staging'],
+    ]);
     const token = await ciToken();
     const result = await create(token, context.orgA, context.projectA, {
       deploymentId: 'e'.repeat(40),
@@ -244,6 +291,6 @@ describe('deployment routes (HTTP)', () => {
     expect(typeof result.body.environment).toBe('string');
     expect(result.body.environment).toBe('sandbox');
     expect(result.body.environmentId).toBeUndefined();
-    expect(context.deploys.rows.size).toBe(5);
+    expect(await context.db.deploy.count()).toBe(5);
   });
 });

@@ -12,6 +12,7 @@ import { InternalAuditController } from '../../api/src/audit/audit.controller';
 import { AuditRepo } from '../../api/src/audit/audit.repo';
 import { AUDIT_READER, AUDIT_SINK } from '../../api/src/audit/audit.sink';
 import { DeployRepo } from '../../api/src/deploys/deploy.repo';
+import { DeploymentClosure } from '../../api/src/deploys/deployment-closure';
 import { BOOT_CONFIG } from '../../api/src/config/boot.config';
 import { ProjectGrant } from '../../api/src/internal/project-grant';
 import { DaemonWorkClient } from '../../api/src/fix/daemon-work.client';
@@ -52,9 +53,13 @@ function fetchAdapter(reply: (incoming: Request) => Promise<Response>): typeof f
   );
 }
 
-export async function platformHttp(db: PrismaService, agents: readonly AgentConfig[]) {
+export async function platformHttp(
+  db: PrismaService,
+  agents: readonly AgentConfig[],
+  projects: string[] = [caller.projectId],
+) {
   const audit = new AuditRepo(db);
-  const work = new WorkItemRepo(db, audit, agents, testProjectGrant([caller.projectId]));
+  const work = new WorkItemRepo(db, audit, agents, testProjectGrant(projects));
   const deploys = new DeployRepo(db, audit);
   const hauntings = new HauntingRepo(db, audit);
   const captured: HttpCapture[] = [];
@@ -97,7 +102,7 @@ export async function platformHttp(db: PrismaService, agents: readonly AgentConf
     ],
     providers: [
       InternalGuard,
-      { provide: ProjectGrant, useValue: testProjectGrant([caller.projectId]) },
+      { provide: ProjectGrant, useValue: testProjectGrant(projects) },
       HauntingService,
       PolicyContextService,
       WorkIngressService,
@@ -109,6 +114,7 @@ export async function platformHttp(db: PrismaService, agents: readonly AgentConf
       { provide: WorkItemRepo, useValue: work },
       { provide: HauntingRepo, useValue: hauntings },
       { provide: DeployRepo, useValue: deploys },
+      { provide: DeploymentClosure, useValue: new DeploymentClosure(deploys) },
       { provide: BOOT_CONFIG, useValue: { agents, policy } },
       {
         provide: ConfigService,

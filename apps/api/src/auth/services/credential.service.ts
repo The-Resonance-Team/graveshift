@@ -29,13 +29,10 @@ import {
 import { FORBIDDEN_SCOPES, type CredentialKind, scopesForKind } from '../scopes';
 
 const digest = (value: string) => createHash('sha256').update(value).digest('hex');
-const MAX_CLIENT_INDEX = 1000;
 
 /** The one issuer and verifier for MCP tokens and plugin API keys. */
 @Injectable()
 export class CredentialService implements CredentialVerifier {
-  private readonly clientIndex = new Map<string, string>();
-
   constructor(
     @Inject(CREDENTIAL_REPO) private readonly repo: Pick<CredentialRepo, keyof CredentialRepo>,
     @Inject(CREDENTIAL_CONFIG) private readonly config: AuthConfig,
@@ -89,7 +86,6 @@ export class CredentialService implements CredentialVerifier {
         expirationAuditedAt: null,
       };
       await this.repo.add(record);
-      this.remember(value, record);
       // The value is returned once. It is never stored, logged or listed again.
       return { ...this.toMetadata(record), prefix: record.prefix, value };
     } catch (error) {
@@ -133,19 +129,6 @@ export class CredentialService implements CredentialVerifier {
   async revoke(id: string, principal: Principal): Promise<void> {
     if (!(await this.repo.revoke(id, principal, new Date().toISOString())))
       throw new NotFoundException();
-  }
-
-  /** Sync lookup for the throttler. Only hashes and client ids are kept. */
-  clientIdForKey(value: string): string | undefined {
-    return this.clientIndex.get(digest(value));
-  }
-
-  private remember(value: string, record: CredentialRecord): void {
-    if (this.clientIndex.size >= MAX_CLIENT_INDEX) {
-      const oldest = this.clientIndex.keys().next().value;
-      if (oldest) this.clientIndex.delete(oldest);
-    }
-    this.clientIndex.set(digest(value), `${record.projectId}:${record.clientId}`);
   }
 
   private isActive(record: CredentialRecord): boolean {

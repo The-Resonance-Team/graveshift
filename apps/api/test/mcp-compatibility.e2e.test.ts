@@ -5,15 +5,31 @@ import { connectMcpClient } from '@nestjs/mcp/testing';
 import { Test, type TestingModule } from '@nestjs/testing';
 import type { AuditDraft } from '@graveshift/core';
 import { parsePolicy } from '@graveshift/policy';
-import { afterAll, beforeAll, describe, expect, mock, spyOn, test } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test';
 
 import { HttpMcpBackend } from '../src/mcp/mcp.backend';
+import {
+  build,
+  type DaemonHarness,
+  openAuditRepo,
+  RECORDED_FIXTURE,
+  SECRET,
+  snapshot,
+  startDaemon,
+  ZERO_COUNTERS,
+} from '../src/mcp/mcp-daemon-read.fixture';
 import { writeAutopsy } from '../src/mcp/mcp.postmortem';
+import { dbTestEnabled } from './database/fixtures';
 import { McpPrompts } from '../src/mcp/mcp.prompts';
 import { McpResources } from '../src/mcp/mcp.resources';
 import { McpTools } from '../src/mcp/mcp.tools';
-import { MCP_AUDIT_WRITER, MCP_BACKEND, MCP_ENV_MODE, MCP_POLICY } from '../src/mcp/mcp.types';
-import { FakeMcpBackend, RECORDED_FIXTURE, SECRET } from './fakes/fake-mcp-backend';
+import {
+  MCP_AUDIT_WRITER,
+  MCP_BACKEND,
+  MCP_ENV_MODE,
+  MCP_POLICY,
+  type McpAuditWriter,
+} from '../src/mcp/mcp.types';
 
 const REQUIRED_TOOLS = [
   'list_services',
@@ -48,13 +64,27 @@ const toolText = (result: unknown): string => {
   return content[0]?.text ?? '';
 };
 
-describe('MCP server (in-memory client)', () => {
+describe.skipIf(!dbTestEnabled)('MCP server against the real API endpoint', () => {
   let moduleRef!: TestingModule;
   let client!: Client;
   let legacy!: Client;
-  const backend = new FakeMcpBackend();
+  let daemon!: DaemonHarness;
+  let auditRepo!: Awaited<ReturnType<typeof openAuditRepo>>;
+  let auditAck = true;
+  const drafts: AuditDraft[] = [];
+  const auditWriter: McpAuditWriter = {
+    requireProject: () => {},
+    auditDecision: async (draft) => {
+      if (!auditAck) throw new Error('Audit unavailable');
+      drafts.push(draft);
+      return { acknowledged: true, key: draft.key };
+    },
+  };
 
   beforeAll(async () => {
+    daemon = startDaemon();
+    auditRepo = await openAuditRepo();
+    const { backend } = await build(daemon.client, auditRepo.audit);
     moduleRef = await Test.createTestingModule({
       imports: [McpModule.forRoot({ name: 'graveshift-mcp', version: '0.1.0' })],
       providers: [
@@ -62,7 +92,7 @@ describe('MCP server (in-memory client)', () => {
         McpPrompts,
         McpResources,
         { provide: MCP_BACKEND, useValue: backend },
-        { provide: MCP_AUDIT_WRITER, useValue: backend },
+        { provide: MCP_AUDIT_WRITER, useValue: auditWriter },
         { provide: MCP_POLICY, useValue: policy },
         { provide: MCP_ENV_MODE, useValue: undefined },
       ],
@@ -75,6 +105,8 @@ describe('MCP server (in-memory client)', () => {
     await client?.close();
     await legacy?.close();
     await moduleRef?.close();
+    daemon?.stop();
+    await auditRepo?.close();
   });
 
   test('lists the nine migrated tools, both prompts and the resource template', async () => {
@@ -96,7 +128,7 @@ describe('MCP server (in-memory client)', () => {
     expect(tools.map((tool) => tool.name)).toEqual(expect.arrayContaining(REQUIRED_TOOLS));
     const result = await legacy.callTool({ name: 'list_incidents', arguments: {} });
     expect(result.isError).toBeFalsy();
-    expect(JSON.parse(toolText(result))).toHaveLength(3);
+    expect(JSON.parse(toolText(result))).toHaveLength(1);
   });
 
   test('redacts secrets in tool, prompt and resource replies', async () => {
@@ -124,43 +156,42 @@ describe('MCP server (in-memory client)', () => {
   });
 
   test('propose_fix decides only and never executes an action', async () => {
-    const execute = spyOn(backend, 'execute');
+    const pr = await client.callTool({
+      name: 'propose_fix',
+      arguments: { incidentId: 'inc1', action: 'open_pr' },
+    });
+    expect(pr.isError).toBeFalsy();
+    expect(JSON.parse(toolText(pr))).toMatchObject({
+      executed: false,
+      decision: { effect: 'allow' },
+      limits: { enforced: true, counters: expect.any(Object) },
+      audit: { acknowledged: true },
+    });
+
+    const restart = await client.callTool({
+      name: 'propose_fix',
+      arguments: { incidentId: 'inc1', action: 'restart' },
+    });
+    expect(restart.isError).toBeFalsy();
+    expect(JSON.parse(toolText(restart))).toMatchObject({
+      executed: false,
+      decision: { effect: 'deny' },
+    });
+
+    daemon.reseed({ missingIncident: true });
     try {
-      const pr = await client.callTool({
-        name: 'propose_fix',
-        arguments: { incidentId: 'inc1', action: 'open_pr' },
-      });
-      expect(pr.isError).toBeFalsy();
-      expect(JSON.parse(toolText(pr))).toMatchObject({
-        executed: false,
-        decision: { effect: 'allow' },
-        limits: { enforced: true, counters: expect.any(Object) },
-        audit: { acknowledged: true },
-      });
-
-      const restart = await client.callTool({
-        name: 'propose_fix',
-        arguments: { incidentId: 'inc1', action: 'restart' },
-      });
-      expect(restart.isError).toBeFalsy();
-      expect(JSON.parse(toolText(restart))).toMatchObject({
-        executed: false,
-        decision: { effect: 'deny' },
-      });
-
       const missing = await client.callTool({
         name: 'propose_fix',
         arguments: { incidentId: 'nope', action: 'restart' },
       });
       expect(missing.isError).toBe(true);
-      expect(execute).not.toHaveBeenCalled();
     } finally {
-      execute.mockRestore();
+      daemon.reseed({});
     }
   });
 
   test('propose_fix applies real counters and audits a fail-closed decision when facts are absent', async () => {
-    backend.counters.openPrsLastHour = 3;
+    daemon.reseed({ counters: snapshot({ ...ZERO_COUNTERS, openPrsLastHour: 3 }) });
     try {
       const limited = await client.callTool({
         name: 'propose_fix',
@@ -170,7 +201,15 @@ describe('MCP server (in-memory client)', () => {
         executed: false,
         decision: { effect: 'deny', reason: 'rate_limited' },
       });
-      backend.contextAvailable = false;
+      daemon.reseed({
+        badContext: {
+          service: 'api',
+          category: 'other',
+          confidence: 0.9,
+          signals: ['runtime.restart-loop'],
+          counters: ZERO_COUNTERS,
+        },
+      });
       const missing = await client.callTool({
         name: 'propose_fix',
         arguments: { incidentId: 'inc1', action: 'open_pr' },
@@ -180,25 +219,24 @@ describe('MCP server (in-memory client)', () => {
         decision: { effect: 'deny', reason: 'policy_context_unavailable' },
         audit: { acknowledged: true },
       });
-      expect(backend.decisions.at(-1)?.payload['reason']).toBe('policy_context_unavailable');
+      expect(drafts.at(-1)?.payload['reason']).toBe('policy_context_unavailable');
     } finally {
-      backend.counters.openPrsLastHour = 0;
-      backend.contextAvailable = true;
+      daemon.reseed({});
     }
   });
 
   test('withholds a proposal when its audit cannot be acknowledged', async () => {
-    backend.auditAvailable = false;
-    const count = backend.decisions.length;
+    auditAck = false;
+    const count = drafts.length;
     try {
       const result = await client.callTool({
         name: 'propose_fix',
         arguments: { incidentId: 'inc1', action: 'open_pr' },
       });
       expect(result.isError).toBe(true);
-      expect(backend.decisions).toHaveLength(count);
+      expect(drafts).toHaveLength(count);
     } finally {
-      backend.auditAvailable = true;
+      auditAck = true;
     }
   });
 

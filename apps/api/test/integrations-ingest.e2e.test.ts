@@ -4,6 +4,8 @@ import { createHttpPublisher } from '@graveshift/events';
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test';
 import request from 'supertest';
 
+import { setupAuthDatabase } from './database/auth.fixture';
+import { dbTestEnabled } from './database/fixtures';
 import { accessToken, buildAuthApp, type AuthTestApp } from './fakes/auth-test-helpers';
 
 function integrationEnvelope(kind: 'plugin' | 'collector', id: string): EventEnvelope {
@@ -21,12 +23,13 @@ function integrationEnvelope(kind: 'plugin' | 'collector', id: string): EventEnv
   });
 }
 
-describe('integration ingest through POST /api/events', () => {
+describe.skipIf(!dbTestEnabled)('integration ingest through POST /api/events', () => {
+  const fixture = setupAuthDatabase();
   let ctx!: AuthTestApp;
   let app!: INestApplication;
 
   beforeAll(async () => {
-    ctx = await buildAuthApp();
+    ctx = await buildAuthApp(fixture);
     app = ctx.app;
   });
 
@@ -44,7 +47,7 @@ describe('integration ingest through POST /api/events', () => {
     return response.body.value as string;
   }
 
-  test('a Plugin and a Collector publish through POST /api/events with the in-memory fake', async () => {
+  test('a Plugin and a Collector publish through POST /api/events over the real API', async () => {
     const key = await pluginKey();
     const seenHeaders: string[] = [];
 

@@ -6,29 +6,29 @@ import { Test } from '@nestjs/testing';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test';
 import request from 'supertest';
-
-import { CREDENTIAL_CONFIG } from '../src/auth/auth.types';
-import { AUDIT_SINK } from '../src/audit/audit.sink';
-import { InMemoryAuditSink } from '../src/audit/testing/in-memory-audit.sink';
-import { AuditedWorkCommands, WORK_COMMANDS_INNER } from '../src/fix/audited-work.commands';
 import { WORK_COMMANDS } from '@graveshift/work';
+import { CREDENTIAL_CONFIG } from '../src/auth/auth.types';
+import { AUDIT_READER, AUDIT_SINK } from '../src/audit/audit.sink';
+import { AuditedWorkCommands, WORK_COMMANDS_INNER } from '../src/fix/audited-work.commands';
 import { OAuthClientCredentialsStrategy } from '../src/auth/oauth-client-credentials.strategy';
 import { IDENTITY_REPO } from '../src/identity/identity.types';
 import { InternalGuard } from '../src/internal/internal.guard';
 import { InternalWorkController } from '../src/work-items/controllers/internal-work.controller';
 import { WorkItemsController } from '../src/work-items/controllers/work-items.controller';
 import { WorkItemRepo } from '../src/work-items/work-item.repo';
+import { setupWorkHttpDatabase } from '../src/work-items/testing/work-http.fixture';
+import { dbTestEnabled } from './database/fixtures';
 import { TEST_CONFIG, TEST_ROOT_ENV } from './fakes/auth-test-config';
-import { testIdentityRepo } from './fakes/auth-test-helpers';
 import { fakeWorkApi } from './fakes/fake-fix-deps';
 
-describe('Work item HTTP boundary', () => {
+describe.skipIf(!dbTestEnabled)('Work item HTTP boundary', () => {
+  const fixture = setupWorkHttpDatabase();
   let app: INestApplication;
   let adapter: ReturnType<typeof fakeWorkApi>;
   let token: string;
 
-  async function start(options: Parameters<typeof fakeWorkApi>[0] = {}) {
-    adapter = fakeWorkApi({ projectId: '12345', ...options });
+  async function start(options: Parameters<typeof fakeWorkApi>[2] = {}) {
+    adapter = fakeWorkApi(fixture.db, fixture.audit, { projectId: '12345', ...options });
     const moduleRef = await Test.createTestingModule({
       imports: [
         PassportModule,
@@ -40,13 +40,14 @@ describe('Work item HTTP boundary', () => {
         OAuthClientCredentialsStrategy,
         InternalGuard,
         { provide: CREDENTIAL_CONFIG, useValue: TEST_CONFIG },
-        { provide: IDENTITY_REPO, useValue: testIdentityRepo() },
+        { provide: IDENTITY_REPO, useValue: fixture.identity },
         { provide: ConfigService, useValue: new ConfigService(TEST_ROOT_ENV) },
         { provide: WorkItemRepo, useValue: adapter.repo },
         AuditedWorkCommands,
         { provide: WORK_COMMANDS, useExisting: AuditedWorkCommands },
         { provide: WORK_COMMANDS_INNER, useValue: adapter.commands },
-        { provide: AUDIT_SINK, useValue: new InMemoryAuditSink() },
+        { provide: AUDIT_SINK, useValue: fixture.audit },
+        { provide: AUDIT_READER, useValue: fixture.audit },
       ],
     }).compile();
     app = moduleRef.createNestApplication({ logger: false });
@@ -76,7 +77,6 @@ describe('Work item HTTP boundary', () => {
 
   beforeEach(async () => start());
   afterEach(async () => app.close());
-
   test('requires a management token and uses its project for reads', async () => {
     await request(app.getHttpServer()).get('/api/work-items').expect(401);
     await request(app.getHttpServer()).post('/api/work-items/work-1/fix-now').send({}).expect(401);

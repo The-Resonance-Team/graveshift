@@ -26,8 +26,8 @@ import { parsePolicyUsage, usageQuery } from './audit.usage';
 /**
  * The one Postgres implementation of the audit seams. It owns the hash chain from
  * `@graveshift/core`, eventKey dedup, the serializable retry and the authenticated scope
- * check. It is registered under `AUDIT_SINK` for writes and `AUDIT_READER` for reads; tests
- * replace it with the in-memory adapter at the same seams.
+ * check. It is registered under `AUDIT_SINK` for writes and `AUDIT_READER` for reads; database
+ * tests bind those seams to this same adapter.
  */
 @Injectable()
 export class AuditRepo implements AuditSink, AuditReader {

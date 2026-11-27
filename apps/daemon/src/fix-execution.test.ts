@@ -4,8 +4,7 @@ import { describe, expect, test } from 'bun:test';
 import { gatewayAudit } from './audit';
 import { createFixExecutor } from './fix-execution';
 import { githubRecording, gitChecks } from './fix-recording';
-import { agent, caller, context, withFixAuditScope } from './flow-fixtures';
-import { harness } from './flow-harness';
+import { agent, caller, claimedAttempt, context, withFixAuditScope } from './flow-fixtures';
 
 const TEST_BASE_SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 // Blob SHA of the source text recorded by githubRecording() for src/main.ts.
@@ -57,13 +56,8 @@ function configured(failAudit = false) {
   return { gateway, prompts, audit };
 }
 
-async function input() {
-  const flow = harness();
-  const claim = await flow.runtime.claim(caller, 'work-1', {
-    expectedVersion: 0,
-    command: { kind: 'fix_now', body: {} },
-  });
-  if (claim.kind !== 'claimed') throw new Error('Expected claim');
+function input() {
+  const claim = claimedAttempt();
   return {
     caller,
     snapshot: claim.snapshot,
@@ -89,7 +83,7 @@ describe('concrete daemon fix executor', () => {
       },
       runner: gitChecks,
     });
-    const request = await input();
+    const request = input();
     const prepared = await withFixAuditScope(() => executor(request));
     expect(recording.writes).toEqual([]);
     expect(recording.calls).not.toContain('base');
@@ -130,7 +124,7 @@ describe('concrete daemon fix executor', () => {
         throw new Error('Must not verify an unaudited patch');
       },
     });
-    const request = await input();
+    const request = input();
     await expect(withFixAuditScope(() => executor(request))).rejects.toMatchObject({
       failure: 'audit_failed',
     });
@@ -149,7 +143,7 @@ describe('concrete daemon fix executor', () => {
       dashboardUrl: '',
       audit: async () => {},
     });
-    const request = await input();
+    const request = input();
     await expect(
       withFixAuditScope(() =>
         executor({ ...request, context: { ...request.context, deploymentId: '' } }),
@@ -162,7 +156,7 @@ describe('concrete daemon fix executor', () => {
   test('missing repository checks fail before source and model access', async () => {
     const recording = recorded();
     const model = configured();
-    const request = await input();
+    const request = input();
     await expect(
       withFixAuditScope(() =>
         createFixExecutor({
@@ -189,7 +183,7 @@ describe('concrete daemon fix executor', () => {
       audit: async () => {},
       runner: async () => ({ exitCode: 1, stdout: '', timedOut: false }),
     });
-    const request = await input();
+    const request = input();
     await expect(withFixAuditScope(() => executor(request))).rejects.toMatchObject({
       failure: 'patch_rejected',
     });
@@ -213,7 +207,7 @@ describe('concrete daemon fix executor', () => {
       audit: async () => {},
       runner: gitChecks,
     });
-    const request = await input();
+    const request = input();
     const prepared = await withFixAuditScope(() => executor(request));
     await expect(prepared.publish()).rejects.toMatchObject({
       failure: 'pr_failed',
@@ -238,7 +232,7 @@ describe('concrete daemon fix executor', () => {
       audit: async () => {},
       runner: gitChecks,
     });
-    const request = await input();
+    const request = input();
     const prepared = await withFixAuditScope(() => executor(request));
     await expect(prepared.publish()).rejects.toMatchObject({
       failure: 'publication_uncertain',

@@ -1,3 +1,4 @@
+import type { AgentConfig } from '@graveshift/agents';
 import type { WorkItem } from '@graveshift/core';
 import { RecordedHauntingSchema, type RecordedHaunting } from '@graveshift/core/recorded';
 import { recoverPublication } from '@graveshift/fixer';
@@ -19,7 +20,7 @@ import { daemonHandler } from './routes';
 import { routingModel } from './routing-model';
 import { workActivation } from './work-activation';
 import { createWorkClient } from './work-client';
-import { createWorkCommands } from './work-flow';
+import { createWorkCommands, type WorkFlowOptions } from './work-flow';
 
 export const TEST_BASE_SHA = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
 // Blob SHA of the source text recorded by githubRecording() for src/main.ts.
@@ -42,13 +43,21 @@ export const PLATFORM_AGENTS = [
   }),
 ];
 
-export async function createPlatform(db: PrismaService) {
-  const http = await platformHttp(db, PLATFORM_AGENTS);
+export interface PlatformConfig {
+  agents?: readonly AgentConfig[];
+  projects?: string[];
+  workflow?: Partial<WorkFlowOptions>;
+}
+
+export async function createPlatform(db: PrismaService, config: PlatformConfig = {}) {
+  const agents = config.agents ?? PLATFORM_AGENTS;
+  const projects = config.projects ?? [caller.projectId];
+  const http = await platformHttp(db, agents, projects);
   const recording = githubRecording();
   const models: ModelRequest[] = [];
   const audit = createAudit(http.api);
   const gateway = createGateway({
-    agents: PLATFORM_AGENTS.map((selected) => {
+    agents: agents.map((selected) => {
       const adapter: ModelAdapter = {
         provider: selected.provider,
         model: selected.model,
@@ -89,9 +98,9 @@ export async function createPlatform(db: PrismaService) {
     },
     onAudit: gatewayAudit(audit),
   });
-  const commands = createWorkCommands({
-    projectIds: [caller.projectId],
-    agents: PLATFORM_AGENTS,
+  const workflow: WorkFlowOptions = {
+    projectIds: [...projects],
+    agents,
     runtime: createWorkClient(http.api),
     policy,
     context: contextClient(http.api, policy),
@@ -106,14 +115,16 @@ export async function createPlatform(db: PrismaService) {
       runner: gitChecks,
     }),
     recover: (intent) => recoverPublication(recording.client, intent),
-  });
+  };
+  const options: WorkFlowOptions = { ...workflow, ...config.workflow };
+  const commands = createWorkCommands(options);
   const reads = createReadRuntime({
     api: http.api,
     sources: [],
     metricJobs: [],
   });
   const edge = {
-    projectIds: [caller.projectId],
+    projectIds: [...projects],
     token: http.token,
     timeoutMs: 30_000,
     maxBytes: 65_536,
@@ -148,13 +159,14 @@ export async function createPlatform(db: PrismaService) {
   http.attach(
     daemonHandler(
       createCommandHandler({ ...edge, commands }),
-      createReadHandler({ ...edge, projectIds: [caller.projectId], reads }),
+      createReadHandler({ ...edge, projectIds: [...projects], reads }),
     ),
   );
   return {
     ...http,
     models,
     recording,
+    options,
     daemon: commands,
     seedHaunting,
     async seed(assignee = 'needs_agent_Assigned Agent'): Promise<RecordedHaunting> {
@@ -179,7 +191,7 @@ export async function createPlatform(db: PrismaService) {
       return createObservations({
         api: http.api,
         gateway,
-        agents: PLATFORM_AGENTS,
+        agents,
         logs: async () => [],
         onWork,
       });

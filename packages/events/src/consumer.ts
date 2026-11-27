@@ -45,6 +45,7 @@ export interface DeliveryOptions {
   /** A Project outside this set is dead-lettered, never processed. */
   grantedProjectIds: readonly string[];
   deadLetter?: (envelope: EventEnvelope, reason: string) => Promise<void>;
+  /** Suppresses completed delivery keys, each one a Project and Event id. */
   dedupe?: EnvelopeDeduplicator;
 }
 
@@ -102,7 +103,9 @@ export async function processQueued(
     }
     return;
   }
-  if (options.dedupe?.has(envelope.id) === true) {
+  // A projectId is one NATS token, so it holds no colon and cannot collide here.
+  const key = `${envelope.projectId}:${envelope.id}`;
+  if (options.dedupe?.has(key) === true) {
     await message.ackAck();
     return;
   }
@@ -110,7 +113,7 @@ export async function processQueued(
   try {
     await process(envelope);
     if (!(await message.ackAck())) throw new Error('Event acknowledgement failed');
-    options.dedupe?.markDone(envelope.id);
+    options.dedupe?.markDone(key);
   } catch {
     message.nak(1000);
   } finally {

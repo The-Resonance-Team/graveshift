@@ -1,29 +1,37 @@
 import { afterEach, describe, expect, test } from 'bun:test';
 
+import type { PrismaService } from '../src/infra/prisma.service';
 import { IdentityService } from '../src/identity/services/identity.service';
 import { MIGRATED_ORG_ID } from '../src/identity/identity.types';
-import type { FakeIdentityRepo } from '../src/identity/testing/fake-identity.repo';
+import { dbTestEnabled } from './database/fixtures';
 import {
   bearer,
   buildIdentityApp,
   closeIdentityApps,
   http,
   registerAndLogin,
+  setupIdentityDatabase,
 } from './fakes/identity-app.fixture';
 
 afterEach(closeIdentityApps);
 
-const migratedOrg = async (identity: FakeIdentityRepo): Promise<void> => {
-  await identity.addOrganization({ id: MIGRATED_ORG_ID, name: 'Migrated', slug: 'migrated' });
-  await identity.addProject({
-    projectId: '1000',
-    orgId: MIGRATED_ORG_ID,
-    name: 'Migrated Project',
-    slug: 'migrated-1000',
+const migratedOrg = async (db: PrismaService): Promise<void> => {
+  await db.organization.create({
+    data: { id: MIGRATED_ORG_ID, name: 'Migrated', slug: 'migrated' },
+  });
+  await db.project.create({
+    data: {
+      projectId: '1000',
+      orgId: MIGRATED_ORG_ID,
+      name: 'Migrated Project',
+      slug: 'migrated-1000',
+    },
   });
 };
 
-describe('identity security boundaries (e2e)', () => {
+describe.skipIf(!dbTestEnabled)('identity security boundaries (e2e)', () => {
+  setupIdentityDatabase();
+
   test('self-registered onboarding cannot adopt or read migrated Projects', async () => {
     const context = await buildIdentityApp(false, migratedOrg);
     const token = await registerAndLogin(context, 'tenant@identity.test');
@@ -118,23 +126,35 @@ describe('identity security boundaries (e2e)', () => {
     expect(response.status).toBe(409);
   });
 
-  test('a mid-bootstrap failure leaves no partial root Account or Organization', async () => {
-    const context = await buildIdentityApp(true);
-    context.identity.failBootstrap = true;
-    await expect(context.app.get(IdentityService).bootstrap()).rejects.toThrow();
+  test('a mid-bootstrap failure leaves no partial root Account or Membership', async () => {
+    // A stale Organization slug makes the second write of bootstrapRoot fail.
+    // The one transaction must roll back the Account insert that came first.
+    const staleOrg = async (db: PrismaService): Promise<void> => {
+      await db.organization.create({ data: { name: 'Stale', slug: 'root-org' } });
+    };
+    const context = await buildIdentityApp(true, staleOrg);
+    await expect(context.app.get(IdentityService).bootstrap()).rejects.toHaveProperty(
+      'status',
+      409,
+    );
     expect(await context.identity.countAccounts()).toBe(0);
-    expect(context.identity.organizations.size).toBe(0);
-    expect(context.identity.memberships.size).toBe(0);
+    expect(await context.db.membership.count()).toBe(0);
   });
 
   test('a competing bootstrap winner is a no-op but a stale root slug is not', async () => {
-    const loser = await buildIdentityApp(true);
-    loser.identity.seedWinnerOnBootstrap = true;
-    await expect(loser.app.get(IdentityService).bootstrap()).resolves.toBeUndefined();
-    expect(await loser.identity.countAccounts()).toBe(1);
+    const winner = await buildIdentityApp(true);
+    await winner.db.account.create({
+      data: {
+        email: 'winner@identity.test',
+        passwordHash: 'test-only-hash',
+        mustChangePassword: true,
+      },
+    });
+    await expect(winner.app.get(IdentityService).bootstrap()).resolves.toBeUndefined();
+    expect(await winner.identity.countAccounts()).toBe(1);
 
-    const staleOrg = async (identity: FakeIdentityRepo): Promise<void> => {
-      await identity.addOrganization({ name: 'Stale', slug: 'root-org' });
+    const staleOrg = async (db: PrismaService): Promise<void> => {
+      await db.organization.create({ data: { name: 'Stale', slug: 'root-org' } });
     };
     const stale = await buildIdentityApp(true, staleOrg);
     await expect(stale.app.get(IdentityService).bootstrap()).rejects.toHaveProperty('status', 409);

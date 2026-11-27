@@ -58,6 +58,16 @@ export async function openTestDatabase(): Promise<PrismaService> {
   }
 }
 
+/** Identity rows are not in OWNED_MODELS: OAuth tests seed clients and grants per suite. */
+export async function clearIdentity(db: PrismaService): Promise<void> {
+  await db.$executeRawUnsafe('DELETE FROM "oauth_clients"');
+  await db.$executeRawUnsafe('DELETE FROM "projects"');
+  await db.$executeRawUnsafe('DELETE FROM "memberships"');
+  await db.$executeRawUnsafe('DELETE FROM "daemon_grants"');
+  await db.$executeRawUnsafe('DELETE FROM "organizations"');
+  await db.$executeRawUnsafe('DELETE FROM "accounts"');
+}
+
 export async function resetDatabase(db: PrismaService): Promise<void> {
   testDatabaseUrl();
   if (!ownedClients.has(db))
@@ -65,6 +75,7 @@ export async function resetDatabase(db: PrismaService): Promise<void> {
   await db.$executeRawUnsafe(
     `TRUNCATE TABLE ${OWNED_MODELS.map((model) => `"${model.table}"`).join(', ')} RESTART IDENTITY`,
   );
+  await clearIdentity(db);
 }
 
 export async function modelCounts(db: PrismaService): Promise<Record<string, number>> {

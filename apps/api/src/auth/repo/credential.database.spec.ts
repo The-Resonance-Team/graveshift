@@ -73,6 +73,10 @@ describe.skipIf(!dbTestEnabled)('Postgres CredentialRepo', () => {
     expect(stored.hash).not.toContain(issued.value.value);
     expect(JSON.stringify(await audit.list('project-1'))).not.toContain(issued.value.value);
     expect(JSON.stringify(await audit.list('project-1'))).not.toContain(stored.hash);
+    // The one creation entry carries identifiers only: no secret and no hash.
+    expect((await audit.list('project-1')).map((entry) => entry.type)).toEqual(
+      Array.from({ length: 10 }, () => 'credential.created'),
+    );
   }, 30_000);
 
   test('revocation is visible across clients and stays idempotent after restart', async () => {

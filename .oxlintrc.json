@@ -60,6 +60,8 @@
     "www/**",
     "test-results/**",
     ".expo/**",
-    "**/next-env.d.ts"
+    "**/next-env.d.ts",
+    // Immutable security-audit evidence; recorded harnesses are not source under lint.
+    "reports/security-audit/**"
   ]
 }

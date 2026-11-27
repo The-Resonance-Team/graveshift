@@ -1,25 +1,22 @@
 import { parseGraveshiftConfig } from '@graveshift/config';
-import type { AuditDraft, AuditEntry } from '@graveshift/core';
+import type { AuditDraft } from '@graveshift/core';
 import type { INestApplication } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import type { Prisma } from '@prisma/client';
 import request from 'supertest';
 
 import { AppModule } from '../src/app.module';
 import { configureApp } from '../src/app.factory';
 import { CREDENTIAL_CONFIG, type AuthConfig } from '../src/auth/auth.types';
-import {
-  AUDIT_SINK,
-  type AuditRecord,
-  type AuditSink,
-  type AuditTransaction,
-} from '../src/audit/audit.sink';
+import { AUDIT_READER, AUDIT_SINK } from '../src/audit/audit.sink';
+import { AuditRepo } from '../src/audit/audit.repo';
 import { IDENTITY_REPO } from '../src/identity/identity.types';
 import { TEST_CONFIG } from './fakes/auth-test-config';
-import { testIdentityRepo } from './fakes/auth-test-helpers';
+import type { AuthFixture } from './database/auth.fixture';
 
 export const FAKE_CONFIG = new URL('./fixtures/config.fake.yaml', import.meta.url);
 export const FAKE_CONFIG_PATH = fileURLToPath(FAKE_CONFIG);
@@ -64,35 +61,15 @@ export function restoreEnv(): void {
   for (const name of Object.keys(FAKE_ENV_VALUES)) delete process.env[name];
 }
 
-/** The in-memory adapter at the `AUDIT_SINK` seam. Records every append without PostgreSQL. */
-export class FakeAuditRepo implements AuditSink {
-  readonly appended: AuditRecord[] = [];
-  failure: Error | undefined;
-
-  append(projectId: string, draft: AuditDraft): Promise<AuditEntry> {
-    if (this.failure) return Promise.reject(this.failure);
-    this.appended.push({ ...structuredClone(draft), projectId });
-    return Promise.resolve(this.entry());
-  }
-
-  appendInTx(_tx: AuditTransaction, projectId: string, draft: AuditDraft): Promise<AuditEntry> {
-    return this.append(projectId, draft);
-  }
-
-  transaction<Result>(work: (tx: AuditTransaction) => Promise<Result>): Promise<Result> {
-    return work(undefined as unknown as AuditTransaction);
-  }
-
-  private entry(): AuditEntry {
-    return {
-      seq: this.appended.length,
-      at: new Date().toISOString(),
-      actor: 'fixture',
-      type: 'fixture',
-      payload: {},
-      prevHash: '0'.repeat(64),
-      hash: '0'.repeat(64),
-    };
+/** The one audit failure seam: fail the append after the transaction has opened. */
+export class FailingAudit extends AuditRepo {
+  override async appendInTx(
+    tx: Prisma.TransactionClient,
+    projectId: string,
+    draft: AuditDraft,
+  ): Promise<never> {
+    await super.appendInTx(tx, projectId, draft);
+    throw new Error('audit chain unavailable');
   }
 }
 
@@ -102,12 +79,13 @@ export class FakeAuditRepo implements AuditSink {
 // boot error, and the boot-validation tests must catch the error instead.
 // CREDENTIAL_CONFIG is pinned so the auth config (and with it the ThrottlerGuard limit,
 // which ThrottlerModule.forRootAsync injects) is explicit per app, as in buildAuthApp.
-// The OAuth client registry is the in-memory store, so no env JSON is needed.
+// The OAuth client registry lives in the guarded database, so no env JSON is needed.
 export async function appFromConfigFile(
+  fixture: AuthFixture,
   path: string,
-  audit: FakeAuditRepo = new FakeAuditRepo(),
+  audit: AuditRepo = fixture.audit,
   credential: Partial<AuthConfig> = {},
-): Promise<{ app: INestApplication; audit: FakeAuditRepo }> {
+): Promise<{ app: INestApplication; audit: AuditRepo }> {
   withFakeEnv(path);
   const credentialConfig: AuthConfig = {
     ...TEST_CONFIG,
@@ -116,10 +94,12 @@ export async function appFromConfigFile(
   const moduleRef = await Test.createTestingModule({ imports: [AppModule] })
     .overrideProvider(AUDIT_SINK)
     .useValue(audit)
+    .overrideProvider(AUDIT_READER)
+    .useValue(audit)
     .overrideProvider(CREDENTIAL_CONFIG)
     .useValue(credentialConfig)
     .overrideProvider(IDENTITY_REPO)
-    .useValue(testIdentityRepo())
+    .useValue(fixture.identity)
     .compile();
   const app = configureApp(moduleRef.createNestApplication({ logger: false }));
   await app.init();

@@ -6,6 +6,20 @@
     "apps/daemon/src/platform.database.test.ts",
     "apps/daemon/src/platform.fixture.ts",
     "apps/daemon/src/platform-http.fixture.ts",
+    "apps/daemon/src/command-handler.test.ts",
+    "apps/daemon/src/fix-audit.test.ts",
+    "apps/daemon/src/observations.test.ts",
+    "apps/daemon/src/observations.pending.test.ts",
+    "apps/daemon/src/reads.test.ts",
+    "apps/daemon/src/transport.test.ts",
+    "apps/daemon/src/flow.fixture.ts",
+    "apps/daemon/src/lease.test.ts",
+    "apps/daemon/src/model-context.test.ts",
+    "apps/daemon/src/observations-database.test.ts",
+    "apps/daemon/src/publication-failure.test.ts",
+    "apps/daemon/src/recovery.test.ts",
+    "apps/daemon/src/work-activation.test.ts",
+    "apps/daemon/src/work-flow.test.ts",
     "packages/api-contract/scripts/**"
   ]
 }
