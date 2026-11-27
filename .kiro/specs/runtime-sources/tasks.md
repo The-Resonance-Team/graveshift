@@ -1,8 +1,8 @@
 # Runtime Sources — Tasks
 
-- [ ] `RuntimeSource` interface in `packages/core` (R1.1)
-- [ ] Docker source via docker-socket-proxy (R3.1)
-- [ ] K8s source via `@kubernetes/client-node` (R4.1)
-- [ ] K8s event-to-signal mapping (R4.2)
-- [ ] Reconnect with backoff and resume (R2)
-- [ ] Shared contract suite passing for both sources (R1.2)
+- [x] Integration lifecycle and prepared Event envelope contract (R1.1)
+- [x] Docker Collector through the read-only socket proxy (R3.1)
+- [x] Kubernetes Collector through the read-only client (R4.1)
+- [x] Namespace-aware Kubernetes envelope mapping (R4.2)
+- [x] Backoff, acknowledged delivery cursor and retry identity (R2)
+- [x] Shared lifetime and adapter regressions (R1.2)

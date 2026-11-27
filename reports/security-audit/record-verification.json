@@ -1,0 +1,97 @@
+[
+  {
+    "agent_id": "record-13",
+    "decision": "verified",
+    "fingerprint": "kiro-hooks.guard-shell.event-shape-fail-open"
+  },
+  {
+    "agent_id": "record-11",
+    "decision": "verified",
+    "fingerprint": "identity/register-addMember/unverified-email-membership"
+  },
+  {
+    "agent_id": "record-07",
+    "decision": "verified",
+    "fingerprint": "deploy/compose/api-service-overlay-retains-control-plane-authority"
+  },
+  {
+    "agent_id": "record-10",
+    "decision": "verified",
+    "fingerprint": "identity/account-password-change/stale-jwt"
+  },
+  {
+    "agent_id": "record-12",
+    "decision": "verified",
+    "fingerprint": "identity/register-login/unthrottled-argon2-work"
+  },
+  {
+    "agent_id": "record-08",
+    "decision": "verified",
+    "fingerprint": "fixer/recovery/parent-only-publication-binding"
+  },
+  {
+    "agent_id": "record-18",
+    "decision": "verified",
+    "fingerprint": "packages/redactor/src/detectors.ts:email-unanchored-scan"
+  },
+  {
+    "agent_id": "record-09",
+    "decision": "verified",
+    "fingerprint": "fixer/sandbox/macos-detached-descendant-lifetime"
+  },
+  {
+    "agent_id": "record-14",
+    "decision": "verified",
+    "fingerprint": "packages/actuator/createDockerRestarter/compose-project-binding"
+  },
+  {
+    "agent_id": "record-05",
+    "decision": "verified",
+    "fingerprint": "apps/daemon/src/reads.ts:collector-evidence-without-project"
+  },
+  {
+    "agent_id": "record-19",
+    "decision": "verified",
+    "fingerprint": "packages/watcher/src/rules.ts:unbounded-temporal-samples"
+  },
+  {
+    "agent_id": "record-17",
+    "decision": "verified",
+    "fingerprint": "packages/integrations/src/delivery.ts:permanent-collector-poison-retry"
+  },
+  {
+    "agent_id": "record-01",
+    "decision": "verified",
+    "fingerprint": "apps/api/src/mcp/mcp.tools.ts:incident-read-embeds-diagnosis"
+  },
+  {
+    "agent_id": "record-16",
+    "decision": "verified",
+    "fingerprint": "packages/events/src/consumer.ts:projectless-event-dedupe"
+  },
+  {
+    "agent_id": "record-06",
+    "decision": "verified",
+    "fingerprint": "daemon/fix-context/service-only-repository-selection"
+  },
+  {
+    "agent_id": "record-03",
+    "decision": "verified",
+    "fingerprint": "apps/daemon/src/observations.ts:failed-outcome-retention"
+  },
+  {
+    "agent_id": "record-04",
+    "decision": "verified",
+    "fingerprint": "apps/daemon/src/observations.ts:service-cache-project-scope"
+  },
+  {
+    "agent_id": "record-02",
+    "decision": "verified",
+    "fingerprint": "apps/api/src/work-items/work-item.publication.ts:beginPublication/project-pr-limit"
+  },
+  {
+    "agent_id": "record-15b",
+    "decision": "verified",
+    "fingerprint": "packages/actuator/runtimeDecision/zeroed-policy-usage"
+  }
+]

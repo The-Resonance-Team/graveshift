@@ -1,0 +1,444 @@
+{
+  "name": "graveshift",
+  "networks": {
+    "act": {
+      "name": "graveshift_act",
+      "ipam": {},
+      "internal": true
+    },
+    "candy": {
+      "name": "candy",
+      "ipam": {}
+    },
+    "core": {
+      "name": "graveshift_core",
+      "ipam": {}
+    }
+  },
+  "services": {
+    "actuator": {
+      "build": {
+        "context": "/Users/xirothedev/security-audit-skill/graveshift/run-1",
+        "dockerfile": "deploy/compose/bun.Dockerfile",
+        "args": {
+          "APP_PATH": "packages/actuator"
+        }
+      },
+      "cap_drop": [
+        "ALL"
+      ],
+      "command": [
+        "bun",
+        "src/main.ts"
+      ],
+      "depends_on": {
+        "socket-proxy-actuator": {
+          "condition": "service_started",
+          "required": true
+        }
+      },
+      "entrypoint": null,
+      "environment": {
+        "ACTUATOR_HMAC_SECRET": "",
+        "ACTUATOR_STATE_DIR": "/data/graveshift-actuator",
+        "BUN_RUNTIME_TRANSPILER_CACHE_PATH": "0",
+        "DOCKER_PROXY_URL": "http://socket-proxy-actuator:2375",
+        "GRAVESHIFT_API_INTERNAL_TOKEN": "DUMMY_PLATFORM_SECRET_MARKER_1234567890",
+        "GRAVESHIFT_API_URL": "http://host.docker.internal:3000",
+        "GRAVESHIFT_CONFIG_PATH": "/config/graveshift.config.yaml",
+        "GRAVESHIFT_MODE": "propose"
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "bun",
+          "-e",
+          "fetch('http://localhost:2603/healthz').then(r=\u003eprocess.exit(r.ok?0:1)).catch(()=\u003eprocess.exit(1))"
+        ],
+        "timeout": "3s",
+        "interval": "10s",
+        "retries": 3
+      },
+      "image": "graveshift/actuator:local",
+      "networks": {
+        "act": null,
+        "core": null
+      },
+      "read_only": true,
+      "restart": "unless-stopped",
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "tmpfs": [
+        "/tmp"
+      ],
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/Users/xirothedev/security-audit-skill/graveshift/run-1/graveshift.config.yaml",
+          "target": "/config/graveshift.config.yaml",
+          "read_only": true,
+          "bind": {}
+        },
+        {
+          "type": "volume",
+          "source": "actuator-state",
+          "target": "/data/graveshift-actuator",
+          "volume": {}
+        }
+      ]
+    },
+    "api": {
+      "profiles": [
+        "api"
+      ],
+      "build": {
+        "context": "/Users/xirothedev/security-audit-skill/graveshift/run-1/examples/haunted-candy-shop",
+        "dockerfile": "deploy/compose/bun.Dockerfile",
+        "args": {
+          "APP_PATH": "apps/api"
+        }
+      },
+      "cap_drop": [
+        "ALL"
+      ],
+      "command": [
+        "bun",
+        "src/main.ts"
+      ],
+      "depends_on": {
+        "nats": {
+          "condition": "service_started",
+          "required": true
+        },
+        "postgres": {
+          "condition": "service_healthy",
+          "required": true
+        }
+      },
+      "entrypoint": null,
+      "environment": {
+        "BUN_RUNTIME_TRANSPILER_CACHE_PATH": "0",
+        "DATABASE_URL": "postgres://candy:@postgres:5432/candy",
+        "DATABASE_URL_STALE": "postgres://candy:@postgres:5432/candy_stale",
+        "GRAVESHIFT_API_INTERNAL_TOKEN": "DUMMY_PLATFORM_SECRET_MARKER_1234567890",
+        "GRAVESHIFT_CONFIG_PATH": "/config/graveshift.config.yaml",
+        "GRAVESHIFT_DAEMON_INTERNAL_TOKEN": "dummy-daemon-token-1234567890",
+        "GRAVESHIFT_NATS_STREAM": "GRAVESHIFT_EVENTS",
+        "GRAVESHIFT_NATS_URL": "nats://nats:4222",
+        "GRAVESHIFT_OAUTH_JWT_SECRET": "dummy-jwt-secret-1234567890",
+        "GRAVESHIFT_ROOT_ADMIN_EMAIL": "dummy@example.invalid",
+        "GRAVESHIFT_ROOT_ADMIN_PASSWORD": "dummy-root-password",
+        "GRAVESHIFT_ROOT_ORG_NAME": "dummy",
+        "GRAVESHIFT_ROOT_ORG_SLUG": "dummy",
+        "HAUNT_TOKEN": "",
+        "OWNER_TOKEN": ""
+      },
+      "healthcheck": {
+        "test": [
+          "CMD",
+          "bun",
+          "-e",
+          "fetch('http://localhost:2600/healthz').then(r=\u003eprocess.exit(r.ok?0:1)).catch(()=\u003eprocess.exit(1))"
+        ],
+        "timeout": "3s",
+        "interval": "10s",
+        "retries": 3
+      },
+      "image": "haunted-candy-shop:local",
+      "networks": {
+        "candy": null,
+        "core": null
+      },
+      "ports": [
+        {
+          "mode": "ingress",
+          "host_ip": "127.0.0.1",
+          "target": 3000,
+          "published": "3000",
+          "protocol": "tcp"
+        },
+        {
+          "mode": "ingress",
+          "host_ip": "127.0.0.1",
+          "target": 2600,
+          "published": "2600",
+          "protocol": "tcp"
+        }
+      ],
+      "read_only": true,
+      "restart": "unless-stopped",
+      "tmpfs": [
+        "/tmp"
+      ],
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/Users/xirothedev/security-audit-skill/graveshift/run-1/graveshift.config.yaml",
+          "target": "/config/graveshift.config.yaml",
+          "read_only": true,
+          "bind": {}
+        }
+      ]
+    },
+    "nats": {
+      "cap_drop": [
+        "ALL"
+      ],
+      "command": [
+        "-c",
+        "/etc/nats/nats.conf"
+      ],
+      "entrypoint": null,
+      "environment": {
+        "NATS_PUBLISH_PASSWORD": "dummy",
+        "NATS_PUBLISH_USER": "dummy",
+        "NATS_READ_PASSWORD": "dummy",
+        "NATS_READ_USER": "dummy"
+      },
+      "expose": [
+        "4222"
+      ],
+      "image": "nats:2.15.0",
+      "networks": {
+        "core": null
+      },
+      "restart": "unless-stopped",
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/Users/xirothedev/security-audit-skill/graveshift/run-1/validation/compose-fixture/nats/nats.conf",
+          "target": "/etc/nats/nats.conf",
+          "read_only": true,
+          "bind": {}
+        },
+        {
+          "type": "bind",
+          "source": "/run/secrets/nats",
+          "target": "/run/secrets/nats",
+          "read_only": true,
+          "bind": {}
+        },
+        {
+          "type": "volume",
+          "source": "nats-data",
+          "target": "/data/jetstream",
+          "volume": {}
+        }
+      ]
+    },
+    "postgres": {
+      "command": null,
+      "entrypoint": null,
+      "environment": {
+        "POSTGRES_DB": "candy",
+        "POSTGRES_PASSWORD": "",
+        "POSTGRES_USER": "candy"
+      },
+      "healthcheck": {
+        "test": [
+          "CMD-SHELL",
+          "pg_isready -U candy -d candy"
+        ],
+        "timeout": "3s",
+        "interval": "5s",
+        "retries": 10
+      },
+      "image": "postgres:18.7",
+      "networks": {
+        "candy": null,
+        "core": null
+      },
+      "ports": [
+        {
+          "mode": "ingress",
+          "host_ip": "127.0.0.1",
+          "target": 5432,
+          "published": "5436",
+          "protocol": "tcp"
+        }
+      ],
+      "restart": "unless-stopped",
+      "volumes": [
+        {
+          "type": "volume",
+          "source": "candy-data",
+          "target": "/var/lib/postgresql",
+          "volume": {}
+        }
+      ]
+    },
+    "prometheus": {
+      "command": null,
+      "entrypoint": null,
+      "image": "prom/prometheus:v3.16.0",
+      "networks": {
+        "candy": null,
+        "core": null
+      },
+      "restart": "unless-stopped",
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/Users/xirothedev/security-audit-skill/graveshift/run-1/validation/compose-fixture/prometheus.yml",
+          "target": "/etc/prometheus/prometheus.yml",
+          "read_only": true,
+          "bind": {}
+        },
+        {
+          "type": "volume",
+          "source": "prometheus-data",
+          "target": "/prometheus",
+          "volume": {}
+        }
+      ]
+    },
+    "socket-proxy": {
+      "command": null,
+      "entrypoint": null,
+      "environment": {
+        "CONTAINERS": "1",
+        "EVENTS": "1",
+        "INFO": "1",
+        "LOGS": "1",
+        "POST": "0"
+      },
+      "image": "tecnativa/docker-socket-proxy:0.3.0",
+      "networks": {
+        "core": null
+      },
+      "restart": "unless-stopped",
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/var/run/docker.sock",
+          "target": "/var/run/docker.sock",
+          "read_only": true,
+          "bind": {}
+        }
+      ]
+    },
+    "socket-proxy-actuator": {
+      "command": null,
+      "entrypoint": null,
+      "environment": {
+        "ALLOW_RESTARTS": "1",
+        "CONTAINERS": "1",
+        "POST": "1"
+      },
+      "image": "tecnativa/docker-socket-proxy:0.3.0",
+      "networks": {
+        "act": null
+      },
+      "restart": "unless-stopped",
+      "security_opt": [
+        "no-new-privileges:true"
+      ],
+      "volumes": [
+        {
+          "type": "bind",
+          "source": "/var/run/docker.sock",
+          "target": "/var/run/docker.sock",
+          "read_only": true,
+          "bind": {}
+        }
+      ]
+    },
+    "worker": {
+      "build": {
+        "context": "/Users/xirothedev/security-audit-skill/graveshift/run-1/examples/haunted-candy-shop",
+        "dockerfile": "Dockerfile"
+      },
+      "cap_drop": [
+        "ALL"
+      ],
+      "command": [
+        "bun",
+        "src/worker-main.ts"
+      ],
+      "entrypoint": null,
+      "environment": {
+        "DATABASE_URL": "postgres://candy:@postgres:5432/candy",
+        "DATABASE_URL_STALE": "postgres://candy:@postgres:5432/candy_stale",
+        "HAUNT_TOKEN": "",
+        "OWNER_TOKEN": "",
+        "PORT": "2601"
+      },
+      "image": "haunted-candy-shop:local",
+      "mem_limit": "134217728",
+      "networks": {
+        "candy": null
+      },
+      "ports": [
+        {
+          "mode": "ingress",
+          "host_ip": "127.0.0.1",
+          "target": 2601,
+          "published": "2601",
+          "protocol": "tcp"
+        }
+      ],
+      "read_only": true,
+      "restart": "unless-stopped",
+      "tmpfs": [
+        "/tmp"
+      ]
+    }
+  },
+  "volumes": {
+    "actuator-state": {
+      "name": "graveshift_actuator-state"
+    },
+    "candy-data": {
+      "name": "graveshift_candy-data"
+    },
+    "nats-data": {
+      "name": "graveshift_nats-data"
+    },
+    "prometheus-data": {
+      "name": "graveshift_prometheus-data"
+    }
+  },
+  "x-app": {
+    "build": {
+      "context": "../../examples/haunted-candy-shop"
+    },
+    "cap_drop": [
+      "ALL"
+    ],
+    "environment": {
+      "DATABASE_URL": "postgres://candy:@postgres:5432/candy",
+      "DATABASE_URL_STALE": "postgres://candy:@postgres:5432/candy_stale",
+      "HAUNT_TOKEN": "",
+      "OWNER_TOKEN": ""
+    },
+    "image": "haunted-candy-shop:local",
+    "networks": [
+      "candy"
+    ],
+    "read_only": true,
+    "restart": "unless-stopped",
+    "tmpfs": [
+      "/tmp"
+    ]
+  },
+  "x-hardened": {
+    "cap_drop": [
+      "ALL"
+    ],
+    "read_only": true,
+    "restart": "unless-stopped",
+    "security_opt": [
+      "no-new-privileges:true"
+    ],
+    "tmpfs": [
+      "/tmp"
+    ]
+  }
+}

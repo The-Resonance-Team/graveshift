@@ -1,12 +1,12 @@
 # Watcher — Design
 
 ## Interfaces
-- `DetectorRule = { id, evaluate(signals, metrics): Signal[] }`.
-- `fingerprint(signal): string` — stable 10-minute dedupe key.
-- `groupSignals(service, signals): Incident`.
+- `watcher.ingest(envelope)` returns detection outcomes and Haunting changes.
+- Private temporal rules remain separate from the pure Rule override engine.
+- Grouping, Salt lines and dedupe include project and Grave identity.
 
 ## Data flow
-RuntimeEvent / metric sample → deterministic rules → fingerprint dedupe → group by service → incident with severity → silence filter → event bus.
+Event envelope → Rule override → temporal detection → Salt line → fingerprint dedupe → Haunting grouping → durable daemon processing.
 
 ## Error handling
 - PromQL query failure logs a warning and skips that interval; never crashes the loop.

@@ -1,0 +1,17 @@
+{
+  "lead": "fixer/sandbox/macos-detached-descendant-lifetime",
+  "verdict": "confirmed",
+  "observed": {
+    "platformSeenBySandbox": "darwin",
+    "elapsedMs": 10,
+    "result": {
+      "exitCode": 0,
+      "stdout": "foreground-done",
+      "timedOut": false
+    },
+    "foregroundExitedBeforeDeadline": true,
+    "descendantWroteMarkerAfterSupervisorReturn": true,
+    "note": "process.platform was patched to darwin and a shim execs sandbox-exec arguments unchanged; no real macOS sandbox policy is claimed. This tests only the supervisor teardown logic in execute()."
+  },
+  "reason": "A detached descendant kept running and wrote inside the workspace after runSandboxed returned, showing cleanup targeted only the original process group."
+}

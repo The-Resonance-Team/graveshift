@@ -1,22 +1,21 @@
-# SCAFFOLD ONLY - not a working stack. Replace before use.
-# Graveshift core services (Compose mode). No real secrets; env placeholders only.
-services:
-  graveshift:
-    # Main daemon: Wraith -> Medium -> Exorcist -> Banshee, HTTP API + SSE.
-    image: graveshift/daemon:PLACEHOLDER
-    restart: unless-stopped
-    read_only: true
-    security_opt: [no-new-privileges:true]
-    cap_drop: [ALL]
-    # SEC-1: never mount /var/run/docker.sock here; use socket-proxy below.
-    environment:
-      GRAVESHIFT_MODE: propose
-      # GRAVESHIFT_DISCORD_TOKEN: "<set via env, never commit>"
-    depends_on: [socket-proxy, prometheus]
+# Graveshift support services in Compose mode. The daemon is not started here.
+# The actuator is the only writer and reaches Docker through its restart-only proxy.
+# No real secrets here: values come from the environment; empty means the feature refuses to run.
+name: graveshift
 
+x-hardened: &hardened
+  restart: unless-stopped
+  read_only: true
+  security_opt: [no-new-privileges:true]
+  cap_drop: [ALL]
+  tmpfs: [/tmp]
+
+services:
   socket-proxy:
-    # Read-only docker-socket-proxy: CONTAINERS/EVENTS/LOGS/INFO=1, POST=0.
-    image: tecnativa/docker-socket-proxy:PLACEHOLDER
+    # Read-only: containers, events, logs and info; every write verb is off.
+    image: tecnativa/docker-socket-proxy:0.3.0
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
     environment:
       CONTAINERS: '1'
       EVENTS: '1'
@@ -25,17 +24,142 @@ services:
       POST: '0'
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [core]
+
+  socket-proxy-actuator:
+    # Used only by the actuator; container restart is the single write permitted.
+    image: tecnativa/docker-socket-proxy:0.3.0
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    environment:
+      CONTAINERS: '1'
+      POST: '1'
+      ALLOW_RESTARTS: '1'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [act]
 
   actuator:
-    # SEC-2: separate container; HMAC-signed approved actions only.
-    image: graveshift/actuator:PLACEHOLDER
+    # SEC-2: separate container; executes approved, HMAC-signed, single-use actions only.
+    <<: *hardened
+    build:
+      context: ../..
+      dockerfile: deploy/compose/bun.Dockerfile
+      args: { APP_PATH: packages/actuator }
+    image: graveshift/actuator:local
+    command: ['bun', 'src/main.ts']
+    environment:
+      DOCKER_PROXY_URL: http://socket-proxy-actuator:2375
+      ACTUATOR_HMAC_SECRET: ${ACTUATOR_HMAC_SECRET:-}
+      GRAVESHIFT_CONFIG_PATH: /config/graveshift.config.yaml
+      GRAVESHIFT_API_INTERNAL_TOKEN: ${GRAVESHIFT_API_INTERNAL_TOKEN:-}
+      GRAVESHIFT_API_URL: ${GRAVESHIFT_ACTUATOR_API_URL:-http://host.docker.internal:3000}
+      GRAVESHIFT_MODE: ${GRAVESHIFT_MODE:-propose}
+      # Durable admission store. A named volume keeps consumed tokens across restart.
+      ACTUATOR_STATE_DIR: /data/graveshift-actuator
+      BUN_RUNTIME_TRANSPILER_CACHE_PATH: '0'
+    volumes:
+      - ../../graveshift.config.yaml:/config/graveshift.config.yaml:ro
+      - actuator-state:/data/graveshift-actuator
+    networks: [core, act]
+    depends_on: [socket-proxy-actuator]
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'bun',
+          '-e',
+          "fetch('http://localhost:2603/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  api:
+    # Opt-in API process. The root admin keys belong here, never on the actuator.
+    # Start with: docker compose --profile api up
+    <<: *hardened
+    profiles: [api]
+    build:
+      context: ../..
+      dockerfile: deploy/compose/bun.Dockerfile
+      args: { APP_PATH: apps/api }
+    image: graveshift/api:local
+    command: ['bun', 'src/main.ts']
+    environment:
+      GRAVESHIFT_CONFIG_PATH: /config/graveshift.config.yaml
+      DATABASE_URL: postgresql://graveshift:graveshift@postgres:5432/graveshift
+      GRAVESHIFT_NATS_URL: nats://nats:4222
+      GRAVESHIFT_NATS_STREAM: GRAVESHIFT_EVENTS
+      GRAVESHIFT_API_INTERNAL_TOKEN: ${GRAVESHIFT_API_INTERNAL_TOKEN:-}
+      GRAVESHIFT_DAEMON_INTERNAL_TOKEN: ${GRAVESHIFT_DAEMON_INTERNAL_TOKEN:-}
+      GRAVESHIFT_OAUTH_JWT_SECRET: ${GRAVESHIFT_OAUTH_JWT_SECRET:-}
+      GRAVESHIFT_ROOT_ADMIN_EMAIL: ${GRAVESHIFT_ROOT_ADMIN_EMAIL:-}
+      GRAVESHIFT_ROOT_ADMIN_PASSWORD: ${GRAVESHIFT_ROOT_ADMIN_PASSWORD:-}
+      GRAVESHIFT_ROOT_ORG_NAME: ${GRAVESHIFT_ROOT_ORG_NAME:-}
+      GRAVESHIFT_ROOT_ORG_SLUG: ${GRAVESHIFT_ROOT_ORG_SLUG:-}
+      BUN_RUNTIME_TRANSPILER_CACHE_PATH: '0'
+    volumes:
+      - ../../graveshift.config.yaml:/config/graveshift.config.yaml:ro
+    ports: ['127.0.0.1:${GRAVESHIFT_API_PORT:-3000}:3000']
+    networks: [core]
+    depends_on: [postgres, nats]
+
+  postgres:
+    # Local durable store. The default password is a local placeholder, not a secret.
+    image: postgres:18.7
     restart: unless-stopped
-    read_only: true
-    cap_drop: [ALL]
+    environment:
+      POSTGRES_USER: graveshift
+      POSTGRES_DB: graveshift
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-graveshift}
+    ports: ['127.0.0.1:${POSTGRES_PORT:-5436}:5432']
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    networks: [core]
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U graveshift -d graveshift']
+      interval: 5s
+      timeout: 3s
+      retries: 10
 
   prometheus:
-    image: prom/prometheus:PLACEHOLDER
+    image: prom/prometheus:v3.16.0
+    restart: unless-stopped
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks: [core, candy]
 
-# TODO (real stack): named volume for incidents + append-only hash-chained audit DB.
+  nats:
+    # Self-hosted event backbone. Port 4222 stays on the private core network.
+    # No public port, no MQTT, no leafnode and no WebSocket in v2.
+    image: nats:2.15.0
+    restart: unless-stopped
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+    command: ['-c', '/etc/nats/nats.conf']
+    environment:
+      NATS_PUBLISH_USER: ${NATS_PUBLISH_USER:?NATS_PUBLISH_USER is required}
+      NATS_PUBLISH_PASSWORD: ${NATS_PUBLISH_PASSWORD:?NATS_PUBLISH_PASSWORD is required}
+      NATS_READ_USER: ${NATS_READ_USER:?NATS_READ_USER is required}
+      NATS_READ_PASSWORD: ${NATS_READ_PASSWORD:?NATS_READ_PASSWORD is required}
+    volumes:
+      - ./nats/nats.conf:/etc/nats/nats.conf:ro
+      - /run/secrets/nats:/run/secrets/nats:ro
+      - nats-data:/data/jetstream
+    expose: ['4222']
+    networks: [core]
+
+networks:
+  core: {}
+  act:
+    internal: true
+  candy:
+    name: candy
+
+volumes:
+  actuator-state:
+  postgres-data:
+  nats-data:
+  prometheus-data:

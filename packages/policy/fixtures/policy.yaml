@@ -1,0 +1,35 @@
+# Loader fixture only. The committed source of truth is graveshift.config.yaml.
+version: 1
+mode: propose
+approvers:
+  discordUserIds: ['123456789012345678']
+  discordRoleIds: []
+limits:
+  maxOpenPrsPerHour: 3
+  maxActionsPerServicePer10Min: 1
+  maxDiagnosisLoops: 2
+  llmDailyBudgetUsd: 2.00
+llm:
+  minConfidenceForPr: 0.6
+  minConfidenceForAction: 0.75
+github:
+  repos:
+    - repo: 'xiro/haunted-candy-shop'
+      services: ['api', 'worker']
+      baseBranch: main
+      branchPrefix: 'graveshift/'
+      draft: true
+      allowedPaths: ['src/**', 'config/**']
+      forbiddenPaths: ['.github/**', '**/*.pem']
+      maxFilesChanged: 5
+      maxLinesChanged: 200
+rules:
+  - id: pr-for-code-bugs
+    action: open_pr
+    when: { category: [code_bug] }
+    effect: allow
+  - id: never-touch-db
+    action: '*'
+    when: { services: [postgres] }
+    effect: deny
+default: deny

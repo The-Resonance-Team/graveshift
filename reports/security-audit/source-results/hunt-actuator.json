@@ -1,0 +1,605 @@
+{
+  "units": [
+    {
+      "coverage_id": "packages%2Factuator%2Fsrc%2Fhandler.ts%23createActionHandler::packages%2Factuator%2Fsrc%2Fexecute.ts%23createActuator::packages%2Factuator::AI-AND-LLM.md%23Action-confirmation%20and%20approval%20binding",
+      "disposition": "candidate",
+      "reviewed_paths": [
+        "packages/actuator/src/handler.ts",
+        "packages/actuator/src/types.ts",
+        "packages/actuator/src/sign.ts",
+        "packages/actuator/src/execute.ts",
+        "packages/actuator/src/claims.ts",
+        "packages/actuator/src/actuator.test.ts",
+        "packages/actuator/src/claims.test.ts",
+        "packages/actuator/src/main.ts",
+        "packages/actuator/src/backends.ts",
+        "packages/policy/src/decide.ts",
+        "deploy/compose/graveshift.compose.yml",
+        "graveshift.config.yaml",
+        "docs/adr/0017-deployment-topology.md"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-actuator",
+          "reviewed_paths": [
+            "packages/actuator/src/handler.ts",
+            "packages/actuator/src/types.ts",
+            "packages/actuator/src/sign.ts",
+            "packages/actuator/src/execute.ts",
+            "packages/actuator/src/claims.ts",
+            "packages/actuator/src/actuator.test.ts",
+            "packages/actuator/src/claims.test.ts"
+          ],
+          "invariant": "The normalized action, complete accepted arguments, approval identity and validity interval must be authenticated and must remain the values used at execution.",
+          "method": "source",
+          "result": "The HTTP handler bounds the body to 16 KiB and passes parsed JSON to one execution path. Strict schemas reject extra fields, invalid runtime/kind combinations and replicas on restarts. HMAC canonicalization covers action, approval and context; execution uses the parsed object, while admission and audit receive clones. Admission checks action/incident equality, an explicit approver ID and the half-open validity interval with a maximum 15-minute TTL. Existing mutation and hash tests were read as specifications only. No unsigned-field substitution was found. The signed service name still requires a correctly scoped backend resource resolution.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-actuator",
+          "reviewed_paths": [
+            "packages/actuator/src/main.ts",
+            "packages/actuator/src/backends.ts",
+            "packages/policy/src/decide.ts",
+            "deploy/compose/graveshift.compose.yml",
+            "graveshift.config.yaml",
+            "docs/adr/0017-deployment-topology.md"
+          ],
+          "invariant": "A Blessing for one service resource must authorize only that resource and its intended group of containers.",
+          "method": "source",
+          "result": "The Docker writer resolves only com.docker.compose.service=<service> and restarts every returned container ID. Neither the action nor the writer binds a Compose project. The launcher uses this writer with a host-socket proxy; the maintained Compose definition shows no project-specific resource filter. The exact HMAC and service allowlist do not distinguish same-named services from different Compose projects. This supports a conditional resource-binding candidate. The checked-in policy is propose, the platform action producer is deferred, and actual co-tenancy, intended approval scope and effective proxy filtering were not observed.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [
+        "packages/actuator/createDockerRestarter/compose-project-binding"
+      ],
+      "unresolved": [
+        "Whether an enabled deployment exposes containers from separate Compose projects through the actuator proxy and intends each Blessing to cover only one of those projects.",
+        "No bounded backend observation was made because complete OS-enforced memory and cumulative disk controls are unavailable; project execution is prohibited."
+      ]
+    },
+    {
+      "coverage_id": "packages%2Factuator%2Fsrc%2Fhandler.ts%23createActionHandler::packages%2Factuator%2Fsrc%2Fexecute.ts%23createActuator::packages%2Factuator::ATTACK-CLASSES.md%23Cryptography%20and%20secrets",
+      "disposition": "covered",
+      "reviewed_paths": [
+        "packages/actuator/src/types.ts",
+        "packages/actuator/src/sign.ts",
+        "packages/actuator/src/execute.ts",
+        "packages/actuator/src/main.ts",
+        "packages/actuator/src/audit.ts",
+        "packages/actuator/src/handler.ts",
+        "packages/actuator/src/audit-http.ts",
+        "packages/actuator/src/audit-http.test.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-actuator",
+          "reviewed_paths": [
+            "packages/actuator/src/types.ts",
+            "packages/actuator/src/sign.ts",
+            "packages/actuator/src/execute.ts",
+            "packages/actuator/src/main.ts"
+          ],
+          "invariant": "Every runtime request must have a valid keyed signature over the accepted object; invalid or absent secrets and malformed signatures must fail closed.",
+          "method": "source",
+          "result": "The launcher and factory reject secrets shorter than 32 characters. The accepted signature is exactly 64 lowercase hex characters. Signing uses keyed SHA-256, deterministic sorted object keys, preserved array order and JSON encoding. Verification computes the expected signature over all accepted unsigned fields and uses timingSafeEqual on equal-length decoded buffers before admission. The request hash includes the signature and all request fields. No unsigned fallback, weak token generator or alternate runtime execution route was found in the assigned paths. Secret entropy remains operator-provided.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-actuator",
+          "reviewed_paths": [
+            "packages/actuator/src/audit.ts",
+            "packages/actuator/src/handler.ts",
+            "packages/actuator/src/audit-http.ts",
+            "packages/actuator/src/audit-http.test.ts"
+          ],
+          "invariant": "Runtime signatures, HMAC keys and internal bearer credentials must not enter public responses, audit payloads or raw transport errors.",
+          "method": "source",
+          "result": "The HTTP response exposes status, classified reason, audit status and an optional prior runtime outcome. Audit construction selects action and approval metadata and omits the signature and secret. The optional API adapter keeps its internal bearer in a request header, rejects credentials in URL userinfo, rejects redirects, sets a timeout and replaces transport errors with fixed messages. Its source tests specify secret-free errors and were not executed. No disclosure path was found for the runtime HMAC key or bearer in these outputs.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    },
+    {
+      "coverage_id": "packages%2Factuator%2Fsrc%2Fhandler.ts%23createActionHandler::packages%2Factuator%2Fsrc%2Fexecute.ts%23createActuator::packages%2Factuator::ATTACK-CLASSES.md%23Injection",
+      "disposition": "covered",
+      "reviewed_paths": [
+        "packages/actuator/src/handler.ts",
+        "packages/actuator/src/types.ts",
+        "packages/actuator/src/claims.ts",
+        "packages/actuator/src/execute.ts",
+        "packages/policy/src/decide.ts",
+        "packages/policy/src/evaluation.ts",
+        "packages/actuator/src/backends.ts",
+        "packages/actuator/src/admission-durable.ts",
+        "apps/api/src/actions/action.repo.ts",
+        "apps/api/src/actions/dto/claim-action.dto.ts",
+        "apps/api/src/actions/dto/complete-action.dto.ts",
+        "apps/api/src/internal/project-grant.ts",
+        "packages/actuator/src/audit-http.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-actuator",
+          "reviewed_paths": [
+            "packages/actuator/src/handler.ts",
+            "packages/actuator/src/types.ts",
+            "packages/actuator/src/claims.ts",
+            "packages/actuator/src/execute.ts",
+            "packages/policy/src/decide.ts",
+            "packages/policy/src/evaluation.ts"
+          ],
+          "invariant": "Caller-controlled action fields must not become arbitrary backend operations, selectors or unbounded numeric parameters.",
+          "method": "source",
+          "result": "The action schema permits only ASCII lowercase service names with internal hyphens, two runtimes and restart/scale operations. Docker scale and restart replicas are rejected. Scale requires an explicit service allowlist, a bounded matching rule and a safe integer replica count within that rule. Unknown fields cannot add backend arguments. Dispatch selects fixed methods and never invokes a shell. No action-field injection path survived these controls.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-actuator",
+          "reviewed_paths": [
+            "packages/actuator/src/backends.ts",
+            "packages/actuator/src/admission-durable.ts",
+            "apps/api/src/actions/action.repo.ts",
+            "apps/api/src/actions/dto/claim-action.dto.ts",
+            "apps/api/src/actions/dto/complete-action.dto.ts",
+            "apps/api/src/internal/project-grant.ts",
+            "packages/actuator/src/audit-http.ts"
+          ],
+          "invariant": "The final HTTP, Kubernetes and storage consumers must retain structural separation between trusted operations and caller data.",
+          "method": "source",
+          "result": "Docker filters are JSON serialized and URL encoded, returned Docker IDs are encoded into a fixed restart path, and the base URL is operator configuration. Container IDs originate from the privileged Docker response rather than workload telemetry. Kubernetes uses typed patch calls with a configured namespace, the validated service name and a fixed patch body. SQLite values use bound parameters; API storage uses Prisma queries and tagged SQL parameters. API DTOs validate the strict claim/completion schemas, and project grants require numeric IDs. Optional API transport uses fixed paths and serialized JSON. The Docker cross-project selection concern is a resource-authorization issue tracked in its assigned companion unit, without evidence of syntax injection.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    },
+    {
+      "coverage_id": "packages%2Factuator%2Fsrc%2Fhandler.ts%23createActionHandler::packages%2Factuator%2Fsrc%2Fexecute.ts%23createActuator::packages%2Factuator::CLOUD-AND-DEPLOYMENT.md%23Namespace%20and%20label%20trust%20confusion",
+      "disposition": "candidate",
+      "reviewed_paths": [
+        "packages/policy/src/schema.ts",
+        "packages/policy/src/action.ts",
+        "packages/policy/src/mode.ts",
+        "packages/policy/src/evaluation.ts",
+        "packages/policy/src/decide.ts",
+        "packages/policy/src/load.ts",
+        "packages/config/src/load.ts",
+        "apps/api/src/config/boot.config.ts",
+        "packages/actuator/src/main.ts",
+        "graveshift.config.yaml",
+        "examples/haunted-candy-shop/graveshift.config.yaml",
+        "docs/adr/0015-one-config-file-at-boot.md",
+        "packages/actuator/src/claims.ts",
+        "packages/actuator/src/types.ts",
+        "packages/actuator/src/admission-durable.ts",
+        "packages/actuator/src/execute.ts",
+        "packages/actuator/src/handler.ts",
+        "packages/actuator/src/sign.ts",
+        "apps/api/src/actions/action.repo.ts",
+        "apps/api/src/internal/policy-context.service.ts",
+        "apps/api/src/audit/audit.usage.ts",
+        "apps/api/src/audit/audit.repo.ts",
+        "packages/core/src/policy-context.ts",
+        "apps/api/src/internal/policy-context.controller.ts",
+        "apps/api/src/internal/policy-context.dto.ts",
+        "apps/api/src/internal/internal.guard.ts",
+        "apps/api/src/internal/project-grant.ts",
+        "apps/api/src/hauntings/haunting.repo.ts",
+        "apps/api/src/app.module.ts",
+        "apps/api/src/app.factory.ts",
+        "packages/actuator/src/backends.ts",
+        "deploy/compose/graveshift.compose.yml"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-actuator",
+          "reviewed_paths": [
+            "packages/policy/src/schema.ts",
+            "packages/policy/src/action.ts",
+            "packages/policy/src/mode.ts",
+            "packages/policy/src/evaluation.ts",
+            "packages/policy/src/decide.ts",
+            "packages/policy/src/load.ts",
+            "packages/config/src/load.ts",
+            "apps/api/src/config/boot.config.ts",
+            "packages/actuator/src/main.ts",
+            "graveshift.config.yaml",
+            "examples/haunted-candy-shop/graveshift.config.yaml",
+            "docs/adr/0015-one-config-file-at-boot.md"
+          ],
+          "invariant": "Runtime permission must derive from validated operator policy, explicit target rules and an effective act mode; a model or request must not broaden it.",
+          "method": "source",
+          "result": "Policy is loaded and validated at boot; configuration changes require a restart by the documented contract. API boot policy is recursively frozen. Deny rules take precedence, unmatched actions default to deny, runtime actions require an explicit service allowlist, and scale must have valid bounds. Runtime requests cannot supply envMode. A valid environment override can only select an equal or safer mode; invalid values do not raise policy mode. Both inspected example/default configurations are propose. These gates are present, but their usage-counter inputs are incomplete in runtime admission.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-actuator",
+          "reviewed_paths": [
+            "packages/actuator/src/claims.ts",
+            "packages/actuator/src/types.ts",
+            "packages/actuator/src/admission-durable.ts",
+            "packages/actuator/src/execute.ts",
+            "packages/actuator/src/handler.ts",
+            "packages/actuator/src/sign.ts",
+            "apps/api/src/actions/action.repo.ts",
+            "apps/api/src/internal/policy-context.service.ts",
+            "apps/api/src/audit/audit.usage.ts",
+            "apps/api/src/audit/audit.repo.ts",
+            "packages/core/src/policy-context.ts"
+          ],
+          "invariant": "Runtime admission must enforce diagnosis-loop and daily-spend policy limits using authoritative facts, and unavailable facts must not become zero usage.",
+          "method": "source",
+          "result": "claims.runtimeDecision supplies real admission action counts but sets diagnosisLoops and llmSpentTodayUsd to zero. The policy gate compares both quantities against limits for runtime actions as well as proposals. The strict signed ContextSchema cannot carry these counters, and the active SQLite rules have no authoritative-usage reader. API ActionRepo calls the same helper, so the sibling admission path has the same omission. In contrast, PolicyContextService obtains recorded usage through AuditRepo, whose query counts diagnosis calls and daily Project spend and rejects unknown cost rows. Source therefore supports a policy-input substitution candidate. No runtime outcome was observed.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-actuator",
+          "reviewed_paths": [
+            "apps/api/src/internal/policy-context.controller.ts",
+            "apps/api/src/internal/policy-context.dto.ts",
+            "apps/api/src/internal/internal.guard.ts",
+            "apps/api/src/internal/project-grant.ts",
+            "apps/api/src/hauntings/haunting.repo.ts",
+            "apps/api/src/app.module.ts",
+            "apps/api/src/app.factory.ts"
+          ],
+          "invariant": "The authoritative policy-context dependency must authenticate its peer and bind recorded facts to the granted Project, incident and service.",
+          "method": "source",
+          "result": "The registered internal context controller uses InternalGuard; its separate bearer is compared through fixed-size SHA-256 digests and timingSafeEqual. Global DTO validation rejects undeclared fields. ProjectGrant checks a stored numeric Project grant. Incident reads use the composite Project/incident key; diagnosis-reference reads filter Project, service and diagnosis ID. PolicyContextService rejects missing Diagnosis or service mismatch before deriving facts. No caller-field override was found at this dependency. Runtime admission currently does not consume this authoritative context.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-actuator",
+          "reviewed_paths": [
+            "packages/actuator/src/backends.ts",
+            "deploy/compose/graveshift.compose.yml",
+            "packages/actuator/src/main.ts",
+            "packages/actuator/src/types.ts"
+          ],
+          "invariant": "A service label or name must resolve inside the intended runtime resource scope.",
+          "method": "source",
+          "result": "Kubernetes namespace selection is fixed by operator configuration, and requests cannot override it. No claim is made about the incomplete Kubernetes deployment scaffolds or their live attachments. Docker resolution is instead global to the configured daemon by Compose service label, with no Compose-project predicate or signed Project scope. The host-socket proxy definition supplies broad container visibility subject to its unverified effective configuration. This is the same resource-binding root cause linked from the approval unit.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [
+        "packages/actuator/createDockerRestarter/compose-project-binding",
+        "packages/actuator/runtimeDecision/zeroed-policy-usage"
+      ],
+      "unresolved": [
+        "Docker candidate: intended per-project approval scope, effective proxy filtering, co-tenancy and enabled act configuration require bounded or owner-observed validation.",
+        "Policy-usage candidate: a bounded comparison of recorded nonzero usage, the canonical policy decision and the resulting stub backend invocation is blocked by the missing complete OS-enforced memory and cumulative disk sandbox controls."
+      ]
+    },
+    {
+      "coverage_id": "packages%2Factuator%2Fsrc%2Fhandler.ts%23createActionHandler::packages%2Factuator%2Fsrc%2Fexecute.ts%23createActuator::packages%2Factuator::PROTOCOLS-RPC-AND-MESSAGING.md%23Duplicate%20delivery%20and%20idempotency%20gaps",
+      "disposition": "covered",
+      "reviewed_paths": [
+        "packages/actuator/src/admission-durable.ts",
+        "packages/actuator/src/claims.ts",
+        "packages/actuator/src/sign.ts",
+        "packages/actuator/src/execute.ts",
+        "packages/actuator/src/main.ts",
+        "packages/actuator/src/handler.ts",
+        "packages/actuator/src/durable.test.ts",
+        "packages/actuator/src/admission-durable.test.ts",
+        "packages/actuator/src/admission.test.ts",
+        "packages/actuator/src/admission-ownership.test.ts",
+        "packages/actuator/src/guards.ts",
+        "apps/api/src/actions/actions.controller.ts",
+        "apps/api/src/actions/action.repo.ts",
+        "apps/api/src/actions/dto/claim-action.dto.ts",
+        "apps/api/src/actions/dto/complete-action.dto.ts",
+        "apps/api/src/actions/actions.module.ts",
+        "apps/api/src/internal/internal.guard.ts",
+        "apps/api/src/internal/project-grant.ts",
+        "apps/api/prisma/schema.prisma",
+        "apps/api/src/audit/audit.repo.ts",
+        "packages/actuator/src/audit-http.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-actuator",
+          "reviewed_paths": [
+            "packages/actuator/src/admission-durable.ts",
+            "packages/actuator/src/claims.ts",
+            "packages/actuator/src/sign.ts",
+            "packages/actuator/src/execute.ts",
+            "packages/actuator/src/main.ts"
+          ],
+          "invariant": "Within the configured admission store, a token or action ID must reserve capacity durably before any backend effect and must never authorize a second effect after retry or restart.",
+          "method": "source",
+          "result": "The active launcher requires a file-backed store and refuses startup if it cannot open it. SQLite has a token primary key and a unique action-ID index. claim rechecks prior identity inside BEGIN IMMEDIATE, derives service counts and capacity, requires its audit callback acknowledgement, inserts the row and commits before returning claimed. Only that result reaches execution. Prior unfinished or changed-hash claims return uncertain; completed claims return their known result without executing. Incomplete claims remain counted beyond approval expiry and the ten-minute window. Retained rows continue to block old token/action identities after completed rows stop consuming active capacity. No single-use bypass was found for a store reopened at the same configured path.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-actuator",
+          "reviewed_paths": [
+            "packages/actuator/src/handler.ts",
+            "packages/actuator/src/durable.test.ts",
+            "packages/actuator/src/admission-durable.test.ts",
+            "packages/actuator/src/admission.test.ts",
+            "packages/actuator/src/admission-ownership.test.ts",
+            "packages/actuator/src/guards.ts"
+          ],
+          "invariant": "Expiry, breaker changes, lost admission replies, backend failures and completion failures must stop or retain the claim rather than replaying an uncertain runtime effect.",
+          "method": "source",
+          "result": "The execution path rechecks approval time/binding/approver and breaker eligibility after admission, then records and runs one backend attempt. Claim failure precedes the effect; a late denial completes the consumed claim. Runtime failures count as terminal attempts. Failed completion leaves the durable admitted row, so another request is uncertain rather than executable. Known outcomes are preserved in responses without raw exception details. Source tests specify restart, duplicate action IDs, pending capacity, lost-response, expiry-during-audit and terminal-failure cases; none were run. Global diagnosis/spend gate omissions are separately tracked in the runtime-policy unit and are not a duplicate-delivery failure.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-actuator",
+          "reviewed_paths": [
+            "apps/api/src/actions/actions.controller.ts",
+            "apps/api/src/actions/action.repo.ts",
+            "apps/api/src/actions/dto/claim-action.dto.ts",
+            "apps/api/src/actions/dto/complete-action.dto.ts",
+            "apps/api/src/actions/actions.module.ts",
+            "apps/api/src/internal/internal.guard.ts",
+            "apps/api/src/internal/project-grant.ts",
+            "apps/api/prisma/schema.prisma",
+            "apps/api/src/audit/audit.repo.ts",
+            "packages/actuator/src/audit-http.ts"
+          ],
+          "invariant": "The optional API admission path must bind replay state and completion to one granted Project and the exact request without weakening the one-effect transition.",
+          "method": "source",
+          "result": "Internal claim/completion routes require the internal bearer and stored Project grant. The repository recomputes the request hash, serializes each Project through the audit-chain transaction lock, uses the database clock and stores Project/token plus Project/action identity. Claim creation and its audit append share one transaction. Completion checks Project, token, action and hash, uses an admitted-state conditional update and appends the terminal audit in the same transaction. The HTTP adapter validates responses, uses a separate bearer, refuses redirects, performs one request and treats a missing/invalid acknowledgement as failure. The production actuator launcher does not use this adapter; no remote durability or shared-store deployment was inferred.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    }
+  ],
+  "candidates": [
+    {
+      "proposed_verdict": "needs_validation",
+      "fingerprint": "packages/actuator/createDockerRestarter/compose-project-binding",
+      "title": "Docker restart selection can cross Compose project boundaries",
+      "description": "When a Blessing is intended to restart one Project's worker service, a caller holding that fresh signed request can potentially cause the actuator's Docker identity to restart unrelated worker containers in other Compose projects on the same daemon. The writer selects all running containers with the service label and invokes restart for every returned ID. The request can remain exactly as approved and correctly signed; the unresolved issue is which resources that service name resolves to. This requires an enabled act-mode configuration, shared-daemon co-tenancy, per-project approval intent and a proxy that exposes both projects. The checked-in configuration is propose, and the in-repo platform-to-actuator producer is deferred. No deployed exposure or runtime effect was observed.",
+      "claimed_root_cause": "The trusted resource resolver in createDockerRestarter authorizes by com.docker.compose.service alone. ActionRequest has no signed Project or Compose-project scope, policy checks only the service name, and the backend neither adds a trusted com.docker.compose.project predicate nor verifies ownership of the returned container IDs before fan-out. A valid approval for one scoped service can therefore name a broader host-level resource set when projects share service names.",
+      "trace": [
+        {
+          "kind": "entrypoint",
+          "file": "packages/actuator/src/handler.ts",
+          "line": 35,
+          "scope": "createActionHandler POST /actions",
+          "description": "A request submitter delivers one signed runtime action through the bounded JSON action endpoint."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/actuator/src/execute.ts",
+          "line": 95,
+          "scope": "createActuator.execute",
+          "description": "The executor strictly parses the action and verifies its HMAC; this prevents mutation but authenticates only the resource fields present in the schema."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/actuator/src/claims.ts",
+          "line": 62,
+          "scope": "admissionDecision",
+          "description": "Admission checks the approval identity, action/incident binding, time, policy and action count for the signed service name."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/policy/src/decide.ts",
+          "line": 48,
+          "scope": "decide runtime allowlist",
+          "description": "The explicit target allowlist compares ctx.service to rule service strings and cannot distinguish different Compose projects with the same service name."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/actuator/src/admission-durable.ts",
+          "line": 97,
+          "scope": "DurableAdmission.claim",
+          "description": "A successful unique token/action claim commits before execution. This correctly prevents replay of the request but does not narrow its resolved container membership."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/actuator/src/execute.ts",
+          "line": 56,
+          "scope": "run Docker restart",
+          "description": "The backend receives only action.service; no Project or Compose-project identity is supplied."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/actuator/src/backends.ts",
+          "line": 22,
+          "scope": "createDockerRestarter.restart container lookup",
+          "description": "The Docker list filter contains only com.docker.compose.service=<service>. The returned set is not checked against another ownership predicate."
+        },
+        {
+          "kind": "sink",
+          "file": "packages/actuator/src/backends.ts",
+          "line": 40,
+          "scope": "createDockerRestarter.restart fan-out",
+          "description": "The actuator sends POST /containers/<Id>/restart for every returned ID under the host proxy's Docker authority, potentially including the unrelated project's same-named service."
+        }
+      ],
+      "evidence": [
+        {
+          "file": "packages/actuator/src/types.ts",
+          "line": 7,
+          "description": "The strict action object includes action/incident IDs, service, runtime, kind and optional replicas, with no Project, Compose-project or deployment selector."
+        },
+        {
+          "file": "packages/actuator/src/sign.ts",
+          "line": 18,
+          "description": "The signature covers the entire accepted action, approval and context, which prevents tampering but cannot bind a resource scope absent from that object."
+        },
+        {
+          "file": "packages/actuator/src/backends.ts",
+          "line": 22,
+          "description": "The sole lookup predicate is the Compose service label; lines 38-46 restart every returned container."
+        },
+        {
+          "file": "packages/actuator/src/main.ts",
+          "line": 74,
+          "description": "The production launcher instantiates this backend from DOCKER_PROXY_URL without an additional Project or Compose-project binding."
+        },
+        {
+          "file": "deploy/compose/graveshift.compose.yml",
+          "line": 29,
+          "description": "The maintained actuator proxy mounts the host Docker socket and enables container access, POST and restarts. No project-specific filtering is expressed here; effective image and deployment behavior remain unverified."
+        },
+        {
+          "file": "graveshift.config.yaml",
+          "line": 62,
+          "description": "The committed default mode is propose, so activation of the runtime sink requires an owner-reviewed act-mode configuration."
+        },
+        {
+          "file": "docs/adr/0017-deployment-topology.md",
+          "line": 76,
+          "description": "The platform-to-actuator producer is described as a future action hop rather than part of the current Fix path. Reachability from a real approval producer must be established separately."
+        }
+      ],
+      "blockers": [
+        "No backend or Docker fixture was executed: complete OS-enforced memory and cumulative disk sandbox controls are unavailable, and this assignment prohibits project code, tests, builds, containers and external requests. No local effect or retained artifact exists.",
+        "The effective pinned proxy's resource filtering, shared-daemon co-tenancy, enabled act configuration and intended per-project scope of the approval producer were not observed. The manifest alone does not establish a deployed cross-project boundary."
+      ],
+      "validation_plan": {
+        "local": "After the parent supplies the required OS sandbox, use dummy keys and one valid signed worker restart with a scratch-only DurableAdmission and a recording HttpFetch backend. Provide two dummy container records representing distinct Compose projects with the same worker service. Record the actual list filter and restart destinations, and establish that the filter lacks a project predicate and that both IDs reach the stub restart sink. Inspect an available pinned Docker/proxy implementation or isolated dummy daemon to verify the service-label filter semantics. Keep external networking disabled and stop at the recorded wrong-target invocation.",
+        "deployment": "Have the owner inspect the rendered active actuator/proxy configuration and workload ownership without submitting a runtime action. Establish whether the proxy can enumerate and restart separate Compose projects, whether same-named services coexist, whether act mode is enabled, and whether each approval is intended to cover one Project. A dedicated daemon or effective resource filter would refute the deployed cross-project condition."
+      }
+    },
+    {
+      "proposed_verdict": "needs_validation",
+      "fingerprint": "packages/actuator/runtimeDecision/zeroed-policy-usage",
+      "title": "Runtime admission substitutes zero for authoritative policy usage",
+      "description": "In a supported act-mode configuration, a submitter holding a still-valid signed Blessing issued before usage limits were reached can potentially execute a restart after recorded diagnosis-loop or Project daily-spend limits require denial. Runtime admission supplies zero for those quantities instead of obtaining current recorded usage, while the canonical policy gate applies both limits to runtime actions. Correct HMAC, an allowed human approver, target allowlisting, safe scale bounds and the local runtime action count remain required. The affected boundary is the admission owner's current policy decision under the actuator's Docker or Kubernetes authority. The shared helper is used by both the active local SQLite path and the optional API claim path. No runtime acceptance or backend effect was observed.",
+      "claimed_root_cause": "claims.runtimeDecision reconstructs SharedPolicyContext with diagnosisLoops: 0 and llmSpentTodayUsd: 0 for every request. These are authoritative state facts, not known-zero properties of a runtime operation. ContextSchema cannot carry them, AdmissionRules has no usage reader, and neither SQLite admission nor API ActionRepo resolves the recorded Project/incident usage before calling this helper. PolicyContextService and AuditRepo already demonstrate the authoritative values and fail-closed handling elsewhere, but runtime admission bypasses that dependency.",
+      "trace": [
+        {
+          "kind": "entrypoint",
+          "file": "packages/actuator/src/handler.ts",
+          "line": 46,
+          "scope": "createActionHandler POST /actions",
+          "description": "The request holder submits an unconsumed signed runtime action whose approval interval still includes the delivery time."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/actuator/src/execute.ts",
+          "line": 95,
+          "scope": "createActuator.execute validation and signature",
+          "description": "Strict parsing and HMAC verification authenticate the action, approval and available context. The signed context has no authoritative usage counters."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/actuator/src/admission-durable.ts",
+          "line": 68,
+          "scope": "DurableAdmission.claim eligibility",
+          "description": "The active store obtains its clock and per-service action count and calls admissionDecision. It has no dependency that reads recorded diagnosis-loop or daily-spend usage."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/actuator/src/claims.ts",
+          "line": 153,
+          "scope": "runtimeDecision policy facts",
+          "description": "The helper passes zero diagnosisLoops and zero llmSpentTodayUsd into the canonical policy engine, irrespective of the real recorded state."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/policy/src/evaluation.ts",
+          "line": 36,
+          "scope": "gate usage limits",
+          "description": "This gate denies runtime actions when either actual usage quantity reaches its configured limit, but the substituted zeros pass positive limits when the other checks pass."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/actuator/src/claims.ts",
+          "line": 165,
+          "scope": "runtimeDecision accepted policy result",
+          "description": "A require_approval decision from the incomplete facts becomes no denial reason, allowing the valid human approval to satisfy admission."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/actuator/src/admission-durable.ts",
+          "line": 97,
+          "scope": "DurableAdmission.claim commit",
+          "description": "The token/action claim is committed under the incomplete policy decision and reported as claimed."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/actuator/src/execute.ts",
+          "line": 121,
+          "scope": "createActuator.execute late eligibility and dispatch",
+          "description": "The late check covers approval eligibility and breaker state only; it does not fetch usage or restore the omitted policy gate inputs before run is invoked."
+        },
+        {
+          "kind": "sink",
+          "file": "packages/actuator/src/backends.ts",
+          "line": 40,
+          "scope": "createDockerRestarter.restart",
+          "description": "For a valid Docker restart action, the privileged backend sends the container restart request even though a policy decision with the recorded usage would require denial. This final result remains to be demonstrated with a recording stub."
+        }
+      ],
+      "evidence": [
+        {
+          "file": "packages/core/src/policy-context.ts",
+          "line": 11,
+          "description": "The shared policy contract requires complete facts and explicitly states that missing counters are never inferred."
+        },
+        {
+          "file": "packages/actuator/src/claims.ts",
+          "line": 153,
+          "description": "Runtime decision supplies actionsLast10Min from admission but hardcodes diagnosisLoops and llmSpentTodayUsd to zero. openPrsLastHour is also zero, but it is not used by the runtime-specific PR/action branch and is not part of this claim."
+        },
+        {
+          "file": "packages/policy/src/evaluation.ts",
+          "line": 38,
+          "description": "Diagnosis-loop and daily-spend limits are unconditional gate terms after the runtime-versus-PR rate-count choice. They therefore apply to runtime actions."
+        },
+        {
+          "file": "packages/actuator/src/types.ts",
+          "line": 36,
+          "description": "The strict signed context permits only category, signals and confidence, so even an honest request producer cannot provide these omitted facts through the current wire contract."
+        },
+        {
+          "file": "packages/actuator/src/admission-durable.ts",
+          "line": 69,
+          "description": "The production local admission path obtains only the per-service runtime action count before invoking the shared runtime decision."
+        },
+        {
+          "file": "apps/api/src/actions/action.repo.ts",
+          "line": 57,
+          "description": "The optional API claim path calls the same runtimeDecision helper after counting action claims; it does not resolve Project/incident policy usage either. This is a source-visible sibling variant of the same root cause."
+        },
+        {
+          "file": "apps/api/src/internal/policy-context.service.ts",
+          "line": 31,
+          "description": "The authoritative context path reads recorded usage for the granted Project, service and incident and includes it in SharedPolicyContext instead of assuming zero."
+        },
+        {
+          "file": "apps/api/src/audit/audit.usage.ts",
+          "line": 20,
+          "description": "Recorded usage derives daily Project model spend and per-incident diagnosis-call counts. Parsing rejects unknown or invalid costs, establishing that unavailable usage must not silently become zero."
+        },
+        {
+          "file": "packages/actuator/src/claims.ts",
+          "line": 75,
+          "description": "The post-claim eligibility recheck covers breaker and approval checks only, so there is no later authoritative-usage check that prevents the proposed effect."
+        },
+        {
+          "file": "packages/actuator/src/main.ts",
+          "line": 53,
+          "description": "The active launcher constructs DurableAdmission with policy, clock, audit, mode and breaker dependencies; no recorded-usage source is attached."
+        }
+      ],
+      "blockers": [
+        "The decisive bounded comparison and backend-stub observation were not executed. Complete OS-enforced memory and cumulative disk sandbox controls are unavailable, and the assignment forbids executing project code or tests. All evidence is source-only with no retained artifact."
+      ],
+      "validation_plan": {
+        "local": "Within a parent-approved OS sandbox, use dummy Project 101, incident and service records, a dummy HMAC key, an act-mode policy with positive diagnosis and spend limits, a fixed clock, scratch-only SQLite admission and recording runtime backends. Obtain policy context from dummy authoritative collaborators showing diagnosisLoops equal to its limit, then separately llmSpentTodayUsd equal to its limit, after the signed approval was issued but before it expires. Confirm decide with each full recorded context denies. Deliver the otherwise valid signed request through createActionHandler and establish whether admission still returns executed and records one stub backend invocation. Repeat the shared-helper comparison for API admission with dummy storage only if needed to validate that variant. Stop at the wrong decision or stub invocation; use no real provider, container, broker, credential or shared database."
+      }
+    }
+  ],
+  "hardening": [
+    "packages/actuator/src/main.ts:38-41 deliberately uses an acknowledgement-only audit callback and sets durableAudit:false at line 71. Runtime responses correctly remain pending, and the SQLite claim still protects replay, but this is not a durable Project audit handoff. Add a signed Project binding and a real durable audit sink before presenting runtime actions as recorded in a Project audit chain. This is an explicit integration limit, not a demonstrated unauthorized action by itself.",
+    "packages/actuator/src/guards.ts exposes reopened(), but no production caller in the assigned runtime paths feeds incident reopens into it; source tests invoke it manually. When the deferred runtime incident/approval producer is implemented, connect authenticated reopen notifications to this helper and define restart persistence of breaker state. The existing rate and human-approval gates still apply, so this integration gap alone was not promoted as a privilege-boundary finding."
+  ],
+  "uncovered": []
+}

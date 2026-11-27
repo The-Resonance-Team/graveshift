@@ -9,5 +9,13 @@
   "scripts": {
     "typecheck": "bun check --no-script",
     "test": "bun test"
+  },
+  "dependencies": {
+    "@graveshift/agents": "workspace:*",
+    "@graveshift/core": "workspace:*",
+    "@graveshift/gateway": "workspace:*",
+    "@graveshift/redactor": "workspace:*",
+    "@graveshift/watcher": "workspace:*",
+    "zod": "^4.6.7"
   }
 }

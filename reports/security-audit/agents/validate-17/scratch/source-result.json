@@ -1,0 +1,102 @@
+{
+  "decision": "needs_validation",
+  "record": {
+    "verdict": "needs_validation",
+    "fingerprint": "packages/integrations/src/delivery.ts:permanent-collector-poison-retry",
+    "title": "A permanently rejected workload name can block the shared Collector queue",
+    "description": "An enabled Kubernetes Collector watches multiple configured namespaces through one ordered queue. A less-trusted workload owner who can choose a legal name containing a dummy model-key-shaped substring, such as demo-sk-aaaaaaaaaaaaaaaaaaaa, can produce a Warning Event that maps to an observation whose service fails privacy validation. The queue retries that deterministic failure forever, blocking later observations from other watched workloads. The Docker variant uses a producer-controlled com.docker.compose.service label containing a dummy email such as ops@example.invalid. The affected resource is the Collector's observation lane; no process crash or suppression beyond that Collector is claimed. Each variant requires delegated workload metadata authority and normally functioning Collector publication.",
+    "claimed_root_cause": "createDeliveryQueue retries all entry.deliver and publisher errors indefinitely without distinguishing permanent validation failures, enforcing an attempt/deadline limit, or quarantining the head record. Both Collectors prepare workload-derived service metadata inside entry.deliver, where assertSafeMetadata can always reject it. The queue's 256-record bound and one-second manual stop deadline do not allow healthy records past that head during normal operation.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "packages/sources-k8s/src/kube-api.ts",
+        "line": 23,
+        "scope": "toEvent",
+        "description": "A schema-valid Warning Event carries the workload's involvedObject.name into involvedName. The parser has no privacy-pattern restriction on workload names."
+      },
+      {
+        "kind": "propagation",
+        "file": "packages/sources-k8s/src/source.ts",
+        "line": 99,
+        "scope": "Kubernetes watch callback",
+        "description": "An included namespace's workload name becomes the qualified Grave service and mapped runtime Event details in one shared Collector queue."
+      },
+      {
+        "kind": "propagation",
+        "file": "packages/sources-k8s/src/source.ts",
+        "line": 105,
+        "scope": "queued Kubernetes delivery",
+        "description": "entry.deliver constructs its envelope using the workload-derived service before sending it. A name such as demo-sk-aaaaaaaaaaaaaaaaaaaa retains a word boundary before the key-shaped substring even after qualification."
+      },
+      {
+        "kind": "propagation",
+        "file": "packages/integrations/src/index.ts",
+        "line": 94,
+        "scope": "envelopeBuilder",
+        "description": "The helper passes Context.service into prepareEnvelope, preserving the workload-derived selector as routing metadata."
+      },
+      {
+        "kind": "propagation",
+        "file": "packages/core/src/privacy.ts",
+        "line": 8,
+        "scope": "assertSafeMetadata",
+        "description": "The model-key detector matches the dummy sk- substring and rejects the non-UUID service with EnvelopeError on every attempt."
+      },
+      {
+        "kind": "propagation",
+        "file": "packages/integrations/src/delivery.ts",
+        "line": 46,
+        "scope": "createDeliveryQueue.retry",
+        "description": "The same permanent validation exception is caught and retried with capped backoff until the queue is externally stopped."
+      },
+      {
+        "kind": "sink",
+        "file": "packages/integrations/src/delivery.ts",
+        "line": 71,
+        "scope": "ordered delivery worker",
+        "description": "The worker never reaches acknowledge, pending.shift or notification for the poison head, so later unrelated workload records cannot publish through this Collector."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "packages/redactor/src/detectors.ts",
+        "line": 47,
+        "description": "The explicit model-key regex accepts a sk- prefix followed by at least twenty allowed characters, including the dummy all-letter example."
+      },
+      {
+        "file": "packages/core/src/envelope.ts",
+        "line": 60,
+        "description": "Service and fingerprint are privacy-checked routing metadata rather than redacted payload fields."
+      },
+      {
+        "file": "packages/sources-k8s/src/source.ts",
+        "line": 140,
+        "description": "A full queue aborts the push watch, but finally waits on queue.drain; this cannot bypass a permanently failing head or reconnect to healthy later records."
+      },
+      {
+        "file": "packages/sources-docker/src/source.ts",
+        "line": 92,
+        "description": "The Docker variant trusts the com.docker.compose.service attribute for service and constructs its envelope inside the same retrying delivery callback at lines 99-110. An email-shaped label deterministically fails the separate email metadata detector."
+      },
+      {
+        "file": "packages/integrations/src/delivery.ts",
+        "line": 88,
+        "description": "ready prevents more than 256 pending records but keeps Docker waiting behind the head. stop at line 123 provides manual bounded cancellation, not automatic quarantine."
+      },
+      {
+        "file": "apps/daemon/src/collectors.ts",
+        "line": 60,
+        "description": "The active daemon factory can enable Docker and Kubernetes Collectors, each sharing one queue across its collected workloads. The effective enabled deployment and delegated workload authority are not established by this source-only review."
+      }
+    ],
+    "blockers": [
+      "No small poison-then-healthy Collector fixture was executed because complete memory and cumulative disk sandbox controls are unavailable.",
+      "The owner must establish actual delegated metadata authority and enabled Collector namespace/endpoint scope. Direct host-root control alone would not establish a lower-trust Docker principal.",
+      "Normal daemon reader/publisher authentication must be established from effective wiring. Compose does not launch the daemon, and the checked-in NATS read user's permissions alone do not authorize detection publication."
+    ],
+    "validation_plan": {
+      "local": "In a parent-approved sandbox, use the native Collector interface with a fixed clock, an in-memory publisher and exactly two native records. First emit a Kubernetes Warning/ImagePullBackOff Event for Pod demo-sk-aaaaaaaaaaaaaaaaaaaa-5d8f9c7b6d-x2k4q in an included dummy namespace, then a healthy-named Warning record in another included dummy namespace. Allow a fixed small number of injected backoff steps, then stop. Record whether the first record repeatedly fails preparation and the second never reaches the publisher. Repeat the independent Docker variant with com.docker.compose.service=ops@example.invalid followed by another container's record. A regression should quarantine or explicitly refuse permanent-invalid input and allow the second record to progress while retaining retry semantics for transient failures.",
+      "deployment": "The owner can inspect manifests, delegated workload roles, enabled Collector settings and effective NATS permissions to establish that a lower-trust workload owner can choose these names/labels and shares a normally functional observation lane with another workload. Do not create workloads or send poison records in a deployed environment."
+    }
+  }
+}

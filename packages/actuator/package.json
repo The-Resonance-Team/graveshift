@@ -4,10 +4,19 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./claims": "./src/claims.ts"
   },
   "scripts": {
     "typecheck": "bun check --no-script",
-    "test": "bun test"
+    "test": "bun test",
+    "start": "bun src/main.ts"
+  },
+  "dependencies": {
+    "@graveshift/config": "workspace:*",
+    "@graveshift/core": "workspace:*",
+    "@graveshift/policy": "workspace:*",
+    "@kubernetes/client-node": "^2.0.2",
+    "zod": "^4.6.7"
   }
 }

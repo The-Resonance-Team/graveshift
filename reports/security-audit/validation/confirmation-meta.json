@@ -1,0 +1,97 @@
+{
+  "apps/api/src/mcp/mcp.tools.ts:incident-read-embeds-diagnosis": {
+    "intended_behavior": "A Credential holding incidents:read but not diagnoses:read must not receive Diagnosis content.",
+    "remediation": "Project incident responses by the caller's MCP scopes, removing incident.diagnosis before deepRedact whenever diagnoses:read is absent; add a two-Credential regression test.",
+    "severity": {"likelihood": {"score": "medium", "reason": "Requires a narrow-scope MCP Credential and an existing diagnosis."}, "impact": {"score": "medium", "reason": "Discloses private Diagnosis content within the Credential's own Project."}, "overall_severity": "medium"}
+  },
+  "apps/api/src/work-items/work-item.publication.ts:beginPublication/project-pr-limit": {
+    "intended_behavior": "The configured maxOpenPrsPerHour limit must bound Project-wide publication admissions.",
+    "remediation": "Re-check and atomically reserve a Project-wide publication slot inside beginPublication using the same policy limit; add a deterministic two-attempt regression test.",
+    "severity": {"likelihood": {"score": "medium", "reason": "Requires two eligible Work attempts and concurrent timing."}, "impact": {"score": "medium", "reason": "Exceeds the owner's configured publication cap for one Project."}, "overall_severity": "medium"}
+  },
+  "apps/daemon/src/observations.ts:failed-outcome-retention": {
+    "intended_behavior": "A terminally refused observation must be evicted and must not retain growing cumulative histories.",
+    "remediation": "Validate the derived internal eventId against the DTO limit before watcher mutation, add terminal-delivery eviction, and bound the pending map.",
+    "severity": {"likelihood": {"score": "medium", "reason": "Requires repeated unique long IDs from an authorized producer."}, "impact": {"score": "low", "reason": "Demonstrated retained-history growth in a fixture; no measured process outage."}, "overall_severity": "low"}
+  },
+  "apps/daemon/src/observations.ts:service-cache-project-scope": {
+    "intended_behavior": "An Event from one Project must not corrupt another Project's Haunting lifecycle cache.",
+    "remediation": "Key the active-ID cache by [projectId, service] to match the watcher grouper, and add a two-Project close/reopen regression test.",
+    "severity": {"likelihood": {"score": "medium", "reason": "Requires shared service names across granted Projects."}, "impact": {"score": "medium", "reason": "Causes a detection to be appended to a closed incident for another Project."}, "overall_severity": "medium"}
+  },
+  "apps/daemon/src/reads.ts:collector-evidence-without-project": {
+    "intended_behavior": "Collector inventory, logs, and metrics must be authorized for the requesting Project.",
+    "remediation": "Thread projectId through ReadRuntime and CollectorReads, enforce a Project-to-resource ownership predicate, and add a two-Project sentinel test.",
+    "severity": {"likelihood": {"score": "medium", "reason": "Requires a shared daemon and a service name matching another Project's workload."}, "impact": {"score": "medium", "reason": "Returns or forwards another Project's private evidence."}, "overall_severity": "medium"}
+  },
+  "daemon/fix-context/service-only-repository-selection": {
+    "intended_behavior": "A Fix must select only a repository authorized for the authenticated Project.",
+    "remediation": "Add a Project grant to repository policy and reject repository selection when caller.projectId is not authorized before any GitHub read.",
+    "severity": {"likelihood": {"score": "medium", "reason": "Requires mutually untrusted Projects and a shared service-to-repository mapping."}, "impact": {"score": "medium", "reason": "Uses instance GitHub authority to read and draft in another Project's repository."}, "overall_severity": "medium"}
+  },
+  "deploy/compose/api-service-overlay-retains-control-plane-authority": {
+    "intended_behavior": "A lower-trust example image must not inherit platform credentials or networking.",
+    "remediation": "Use distinct Compose service keys and explicit !reset directives for environment and networks, or separate Compose projects, and validate the combined render in CI.",
+    "severity": {"likelihood": {"score": "medium", "reason": "Requires the documented combined launch with the api profile and nonempty credentials."}, "impact": {"score": "medium", "reason": "Delivers platform credentials and core-network membership to the example workload."}, "overall_severity": "medium"}
+  },
+  "fixer/recovery/parent-only-publication-binding": {
+    "intended_behavior": "Draft recovery must verify the same immutable content identity that was originally verified.",
+    "remediation": "Persist an expected tree/head digest in PublicationIntent and reject an existing draft whose head tree differs, including on replay reconciliation.",
+    "severity": {"likelihood": {"score": "medium", "reason": "Requires an actor able to rewrite the generated branch."}, "impact": {"score": "medium", "reason": "Records an unverified head as the completed Fix."}, "overall_severity": "medium"}
+  },
+  "fixer/sandbox/macos-detached-descendant-lifetime": {
+    "intended_behavior": "Every verification descendant must be terminated before workspace inspection and cleanup.",
+    "remediation": "Own the full process tree with a supervisor that independently rejects on timeout and proves all descendants exited before success, inspection, and removal.",
+    "severity": {"likelihood": {"score": "medium", "reason": "Requires macOS, a repository-executing verification command, and a detached child."}, "impact": {"score": "low", "reason": "Demonstrated retained work and a workspace writer; no host credential escape or outage observed."}, "overall_severity": "low"}
+  },
+  "identity/account-password-change/stale-jwt": {
+    "intended_behavior": "Changing a password must invalidate other pre-change Account bearers.",
+    "remediation": "Add a password epoch or session version to Account JWTs and verify it against stored Account state in AccountAuthGuard.",
+    "severity": {"likelihood": {"score": "medium", "reason": "Requires prior possession of a valid bearer."}, "impact": {"score": "medium", "reason": "Retains owner capability inside the Account's own Organization."}, "overall_severity": "medium"}
+  },
+  "identity/register-addMember/unverified-email-membership": {
+    "intended_behavior": "Membership must be granted only to a principal that proves ownership of the invited email.",
+    "remediation": "Replace direct add-by-email with an invitation accepted from the mailbox-verified recipient before Membership activation.",
+    "severity": {"likelihood": {"score": "medium", "reason": "Requires the owner to add an email already pre-registered by an attacker."}, "impact": {"score": "medium", "reason": "Grants attacker Project read and creation rights in the victim Organization."}, "overall_severity": "medium"}
+  },
+  "identity/register-login/unthrottled-argon2-work": {
+    "intended_behavior": "Anonymous password work must be admitted under an effective rate and concurrency budget.",
+    "remediation": "Attach ThrottlerGuard to registration and login, or install an equivalent global admission guard, with a regression check on guard metadata.",
+    "severity": {"likelihood": {"score": "medium", "reason": "Requires reachable identity routes without upstream admission."}, "impact": {"score": "low", "reason": "Demonstrated admission gap and reached password work; no measured shared outage."}, "overall_severity": "low"}
+  },
+  "kiro-hooks.guard-shell.event-shape-fail-open": {
+    "intended_behavior": "The shell hook must bind the real event shape and fail closed when the command cannot be identified.",
+    "remediation": "Validate the documented Kiro event schema, reject missing or unknown command fields with a blocking exit code, and normalize the command before denylist matching.",
+    "severity": {"likelihood": {"score": "medium", "reason": "Requires a hook event shape outside the eight guessed fields or a semantically equivalent command."}, "impact": {"score": "low", "reason": "Developer-host guard bypass; no product-server boundary demonstrated."}, "overall_severity": "low"}
+  },
+  "packages/actuator/createDockerRestarter/compose-project-binding": {
+    "intended_behavior": "A Blessing must authorize only the signed service resource scope.",
+    "remediation": "Add a signed Project or Compose-project predicate to the signed action and container lookup, and verify returned container ownership before restart fan-out.",
+    "severity": {"likelihood": {"score": "medium", "reason": "Requires act mode, shared-daemon co-tenancy, and duplicate service labels."}, "impact": {"score": "medium", "reason": "Restarts containers belonging to another Compose project."}, "overall_severity": "medium"}
+  },
+  "packages/actuator/runtimeDecision/zeroed-policy-usage": {
+    "intended_behavior": "Runtime admission must evaluate policy with authoritative recorded usage.",
+    "remediation": "Resolve diagnosis-loop and daily-spend usage from the authoritative Project context before calling runtimeDecision, on both local and API admission paths.",
+    "severity": {"likelihood": {"score": "medium", "reason": "Requires an approved action delivered after limits are reached."}, "impact": {"score": "medium", "reason": "Executes a runtime action that current policy would deny."}, "overall_severity": "medium"}
+  },
+  "packages/events/src/consumer.ts:projectless-event-dedupe": {
+    "intended_behavior": "Event replay identity must be scoped by Project.",
+    "remediation": "Namespace publisher msgID and consumer completed-ID keys by [projectId, id] while preserving same-Project replay deduplication.",
+    "severity": {"likelihood": {"score": "medium", "reason": "Requires a predictable target Event ID and a shared consumer."}, "impact": {"score": "medium", "reason": "Suppresses another Project's observation without dispatch."}, "overall_severity": "medium"}
+  },
+  "packages/integrations/src/delivery.ts:permanent-collector-poison-retry": {
+    "intended_behavior": "One permanently invalid workload record must not block the shared Collector queue.",
+    "remediation": "Distinguish permanent validation failures from transient errors, quarantine or drop them, and continue with later records.",
+    "severity": {"likelihood": {"score": "medium", "reason": "Requires delegated control of a workload name or label."}, "impact": {"score": "low", "reason": "Demonstrated head-of-line blocking in a fixture; no measured service-wide outage."}, "overall_severity": "low"}
+  },
+  "packages/redactor/src/detectors.ts:email-unanchored-scan": {
+    "intended_behavior": "A bounded telemetry string must not cause disproportionate synchronous work.",
+    "remediation": "Anchor and bound the email detector's local part and impose a per-string scan limit before redaction.",
+    "severity": {"likelihood": {"score": "low", "reason": "Requires a long non-matching telemetry string within the accepted byte caps."}, "impact": {"score": "low", "reason": "Demonstrated cost growth; no measured delay to unrelated work."}, "overall_severity": "low"}
+  },
+  "packages/watcher/src/rules.ts:unbounded-temporal-samples": {
+    "intended_behavior": "Temporal sample storage and work must be bounded by the rule threshold and window.",
+    "remediation": "Cap the error and restart arrays at their thresholds and expire samples against wall clock rather than only the producer timestamp.",
+    "severity": {"likelihood": {"score": "low", "reason": "Requires repeated unique Events with stale or equal timestamps."}, "impact": {"score": "low", "reason": "Demonstrated growing element visits; no measured service impact."}, "overall_severity": "low"}
+  }
+}

@@ -1,7 +1,7 @@
 {
   "name": "graveshift",
   "displayName": "Graveshift",
-  "description": "SCAFFOLD: AI SRE incident triage via graveshift-mcp. Not functional.",
+  "description": "SCAFFOLD: AI SRE incident triage via the graveshift-mcp tools served by the Graveshift API. Not functional.",
   "version": "0.1.0",
   "keywords": ["incident", "on-call", "graveshift", "postmortem", "haunting"],
   "skills": ["skills/triage/SKILL.md"],

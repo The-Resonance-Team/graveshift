@@ -9,5 +9,12 @@
   "scripts": {
     "typecheck": "bun check --no-script",
     "test": "bun test"
+  },
+  "bin": {
+    "graveshift": "./src/cli.ts"
+  },
+  "dependencies": {
+    "@graveshift/core": "workspace:*",
+    "zod": "^4.6.7"
   }
 }

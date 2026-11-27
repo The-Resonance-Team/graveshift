@@ -9,5 +9,8 @@
   "scripts": {
     "typecheck": "bun check --no-script",
     "test": "bun test"
+  },
+  "dependencies": {
+    "@graveshift/core": "workspace:*"
   }
 }

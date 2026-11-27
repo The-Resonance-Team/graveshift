@@ -9,5 +9,10 @@
   "scripts": {
     "typecheck": "bun check --no-script",
     "test": "bun test"
+  },
+  "dependencies": {
+    "@graveshift/core": "workspace:*",
+    "@graveshift/integrations": "workspace:*",
+    "zod": "^4.6.7"
   }
 }

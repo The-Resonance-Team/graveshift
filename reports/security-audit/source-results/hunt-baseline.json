@@ -1,0 +1,567 @@
+{
+  "units": [
+    {
+      "coverage_id": "package.json%23workspaces::apps%2Fapi%2Fsrc%2Fapp.factory.ts%23createApp::package.json%23workspaces::ATTACK-CLASSES.md%23Obvious%20things",
+      "disposition": "blocked",
+      "reviewed_paths": [
+        ".env.example",
+        ".github/actions/setup-bun/action.yml",
+        ".github/dependabot.yml",
+        ".github/workflows/ci.yml",
+        ".github/workflows/codeql.yml",
+        ".gitignore",
+        ".kiro/settings/mcp.example.json",
+        "apps/api/package.json",
+        "apps/api/scripts/check-prisma-drift.ts",
+        "apps/api/src/app.factory.ts",
+        "apps/api/src/app.module.ts",
+        "apps/api/src/auth/controllers/oauth.controller.ts",
+        "apps/api/src/auth/env.schema.ts",
+        "apps/api/src/auth/services/nats-event-publisher.ts",
+        "apps/api/src/config/config.controller.ts",
+        "apps/api/src/config/config.module.ts",
+        "apps/api/src/config/env.schema.ts",
+        "apps/api/src/dto/validate-rules.dto.ts",
+        "apps/api/src/health.controller.ts",
+        "apps/api/src/identity/controllers/account.controller.ts",
+        "apps/api/src/identity/services/identity.service.ts",
+        "apps/api/src/internal/internal-config.controller.ts",
+        "apps/api/src/internal/internal.guard.ts",
+        "apps/api/src/main.ts",
+        "apps/api/src/mcp/mcp.module.ts",
+        "apps/api/src/metadata.ts",
+        "apps/api/src/rules.controller.ts",
+        "apps/api/src/rules.service.ts",
+        "apps/api/src/stdio.ts",
+        "apps/api/src/work-items/work-error.filter.ts",
+        "apps/api/test/openapi.e2e.test.ts",
+        "apps/api/test/setup.ts",
+        "apps/daemon/src/command-handler.ts",
+        "apps/daemon/src/config.ts",
+        "apps/daemon/src/fix-execution.ts",
+        "apps/daemon/src/fix-recording.ts",
+        "apps/daemon/src/read-handler.ts",
+        "apps/daemon/src/routes.ts",
+        "bun.lock",
+        "bunfig.toml",
+        "deploy/compose/bun.Dockerfile",
+        "deploy/compose/bun.Dockerfile.dockerignore",
+        "deploy/compose/demo.compose.yml",
+        "deploy/compose/graveshift.compose.yml",
+        "deploy/compose/nats/nats.conf",
+        "deploy/helm/graveshift/values.yaml",
+        "deploy/k8s/kustomization.yaml",
+        "deploy/k8s/networkpolicy.yaml",
+        "examples/haunted-candy-shop/.dockerignore",
+        "examples/haunted-candy-shop/Dockerfile",
+        "examples/haunted-candy-shop/graveshift.config.yaml",
+        "examples/haunted-candy-shop/src/app.ts",
+        "examples/haunted-candy-shop/src/candy-shop.test.ts",
+        "examples/haunted-candy-shop/src/haunt.ts",
+        "examples/haunted-candy-shop/src/metrics.ts",
+        "examples/haunted-candy-shop/src/worker.ts",
+        "graveshift.config.yaml",
+        "package.json",
+        "packages/actuator/src/handler.ts",
+        "packages/actuator/src/main.ts",
+        "packages/agents/package.json",
+        "packages/agents/src/config.ts",
+        "packages/api-contract/scripts/generate.ts",
+        "packages/config/package.json",
+        "packages/core/package.json",
+        "packages/fixer/src/pr-body.ts",
+        "packages/fixer/src/sandbox.ts",
+        "packages/gateway/src/adapters.ts",
+        "packages/mcp-client/scripts/drift-check.ts",
+        "packages/notifier-discord/src/index.ts",
+        "packages/work/src/errors.ts",
+        "scripts/check-nats-config.ts",
+        "scripts/test-database.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-baseline",
+          "reviewed_paths": [
+            ".env.example",
+            ".kiro/settings/mcp.example.json",
+            "graveshift.config.yaml",
+            "examples/haunted-candy-shop/graveshift.config.yaml",
+            "apps/api/src/auth/env.schema.ts",
+            "apps/api/src/config/env.schema.ts",
+            "packages/gateway/src/adapters.ts"
+          ],
+          "invariant": "Obvious 01: checked-in literal passwords, API keys, bearer values and private keys must not supply hidden production authentication authority.",
+          "method": "source",
+          "result": "Tracked-source keyword and common credential-signature searches covered apps, packages, scripts, deploy, .github, .kiro, powers, examples and the root configuration. Signature-shaped hits were synthetic tests, fixtures or detector expressions; no non-fixture production secret was identified. The allowed untracked example YAML also names environment variables rather than holding their values. .env.example:10-11,25-31,48-49,64 leaves authority-bearing values empty; .kiro/settings/mcp.example.json:14 is an explicit local placeholder. apps/api/src/auth/env.schema.ts:15-26 requires the JWT secret; apps/api/src/config/env.schema.ts:16-23,77-88,115 requires deployment secrets and rejects obvious placeholders. packages/gateway/src/adapters.ts:25-35,126-131 rejects missing or placeholder provider keys. Local database example defaults are addressed separately below. No real secret value is reproduced here.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-baseline",
+          "reviewed_paths": [
+            "apps/api/src/dto/validate-rules.dto.ts",
+            "deploy/k8s/kustomization.yaml",
+            "deploy/k8s/networkpolicy.yaml",
+            "deploy/helm/graveshift/values.yaml",
+            "packages/notifier-discord/src/index.ts"
+          ],
+          "invariant": "Obvious 02: security-related TODO, FIXME, HACK or XXX comments must not conceal an active authentication or validation bypass.",
+          "method": "source",
+          "result": "A case-insensitive search for all four markers and their authentication, validation, permission, secret, TLS and sandbox variants found no security-marker bypass in active application code. apps/api/src/dto/validate-rules.dto.ts:15 says the public validator is bounded until authentication ships; its two arrays are limited to 200 entries at lines 16-34, and its stateless behavior is traced in the Wildcard unit. deploy/k8s/networkpolicy.yaml:13 leaves egress allowlisting unfinished, and deploy/k8s/kustomization.yaml:7-11 leaves application/actuator manifests disabled; these are explicit deployment scaffolds assigned to deployment peers. deploy/helm/graveshift/values.yaml:1 and packages/notifier-discord/src/index.ts:1 do not implement hidden runtime routes. No TODO alone was promoted to a finding.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-baseline",
+          "reviewed_paths": [
+            "apps/api/src/app.factory.ts",
+            "apps/api/src/auth/env.schema.ts",
+            "apps/api/src/config/env.schema.ts",
+            "apps/api/test/openapi.e2e.test.ts",
+            "deploy/compose/bun.Dockerfile",
+            "graveshift.config.yaml"
+          ],
+          "invariant": "Obvious 03: debug and development surfaces must not be switchable by lower-trust request headers or parameters.",
+          "method": "source",
+          "result": "apps/api/src/app.factory.ts:42-45 chooses Swagger registration once from ConfigService.NODE_ENV and closes it for normalized production/prod values. No request-controlled debug switch, inspector flag, debug controller or bypass environment variable was identified in the runtime-registration search. deploy/compose/bun.Dockerfile:5 sets production; graveshift.config.yaml:3-5 binds the direct development API to loopback. apps/api/src/config/env.schema.ts:59 declares the strict boot environment enum, while apps/api/src/auth/env.schema.ts:9 retains an older permissive schema; neither takes request input. apps/api/test/openapi.e2e.test.ts:53-70 contains production and mixed-case UI-closure assertions, read as source only. The test-only ConfigService.set hook at lines 13-17 is outside production startup.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-baseline",
+          "reviewed_paths": [
+            "bunfig.toml",
+            "apps/api/test/setup.ts",
+            "packages/api-contract/scripts/generate.ts",
+            "apps/api/src/auth/env.schema.ts",
+            "apps/api/src/config/config.module.ts",
+            "apps/api/src/config/env.schema.ts",
+            "apps/api/src/main.ts",
+            "apps/api/src/identity/services/identity.service.ts",
+            "examples/haunted-candy-shop/src/haunt.ts",
+            "examples/haunted-candy-shop/src/candy-shop.test.ts",
+            "deploy/compose/graveshift.compose.yml",
+            ".github/workflows/ci.yml",
+            "scripts/check-nats-config.ts"
+          ],
+          "invariant": "Obvious 04: test, example and seed credentials must not be installed as default production identities or remote bypass credentials.",
+          "method": "source",
+          "result": "bunfig.toml:1-2 loads apps/api/test/setup.ts only under the test configuration; runtime start commands do not import that setup. packages/api-contract/scripts/generate.ts:8-22 supplies random ephemeral authentication values and closes the generated app without listening. apps/api/src/main.ts:9-14 connects and completes identity bootstrap before listening. IdentityService.bootstrap at apps/api/src/identity/services/identity.service.ts:49-62 uses only configured root credentials, only for an empty account store, hashes the password and requires a password change. The four root settings are optional together and have no credential default at apps/api/src/config/env.schema.ts:73-76,128-144. The older auth schema has a local database placeholder at apps/api/src/auth/env.schema.ts:10-14; RootConfigModule also registers the stronger root schema at apps/api/src/config/config.module.ts:28. The Compose database placeholder at deploy/compose/graveshift.compose.yml:109-116 is an actual local store default with a loopback publication, not a hidden API account. CI and scripts/check-nats-config.ts use explicitly dummy broker values in configuration checks. Demo fault-token defaults are empty and tokenMatches fails closed at examples/haunted-candy-shop/src/haunt.ts:5-11. No production importer of the test credentials was found.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-baseline",
+          "reviewed_paths": [
+            "apps/api/src/app.module.ts",
+            "apps/api/src/health.controller.ts",
+            "apps/api/src/config/config.controller.ts",
+            "apps/api/src/internal/internal-config.controller.ts",
+            "apps/api/src/internal/internal.guard.ts",
+            "apps/api/src/mcp/mcp.module.ts",
+            "apps/api/src/rules.controller.ts",
+            "apps/api/src/rules.service.ts",
+            "apps/api/src/dto/validate-rules.dto.ts",
+            "apps/daemon/src/routes.ts",
+            "packages/actuator/src/handler.ts",
+            "examples/haunted-candy-shop/src/app.ts",
+            "examples/haunted-candy-shop/src/worker.ts",
+            "examples/haunted-candy-shop/src/metrics.ts"
+          ],
+          "invariant": "Obvious 05: public debug, administrative, test, status, health, metrics, environment and configuration routes must not expose hidden authority or secrets.",
+          "method": "source",
+          "result": "Controller annotations, AppModule imports and handwritten Bun routers were inventoried. API health returns only status at apps/api/src/health.controller.ts:8-14. Daemon health is similarly constant at apps/daemon/src/routes.ts:6-15; its private branches dispatch to their authenticated handlers at lines 22-27. The actuator exposes constant health and the signed-action handler, not an unauthenticated management console, at packages/actuator/src/handler.ts:29-46. Config export has throttling and an OAuth guard at apps/api/src/config/config.controller.ts:30; internal config has InternalGuard at apps/api/src/internal/internal-config.controller.ts:8-10, which checks the required token at apps/api/src/internal/internal.guard.ts:16-23. MCP HTTP registration pairs bearer/scope guards at apps/api/src/mcp/mcp.module.ts:81-90; deeper scope behavior remains peer-owned. The anonymous rules endpoint computes a caller-supplied validation result without persistence. Demo /metrics returns request statistics, RSS and application counters at examples/haunted-candy-shop/src/metrics.ts:27-45; fault mutations separately require configured tokens. No /debug, /admin, /test, /env, /.env, directory-static-file middleware or unauthenticated config route was found.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-baseline",
+          "reviewed_paths": [
+            ".gitignore",
+            ".env.example"
+          ],
+          "invariant": "Obvious 06: tracked .env files, credential JSON files and private-key files must not carry deployable secrets.",
+          "method": "source",
+          "result": "Git's tracked-path inventory for .env variants, credentials.json, *.pem and *.key returned only .env.example; no tracked secret-bearing file of the other requested forms was present. The example contains empty authority-bearing values and explicitly marked local placeholders. A name-only search of available Git history also found no committed .env, .env.local, .env.production, PEM, key or credentials.json path under the searched forms. Ignored target-local environment and MCP settings files were not opened. This is a source-inventory result, not a claim about external secret stores or all possible secret encodings.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-baseline",
+          "reviewed_paths": [
+            ".gitignore",
+            "deploy/compose/bun.Dockerfile.dockerignore",
+            "examples/haunted-candy-shop/.dockerignore"
+          ],
+          "invariant": "Obvious 07: ignore rules must cover expected environment secrets and local settings, and gaps must be distinguished from an actual exposed file.",
+          "method": "source",
+          "result": ".gitignore:8-11 excludes .graveshift, .env and .env variants while retaining .env.example; lines 16-17 exclude the two local Kiro MCP settings files. The runtime Docker ignore file excludes .env* and .kiro at deploy/compose/bun.Dockerfile.dockerignore:3-4; the example Docker ignore also excludes .env*. Generic *.pem, *.key, credentials.json, uploads and arbitrary local YAML are not covered by the root ignore rules. No committed key file or HTTP upload/static-file exposure was established, so those omissions are hardening rather than a demonstrated disclosure.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-baseline",
+          "reviewed_paths": [
+            "package.json",
+            "apps/api/package.json",
+            "packages/config/package.json",
+            "packages/core/package.json",
+            "packages/agents/package.json",
+            "bun.lock",
+            ".github/actions/setup-bun/action.yml",
+            ".github/workflows/ci.yml",
+            ".github/dependabot.yml",
+            ".github/workflows/codeql.yml",
+            "deploy/compose/bun.Dockerfile",
+            "deploy/compose/graveshift.compose.yml",
+            "examples/haunted-candy-shop/Dockerfile"
+          ],
+          "invariant": "Obvious 08: dependency versions and installed resolution must be identifiable, and current known-vulnerability status must not be asserted without advisory evidence.",
+          "method": "source",
+          "result": "package.json:6 pins Bun; API direct third-party dependencies are exact versions at apps/api/package.json:31-52. Some library manifests retain SemVer ranges, including packages/config/package.json:17, packages/agents/package.json:16 and packages/core/package.json:50. bun.lock records exact workspace/dependency resolutions and integrity hashes; examples include Express 5.3.0 at line 1010, jsonwebtoken 9.0.3 at line 1146, qs 6.17.1 at line 1296 and undici 8.12.4 at line 1422. .github/actions/setup-bun/action.yml:11 and deploy/compose/bun.Dockerfile:9 require frozen installs; checked workflow actions use commit SHAs and container references use version tags. Dependabot configuration at .github/dependabot.yml:1-58 and CodeQL configuration at .github/workflows/codeql.yml:21-33 are present, but are not an advisory result. No current local advisory snapshot was supplied. External advisory requests and package-manager execution are prohibited, so current CVE applicability remains unresolved and this unit is blocked rather than declared clean.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-baseline",
+          "reviewed_paths": [
+            "apps/api/src/metadata.ts",
+            "packages/mcp-client/scripts/drift-check.ts",
+            "packages/fixer/src/sandbox.ts",
+            "apps/daemon/src/fix-execution.ts",
+            "apps/daemon/src/fix-recording.ts",
+            "apps/api/scripts/check-prisma-drift.ts",
+            "scripts/test-database.ts",
+            "scripts/check-nats-config.ts"
+          ],
+          "invariant": "Obvious 09: dynamic evaluation, imports and process execution must not introduce an unassigned request-controlled hidden execution path.",
+          "method": "source",
+          "result": "The source search found no JavaScript eval, new Function or vm.run path. RegExp.exec and fixed SQLite transaction strings were separated from OS execution hits. Real process sinks exist: packages/fixer/src/sandbox.ts:45-54 executes argv with an explicit environment after the isolation selection/probe at lines 151-210; apps/daemon/src/fix-execution.ts:193-195,220-224 obtains verification argv from operator configuration. Their untrusted-repository and verification authority boundaries are assigned to fixer peers and were not re-hunted. apps/daemon/src/fix-recording.ts:10-24 is imported by fixture code rather than the production launcher. Metadata imports at apps/api/src/metadata.ts:13-15 come from the local controller tree; drift-check imports at packages/mcp-client/scripts/drift-check.ts:16-24 use three fixed filenames. The remaining inspected Bun.spawn sites are local maintenance/test scripts with constructed argv. One-shot workflow process sinks remain with the workflow peers. No new remotely selected evaluation or fallback command was identified.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-baseline",
+          "reviewed_paths": [
+            "apps/api/src/app.factory.ts",
+            "apps/api/src/app.module.ts",
+            "apps/api/src/mcp/mcp.module.ts"
+          ],
+          "invariant": "Obvious 10: application CORS configuration must not combine wildcard or reflected origins with credentialed cross-origin access.",
+          "method": "source",
+          "result": "A tracked-source search for CORS, enableCors and Access-Control-Allow headers found no application CORS registration or wildcard/credential header assignment. apps/api/src/app.factory.ts:12-47 installs raw-body handling, DTO validation and the environment-gated Swagger UI without enabling CORS; apps/api/src/app.module.ts:34-77 adds no such middleware. MCP's registration at apps/api/src/mcp/mcp.module.ts:78-94 adds authentication decorators rather than a custom origin policy. This settles the literal application-header check; behavior added by an external proxy or dependency is not inferred from source.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-baseline",
+          "reviewed_paths": [
+            "apps/api/src/identity/controllers/account.controller.ts",
+            "apps/api/src/identity/services/identity.service.ts",
+            "apps/api/src/auth/controllers/oauth.controller.ts",
+            "apps/api/src/app.factory.ts"
+          ],
+          "invariant": "Obvious 11: security-sensitive application cookies must have appropriate HttpOnly, Secure and SameSite handling.",
+          "method": "source",
+          "result": "No application Set-Cookie, cookie setter, cookie parser or cookie-session registration was found. Account login returns an access_token JSON object through apps/api/src/identity/controllers/account.controller.ts:47-52 and apps/api/src/identity/services/identity.service.ts:90-105. OAuth similarly returns bearer JSON at apps/api/src/auth/controllers/oauth.controller.ts:28-34. apps/api/src/app.factory.ts configures no cookie middleware. Cookie attribute findings are therefore not applicable to the application-managed authentication paths reviewed; bearer transport and session semantics remain the corresponding peers' boundaries.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-baseline",
+          "reviewed_paths": [
+            "apps/api/src/app.factory.ts",
+            "apps/api/src/identity/controllers/account.controller.ts",
+            "apps/api/src/auth/controllers/oauth.controller.ts",
+            "packages/fixer/src/pr-body.ts",
+            "apps/daemon/src/config.ts"
+          ],
+          "invariant": "Obvious 12: redirect, return, next, url, goto and continue inputs must not feed an unchecked redirect response.",
+          "method": "source",
+          "result": "The source search found no application response.redirect, Location-header redirect or redirect_uri/returnUrl handler accepting these inputs. The account and OAuth controllers return JSON. The dashboard URL use at packages/fixer/src/pr-body.ts:15-35 builds a Markdown link, rejects credentials and non-HTTP(S) protocols, encodes the incident path and clears query/fragment; it is not an HTTP redirect endpoint. Internal origins at apps/daemon/src/config.ts:21-32 reject credentials, query and fragment and do not consume request redirect parameters. No lower-trust open-redirect path was identified.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-baseline",
+          "reviewed_paths": [
+            "apps/api/src/main.ts",
+            "graveshift.config.yaml",
+            "examples/haunted-candy-shop/graveshift.config.yaml",
+            "apps/daemon/src/config.ts",
+            "packages/actuator/src/main.ts",
+            "deploy/compose/graveshift.compose.yml",
+            "deploy/compose/demo.compose.yml",
+            "deploy/compose/nats/nats.conf",
+            "packages/agents/src/config.ts"
+          ],
+          "invariant": "Obvious 13: identify HTTP-only credential paths and establish their source-visible routing limits without assuming external TLS termination.",
+          "method": "source",
+          "result": "The API and actuator launchers create HTTP listeners without in-process TLS at apps/api/src/main.ts:14 and packages/actuator/src/main.ts:80-84. Both supplied Graveshift YAML files bind the direct API to 127.0.0.1. Daemon configuration explicitly requires a loopback HTTP origin at apps/daemon/src/config.ts:21-32. Support Compose publishes API/Postgres only on loopback at deploy/compose/graveshift.compose.yml:104,116 and publishes no actuator host port; demo ports are loopback at deploy/compose/demo.compose.yml:25,47. NATS declares mounted TLS material at deploy/compose/nats/nats.conf:15-19. Agent base URLs must be HTTPS without URL credentials at packages/agents/src/config.ts:71-74. Source therefore establishes local HTTP endpoints, not universal TLS enforcement. No off-host plaintext bearer exposure was established from the default routes; any alternative proxy/remote deployment assessment belongs to the assigned deployment and credential-transport peers.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-baseline",
+          "reviewed_paths": [
+            "apps/api/src/main.ts",
+            "apps/api/src/stdio.ts",
+            "apps/api/src/app.factory.ts",
+            "apps/api/src/work-items/work-error.filter.ts",
+            "packages/work/src/errors.ts",
+            "apps/daemon/src/command-handler.ts",
+            "apps/daemon/src/read-handler.ts",
+            "examples/haunted-candy-shop/src/app.ts",
+            "packages/actuator/src/handler.ts",
+            "apps/api/src/auth/services/nats-event-publisher.ts"
+          ],
+          "invariant": "Obvious 14: production error responses must not deliberately return exception stacks, host paths, SQL text or populated secret values.",
+          "method": "source",
+          "result": "No application response path explicitly serializes Error.stack or a raw Prisma exception. API startup emits a fixed message at apps/api/src/main.ts:21-23; stdio startup writes its error only to the trusted local process stderr at apps/api/src/stdio.ts:14-16. Known work errors are reduced to code/status/message at packages/work/src/errors.ts:54-55 and apps/api/src/work-items/work-error.filter.ts:4-10. Daemon unknown command/read failures use fixed 502 messages at apps/daemon/src/command-handler.ts:62-66 and apps/daemon/src/read-handler.ts:100-103. The demo catches exceptions and returns a fixed 500 at examples/haunted-candy-shop/src/app.ts:63-65; the actuator emits selected result fields at packages/actuator/src/handler.ts:57-64. One application-controlled exception merits hardening: apps/api/src/auth/services/nats-event-publisher.ts:34-39 places a connector error.message in a public ServiceUnavailableException. No source-proven case populating that message with a secret, SQL statement or host path was established, so it is not a disclosure candidate. Default framework and deployed error rendering were not executed or asserted as observed behavior.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": [
+        "Obvious 08 remains incomplete: current CVE/GHSA/OSV applicability to the exact bun.lock resolutions and container versions cannot be established from the supplied source. No current offline advisory snapshot is available, external requests are prohibited, and no package-manager audit command may be run. A trusted parent or owner can compare the locked versions with a dated advisory export without executing the project. No vulnerable dependency or severity is asserted."
+      ]
+    },
+    {
+      "coverage_id": "package.json%23workspaces::apps%2Fapi%2Fsrc%2Fapp.factory.ts%23createApp::package.json%23workspaces::ATTACK-CLASSES.md%23Wildcard",
+      "disposition": "covered",
+      "reviewed_paths": [
+        ".env.example",
+        ".kiro/agents/chaos-witch.json",
+        ".kiro/agents/docs-scribe.json",
+        ".kiro/agents/sre-reviewer.json",
+        ".kiro/hooks/block-dangerous-shell.json",
+        ".kiro/hooks/pbt-on-guardrails.json",
+        ".kiro/hooks/secret-scan-on-save.json",
+        ".kiro/hooks/typecheck-on-save.json",
+        ".kiro/settings/mcp.example.json",
+        "apps/api/package.json",
+        "apps/api/src/app.factory.ts",
+        "apps/api/src/app.module.ts",
+        "apps/api/src/auth/auth.config.module.ts",
+        "apps/api/src/auth/auth.config.ts",
+        "apps/api/src/auth/env.schema.ts",
+        "apps/api/src/config/boot.config.ts",
+        "apps/api/src/config/config.module.ts",
+        "apps/api/src/config/config.provider.ts",
+        "apps/api/src/config/env.schema.ts",
+        "apps/api/src/dto/rule.dto.ts",
+        "apps/api/src/dto/validate-rules.dto.ts",
+        "apps/api/src/main.ts",
+        "apps/api/src/mcp/mcp.module.ts",
+        "apps/api/src/metadata.ts",
+        "apps/api/src/rules.controller.ts",
+        "apps/api/src/rules.service.ts",
+        "apps/api/src/stdio.ts",
+        "apps/api/test/rules-validate.e2e.test.ts",
+        "apps/api/test/setup.ts",
+        "apps/daemon/src/boot-config.ts",
+        "apps/daemon/src/fix-recording.ts",
+        "apps/daemon/src/main.ts",
+        "apps/daemon/src/platform.fixture.ts",
+        "apps/daemon/src/routes.ts",
+        "bunfig.toml",
+        "deploy/compose/demo.compose.yml",
+        "deploy/helm/graveshift/values.yaml",
+        "deploy/k8s/kustomization.yaml",
+        "examples/haunted-candy-shop/graveshift.config.yaml",
+        "examples/haunted-candy-shop/package.json",
+        "examples/haunted-candy-shop/src/app.ts",
+        "examples/haunted-candy-shop/src/candy-shop.test.ts",
+        "examples/haunted-candy-shop/src/config.ts",
+        "examples/haunted-candy-shop/src/db.ts",
+        "examples/haunted-candy-shop/src/haunt.ts",
+        "examples/haunted-candy-shop/src/worker.ts",
+        "graveshift.config.yaml",
+        "package.json",
+        "packages/actuator/src/handler.ts",
+        "packages/actuator/src/main.ts",
+        "packages/agents/agents",
+        "packages/agents/package.json",
+        "packages/api-contract/scripts/generate.ts",
+        "packages/config/src/load.ts",
+        "packages/config/src/schema.ts",
+        "packages/core/core",
+        "packages/core/package.json",
+        "packages/core/src/rules.ts",
+        "packages/mcp-client/scripts/drift-check.ts",
+        "packages/notifier-discord/src/index.ts",
+        "packages/policy/src/mode.ts",
+        "powers/graveshift/mcp.json",
+        "powers/graveshift/plugin.json",
+        "scripts/kiro/guard-shell.mjs",
+        "scripts/kiro/secret-scan.mjs"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-baseline",
+          "reviewed_paths": [
+            "package.json",
+            "apps/api/package.json",
+            "apps/api/src/app.module.ts",
+            "apps/api/src/app.factory.ts",
+            "apps/api/src/main.ts",
+            "apps/api/src/stdio.ts",
+            "apps/api/src/mcp/mcp.module.ts",
+            "apps/daemon/src/main.ts",
+            "apps/daemon/src/routes.ts",
+            "packages/actuator/src/main.ts",
+            "packages/actuator/src/handler.ts",
+            "powers/graveshift/mcp.json",
+            "powers/graveshift/plugin.json",
+            ".kiro/settings/mcp.example.json"
+          ],
+          "invariant": "Unadvertised, compatibility and alternate entrypoints must not create a runtime authority path outside the declared API, private daemon and signed actuator registrations.",
+          "method": "source",
+          "result": "Root workspaces are limited to apps/api, apps/daemon and packages/* at package.json:7-10. apps/api/package.json:7-8 starts main or the explicit local stdio context. HTTP main uses createApp and completes bootstrap before listen; AppModule lists the controller/modules that are registered. MCP's HTTP registration carries the guard decorators at apps/api/src/mcp/mcp.module.ts:81-90, while apps/api/src/stdio.ts:6-11 deliberately uses an application context with no HTTP listener. powers/graveshift/mcp.json:4-5 and .kiro/settings/mcp.example.json:19-20 select that same stdio command, not a separate legacy server. The plugin's 'not functional' description is stale registration documentation, not a runtime security gate. apps/daemon/src/routes.ts:22-27 exposes only the two private branches and constant health; the actuator router selects health or POST /actions. No additional hidden admin/debug listener or fallback authentication transport was found. Deep HTTP/MCP, local-IPC and actuator authorization invariants remain with their named peers.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-baseline",
+          "reviewed_paths": [
+            "apps/api/src/rules.controller.ts",
+            "apps/api/src/rules.service.ts",
+            "apps/api/src/dto/validate-rules.dto.ts",
+            "apps/api/src/dto/rule.dto.ts",
+            "packages/core/src/rules.ts",
+            "apps/api/test/rules-validate.e2e.test.ts"
+          ],
+          "invariant": "The unguarded rule-confirmation API must not use caller-supplied systemRules or confirmOverrides to modify effective policy or another principal's stored rules.",
+          "method": "source",
+          "result": "Traced POST /api/rules/validate at apps/api/src/rules.controller.ts:22-34 through RulesService.validate at apps/api/src/rules.service.ts:9-13 to confirmRuleOverrides/detectRuleOverrides at packages/core/src/rules.ts:47-57,123-135. Both systemRules and clientRules belong entirely to the request; the functions build a Set, return sorted matching IDs and construct a warning. No repository, gateway, audit, policy writer, filesystem writer or downstream action is called. DTO validation bounds each layer to 200 rules at apps/api/src/dto/validate-rules.dto.ts:16-34, validates nested fields and requires a boolean confirmation when supplied. Changing confirmation only changes the 200/409 validation result. The source tests at apps/api/test/rules-validate.e2e.test.ts:109-132,142-190 exercise no-write semantics, count limits, unknown fields and nulls. This anomaly is a stateless public helper, not an authorization bypass or a source-demonstrated shared-availability failure.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-baseline",
+          "reviewed_paths": [
+            "examples/haunted-candy-shop/package.json",
+            "examples/haunted-candy-shop/src/app.ts",
+            "examples/haunted-candy-shop/src/haunt.ts",
+            "examples/haunted-candy-shop/src/config.ts",
+            "examples/haunted-candy-shop/src/db.ts",
+            "examples/haunted-candy-shop/src/worker.ts",
+            "examples/haunted-candy-shop/src/candy-shop.test.ts",
+            "deploy/compose/demo.compose.yml"
+          ],
+          "invariant": "Fault-injection and memory/database fallback features must not allow an anonymous caller to mutate demo runtime state or select an arbitrary host resource.",
+          "method": "source",
+          "result": "The demo is a separate non-workspace package with explicit API/worker launchers at examples/haunted-candy-shop/package.json:9-14. createHaunt checks the method/path and configured token before parsing or applying a scenario at examples/haunted-candy-shop/src/haunt.ts:23-46; empty tokens deny at lines 5-6. Reset uses OWNER_TOKEN, while fault injection uses HAUNT_TOKEN. The requested scenario must match the fixed list at examples/haunted-candy-shop/src/config.ts:1-11. The database swap selects only operator-supplied normal/stale URLs at lines 15-20, and the memory database fallback contains fixed demo candies at examples/haunted-candy-shop/src/db.ts:18-43. The retaining worker buffer grows only after the authorized memory-leech scenario at examples/haunted-candy-shop/src/worker.ts:21-23. Test-source cases at examples/haunted-candy-shop/src/candy-shop.test.ts:35-57 include missing/wrong tokens and owner-only reset. The Compose file supplies no fault-token default and publishes the API/worker on loopback at deploy/compose/demo.compose.yml:19-20,25,47. These intentional authorized faults do not establish a hidden production control path.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-baseline",
+          "reviewed_paths": [
+            "packages/config/src/load.ts",
+            "packages/config/src/schema.ts",
+            "apps/api/src/config/config.module.ts",
+            "apps/api/src/config/config.provider.ts",
+            "apps/api/src/config/boot.config.ts",
+            "apps/api/src/config/env.schema.ts",
+            "apps/api/src/auth/env.schema.ts",
+            "apps/api/src/auth/auth.config.module.ts",
+            "apps/api/src/auth/auth.config.ts",
+            "graveshift.config.yaml",
+            "examples/haunted-candy-shop/graveshift.config.yaml",
+            ".env.example"
+          ],
+          "invariant": "Compatibility configuration and environment fallbacks must not let a request select local files, resolve secret values into exported configuration or weaken frozen operator authority.",
+          "method": "source",
+          "result": "packages/config/src/load.ts:14-27 selects the committed default file or the operator's GRAVESHIFT_CONFIG_PATH and parses it once; no request parameter is involved. The root object and boot/fix objects are strict at packages/config/src/schema.ts:10-15,17-43,66-75. GraveshiftConfigModule loads/freezeDeep at apps/api/src/config/config.module.ts:14-18, with recursive freezing in apps/api/src/config/config.provider.ts:5-10; RootBootConfig is separately frozen at apps/api/src/config/boot.config.ts:34-40,60-74. API keys and GitHub keys remain environment-variable names in both reviewed YAML files and in the schema, not resolved values. Older auth env/config/provider definitions coexist with RootConfigModule and merit cleanup, but both auth provider factories only read the configured JWT secret, neither substitutes a default key, and no lower-trust selector can choose between them. The local database default is an operator-bootstrap concern rather than a remotely set fallback. No config mutation or secret-resolution bypass was established; detailed config-export scope behavior was left with its peer owner.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-baseline",
+          "reviewed_paths": [
+            "bunfig.toml",
+            "apps/api/test/setup.ts",
+            "packages/api-contract/scripts/generate.ts",
+            "apps/api/src/metadata.ts",
+            "packages/mcp-client/scripts/drift-check.ts",
+            "apps/daemon/src/fix-recording.ts",
+            "apps/daemon/src/platform.fixture.ts",
+            "package.json",
+            "packages/agents/agents",
+            "packages/core/core",
+            "packages/agents/package.json",
+            "packages/core/package.json"
+          ],
+          "invariant": "Disconnected test implementations, generated-metadata helpers and stray source links must not become hidden production code or source readers.",
+          "method": "source",
+          "result": "Production import searches did not connect test setup, fake identity/credential adapters or githubRecording/gitChecks to runtime launchers. The recording helpers are used by apps/daemon/src/platform.fixture.ts:12,47,106. Metadata imports are restricted to the local controller-tree enumeration at apps/api/src/metadata.ts:13-15; drift-check enumerates three literal modules at packages/mcp-client/scripts/drift-check.ts:16-24. The contract-generation helper sets random temporary keys and never listens at packages/api-contract/scripts/generate.ts:8-22. Git records packages/agents/agents and packages/core/core as symlinks pointing outside the repository; their link contents were inspected with git show without following them. Workspace discovery at package.json:7-10 and explicit exports at packages/agents/package.json:6-10 and packages/core/package.json:29-40 do not select those nested links, and core's published file list at lines 8-19 omits them. No runtime consumer of the stray links was identified. Their presence is repository hygiene, not an established file-disclosure or authority path.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-baseline",
+          "reviewed_paths": [
+            "packages/policy/src/mode.ts",
+            "graveshift.config.yaml",
+            "apps/api/src/config/env.schema.ts",
+            "apps/daemon/src/boot-config.ts",
+            "apps/daemon/src/main.ts",
+            "packages/actuator/src/main.ts",
+            "deploy/helm/graveshift/values.yaml",
+            "deploy/k8s/kustomization.yaml",
+            "packages/notifier-discord/src/index.ts",
+            "powers/graveshift/plugin.json"
+          ],
+          "invariant": "Invalid mode, unavailable optional components and incomplete scaffolds must not silently enable a stronger runtime capability or alternate approval collector.",
+          "method": "source",
+          "result": "packages/policy/src/mode.ts:3-20 orders dry-run/propose/act, preserves policy mode for an unknown override and refuses an override with greater authority. The committed config defaults to propose and fix.enabled false at graveshift.config.yaml:62,105-106. API boot defaults model spending to zero at apps/api/src/config/env.schema.ts:106-113. Daemon boot reads authenticated API configuration and refuses startup with no granted Project at apps/daemon/src/boot-config.ts:21-23 and apps/daemon/src/main.ts:41-47. The actuator refuses missing/short HMAC configuration at packages/actuator/src/main.ts:19-25 and unavailable durable admission at lines 49-65; its local audit acknowledgement limitation is explicit at lines 38-41,71 and remains with the actuator peer. Helm/Kubernetes files are marked scaffold and do not include a Deployment; packages/notifier-discord/src/index.ts implements no approval listener. No hidden Discord approval, model fallback with elevated mode, or executable Helm fallback was identified. Full action approval, budget concurrency and publication recovery were not duplicated from peer assignments.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-baseline",
+          "reviewed_paths": [
+            ".env.example",
+            "apps/api/src/auth/env.schema.ts",
+            "apps/api/src/app.factory.ts",
+            "scripts/kiro/secret-scan.mjs"
+          ],
+          "invariant": "Available history and security-tool remnants must not reveal a removed production secret or a reverted security gate that still supplies current hidden authority.",
+          "method": "source",
+          "result": "Read the current/recent commit subjects and performed name-only history searches for committed environment, credential JSON and key files; none of those secret-file forms was found. A history search for common key signatures and hardcoded-secret changes returned synthetic fixture/detector files and the JWT environment-schema hardening, not a source-established retired production credential. Revert-related subjects found an unrelated contrast-helper revert/reapply and test/refactor history; no current runtime security bypass was established from them. The current JWT schema still requires a configured key at apps/api/src/auth/env.schema.ts:15-26 and current Swagger registration still gates production at apps/api/src/app.factory.ts:42-45. This was a bounded source/history inspection, not a claim that every historical byte or external credential is safe.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-baseline",
+          "reviewed_paths": [
+            ".kiro/agents/chaos-witch.json",
+            ".kiro/agents/docs-scribe.json",
+            ".kiro/agents/sre-reviewer.json",
+            ".kiro/hooks/block-dangerous-shell.json",
+            ".kiro/hooks/secret-scan-on-save.json",
+            ".kiro/hooks/typecheck-on-save.json",
+            ".kiro/hooks/pbt-on-guardrails.json",
+            "scripts/kiro/guard-shell.mjs",
+            "scripts/kiro/secret-scan.mjs"
+          ],
+          "invariant": "Unexpected authority outside registered product runtimes must be assigned its own boundary rather than implicitly covered by a runtime baseline pass.",
+          "method": "source",
+          "result": "The source inventory identified a distinct development-tool boundary: checked-in Kiro agents deny shell access, while hooks independently process tool/save events and launch commands. .kiro/hooks/block-dangerous-shell.json:7-10 invokes scripts/kiro/guard-shell.mjs; that script accepts several event shapes at lines 16-43 and allows empty/unrecognized command input at lines 45-55. .kiro/hooks/secret-scan-on-save.json:7-10 invokes scripts/kiro/secret-scan.mjs, whose missing/unreadable-file paths exit successfully at lines 57-64. Save hooks launch project checks at .kiro/hooks/typecheck-on-save.json:7-10 and .kiro/hooks/pbt-on-guardrails.json:7-12. This is not the peer-owned powers MCP registration boundary and is recorded in uncovered for a dedicated event-shape/enforcement/host-authority unit. No hook was executed, no restricted-agent bypass is asserted, and no runtime vulnerability candidate is inferred from the hook configuration alone.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    }
+  ],
+  "candidates": [],
+  "hardening": [
+    ".gitignore:8-17 covers environment variants and local MCP settings but lacks generic private-key, credential-JSON, uploads and alternate local-config patterns. Add narrowly chosen patterns with explicit exceptions for intended fixtures; no committed key file or upload disclosure was established.",
+    "Consolidate apps/api/src/auth/env.schema.ts and apps/api/src/auth/auth.config.module.ts with the root env/config definitions in apps/api/src/config/config.module.ts and apps/api/src/config/env.schema.ts. The old database default and duplicate auth providers make precedence harder to assess, although no request-controlled fallback or default JWT secret was found.",
+    "apps/api/src/auth/services/nats-event-publisher.ts:34-39 reflects connector error.message in a ServiceUnavailableException. Prefer a fixed client-facing broker-unavailable message with separately controlled diagnostics. A populated sensitive connector error was not established, so this is not a disclosure finding.",
+    "Direct API and actuator launchers do not enforce TLS themselves. Preserve the source-visible loopback/private publication model, and specify TLS termination when an operator chooses an off-host public binding. No off-host plaintext credential exposure was established from the supplied defaults.",
+    "Review the stray tracked symlinks packages/agents/agents and packages/core/core, which point outside the repository. They were not followed and no runtime/export consumer was identified; their current presence is a source-hygiene issue rather than a demonstrated boundary violation."
+  ],
+  "uncovered": [
+    {
+      "surface": "Kiro development agents and command/save hooks",
+      "boundary": "Lower-trust tool/save event data and restricted-agent source writes to developer-host hook commands and security-control decisions",
+      "subsystem": ".kiro/hooks",
+      "attack_class": "Local development-hook authorization, event-shape binding and fail-open enforcement",
+      "starting_paths": [
+        ".kiro/agents/chaos-witch.json",
+        ".kiro/agents/docs-scribe.json",
+        ".kiro/agents/sre-reviewer.json",
+        ".kiro/hooks/block-dangerous-shell.json",
+        ".kiro/hooks/secret-scan-on-save.json",
+        ".kiro/hooks/typecheck-on-save.json",
+        ".kiro/hooks/pbt-on-guardrails.json",
+        "scripts/kiro/guard-shell.mjs",
+        "scripts/kiro/secret-scan.mjs"
+      ],
+      "reason": "This newly identified boundary is distinct from runtime HTTP/MCP authorization and the peer-owned powers/graveshift MCP plugin registration. Shell-denying agent definitions coexist with independently launched hook commands; the command guard accepts multiple event shapes and the scanner succeeds for missing/unreadable inputs. A deterministic unit should establish Kiro's actual event schema, whether malformed/missing hook input blocks the tool, which principal and environment run save hooks, and whether restricted-agent writes can influence a more privileged hook effect. Those facts were not assumed or tested in this source-only runtime baseline; the configuration alone does not establish a vulnerability."
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "lead": "deploy/compose/api-service-overlay-retains-control-plane-authority",
+  "verdict": "confirmed",
+  "observed": {
+    "method": "Trusted parent-side `docker compose config --format json` on a scratch copy of the two maintained manifests, with the api profile enabled and an 11-key dummy environment.",
+    "unchanged_pair_validation": "Compose v5.5.0 rejects the unmodified pair: services.api.security_opt contains duplicate no-new-privileges:true entries from the two YAML merges.",
+    "scratch_fixture_change": "The demo copy replaced its security_opt line with `security_opt: !reset [no-new-privileges:true]` so the merge could render; no platform source was edited.",
+    "rendered_api": {
+      "image": "haunted-candy-shop:local",
+      "build_context_absolute": "/Users/xirothedev/security-audit-skill/graveshift/run-1/examples/haunted-candy-shop",
+      "build_dockerfile": "deploy/compose/bun.Dockerfile",
+      "command": ["bun", "src/main.ts"],
+      "profiles": ["api"],
+      "networks": ["candy", "core"]
+    },
+    "platform_credential_environment_keys_present": [
+      "GRAVESHIFT_API_INTERNAL_TOKEN",
+      "GRAVESHIFT_DAEMON_INTERNAL_TOKEN",
+      "GRAVESHIFT_OAUTH_JWT_SECRET",
+      "GRAVESHIFT_ROOT_ADMIN_EMAIL",
+      "GRAVESHIFT_ROOT_ADMIN_PASSWORD",
+      "GRAVESHIFT_ROOT_ORG_NAME",
+      "GRAVESHIFT_ROOT_ORG_SLUG"
+    ],
+    "dummy_marker_delivered": true,
+    "marker_value_note": "A dummy 32-character marker was used; no real secret was read or copied."
+  },
+  "reason": "When the api profile is enabled, the merged services.api selects the examples-controlled image while retaining the platform credential environment fields and the core network. The unchanged pair fails Compose v5 validation because of a duplicate security_opt item; resolving that in a scratch copy produced the rendered result."
+}

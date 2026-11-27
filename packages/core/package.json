@@ -1,13 +1,52 @@
 {
   "name": "@graveshift/core",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
+  "license": "Apache-2.0",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "src/index.ts",
+    "src/contract.ts",
+    "src/policy-context.ts",
+    "src/errors.ts",
+    "src/rules.ts",
+    "src/runtime-source.ts",
+    "src/schemas.ts",
+    "src/state.ts",
+    "src/work-item.ts"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/The-Resonance-Team/graveshift.git",
+    "directory": "packages/core"
+  },
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "bun": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./contract": {
+      "bun": "./src/contract.ts",
+      "types": "./dist/contract.d.ts"
+    },
+    "./recorded": "./src/recorded.ts",
+    "./policy-context": "./src/policy-context.ts"
   },
   "scripts": {
+    "build": "bun build src/index.ts --target=node --packages=external --outfile=dist/index.js && bunx tsc --project tsconfig.build.json --emitDeclarationOnly && bun ../../scripts/finalize-contract.ts",
+    "prepack": "bun run build",
     "typecheck": "bun check --no-script",
     "test": "bun test"
+  },
+  "dependencies": {
+    "@graveshift/redactor": "workspace:*",
+    "zod": "^4.6.7"
   }
 }

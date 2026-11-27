@@ -1,0 +1,162 @@
+{
+  "decision": "needs_validation",
+  "record": {
+    "verdict": "needs_validation",
+    "fingerprint": "apps/daemon/src/reads.ts:collector-evidence-without-project",
+    "title": "Collector evidence selection drops Project authorization",
+    "description": "A caller holding an MCP Credential for one granted Project can select any service name for tail_logs and any daemon-allowlisted metric job. The API supplies the authenticated Project (the bearer guard enters it into McpProjectContext, and HttpMcpBackend.read includes it in the private daemon request) and the daemon checks grant membership, but the final collector reads no longer receive that Project: createReadHandler dispatches logs and metric without projectId, ReadRuntime declares logs(service,lines) and metric(promql) with no Project parameter, services(projectId) returns the entire global collector inventory with only an incident-state overlay, CollectorReads has no Project ownership contract, and the metric allowlist is derived from every configured job. In a deployment where one daemon observes evidence reserved for another Project or Organization, the source path would return that evidence using the daemon's Docker, Kubernetes or Prometheus authority. Redaction removes recognized sensitive strings but leaves ordinary private operational log text and numeric metrics visible. This requires a valid narrow-scope MCP Credential, a reachable real Project context, and a collector resource outside that Project's authorized scope; no such disclosure was executed or observed during this source-only review. The Event-driven diagnosis path reaches the same host-wide log reader: observations supplies an Event Project to its logs callback, but the production main callback accepts only (service, lines) and drops the Project before ReadRuntime.logs. Ordinary private log text can therefore enter the wrong Project's model context under the same ownership conditions, independently of an MCP HTTP context handoff. No provider request or persisted diagnosis was observed. Source review found no ownership predicate on any collector read path; the grant check, strict command schema, unique service match, namespace filter, exact PromQL allowlist and redaction constrain selection or content but do not bind the selected resource to the authenticated Project.",
+    "claimed_root_cause": "ReadRuntime treats collector evidence as host-wide after checking only whether the caller's Project appears in the daemon grant. Its logs and metric methods have no projectId parameter, inventory is not filtered by Project, CollectorReads has no Project ownership contract, and the configured metric allowlist is global. The service uniqueness check and namespace/job allowlists constrain selection but do not bind the selected resource to the authenticated Project.",
+    "trace": [
+      {
+        "kind": "entrypoint",
+        "file": "apps/api/src/mcp/mcp-token.verifier.ts",
+        "line": 48,
+        "scope": "McpBearerGuard.canActivate",
+        "description": "The external MCP caller presents a Credential; verification supplies its stored scopes and Project and attempts to bind that Project for the request via McpProjectContext.enter."
+      },
+      {
+        "kind": "propagation",
+        "file": "apps/api/src/mcp/mcp.permissions.ts",
+        "line": 21,
+        "scope": "PRIMITIVES",
+        "description": "tail_logs requires logs:read (line 21) and query_metric requires metrics:read (line 22), without adding resource ownership restrictions."
+      },
+      {
+        "kind": "propagation",
+        "file": "apps/api/src/mcp/mcp.tools.ts",
+        "line": 234,
+        "scope": "McpTools.tailLogs",
+        "description": "The accepted service selector and bounded line count (max 200) are passed to the backend."
+      },
+      {
+        "kind": "propagation",
+        "file": "apps/api/src/mcp/mcp.backend.ts",
+        "line": 52,
+        "scope": "HttpMcpBackend.read",
+        "description": "The API requires the authenticated Project and includes it with the selector in a POST to the private daemon read endpoint."
+      },
+      {
+        "kind": "propagation",
+        "file": "apps/daemon/src/read-handler.ts",
+        "line": 72,
+        "scope": "createReadHandler",
+        "description": "The daemon bearer, strict command schema and granted Project are checked; lines 89-93 then dispatch logs and metric without projectId."
+      },
+      {
+        "kind": "propagation",
+        "file": "apps/daemon/src/reads.ts",
+        "line": 104,
+        "scope": "createReadRuntime.logs",
+        "description": "The runtime finds the requested service in global collector inventory, requires one matching source and invokes tailLogs without an ownership query."
+      },
+      {
+        "kind": "propagation",
+        "file": "packages/sources-docker/src/source.ts",
+        "line": 39,
+        "scope": "createDockerCollector.containerOf",
+        "description": "The Docker variant searches all API-visible containers only by serviceName; no Project value is available to filter the target."
+      },
+      {
+        "kind": "propagation",
+        "file": "packages/sources-docker/src/api.ts",
+        "line": 94,
+        "scope": "DockerApi.logs",
+        "description": "The selected container id is safely URL-encoded and its logs are read using the daemon's configured Docker endpoint authority."
+      },
+      {
+        "kind": "sink",
+        "file": "apps/api/src/mcp/mcp.tools.ts",
+        "line": 236,
+        "scope": "McpTools.tailLogs response",
+        "description": "Returned log text is redacted and wrapped in untrusted_logs tags, then disclosed to the original MCP caller without checking the selected service's Project."
+      }
+    ],
+    "evidence": [
+      {
+        "file": "docs/adr/0023-organization-is-the-tenant-root.md",
+        "line": 6,
+        "description": "The current product serves multiple Organizations in one deployment and derives scope from the authenticated request."
+      },
+      {
+        "file": "apps/daemon/src/main.ts",
+        "line": 50,
+        "description": "Collectors are bootstrapped with the first granted Project; lines 85-90 construct one shared read runtime from their sources and metric jobs, and lines 129-134 expose it to every granted Project."
+      },
+      {
+        "file": "apps/daemon/src/read-handler.ts",
+        "line": 72,
+        "description": "The strongest Project gate is membership in options.projectIds. Lines 89-93 discard that Project for log and metric dispatch."
+      },
+      {
+        "file": "apps/daemon/src/reads.ts",
+        "line": 77,
+        "description": "services(projectId) returns every inventory item and overlays only Project-specific incident state; logs selects global inventory and metric checks a global job-derived allowlist."
+      },
+      {
+        "file": "packages/integrations/src/reads.ts",
+        "line": 15,
+        "description": "CollectorReads exposes inventory and log reads without any Project argument or ownership field."
+      },
+      {
+        "file": "packages/sources-docker/src/source.ts",
+        "line": 139,
+        "description": "Docker inventory includes all API-visible containers and log selection resolves only the service name."
+      },
+      {
+        "file": "packages/sources-k8s/src/source.ts",
+        "line": 40,
+        "description": "Kubernetes filters a daemon-wide namespace list. Lines 171-185 enumerate those deployments and read a selected pod's logs without a requesting Project."
+      },
+      {
+        "file": "apps/daemon/src/collectors.ts",
+        "line": 99,
+        "description": "metricJobs contains all configured metric-target jobs, with no Project association."
+      },
+      {
+        "file": "apps/daemon/src/reads.ts",
+        "line": 113,
+        "description": "The metric variant admits exact WATCHER_QUERIES for any configured job and invokes the shared metrics client. Exact query equality prevents arbitrary PromQL but does not provide tenant isolation."
+      },
+      {
+        "file": "apps/api/test/mcp-http.e2e.test.ts",
+        "line": 52,
+        "description": "The existing HTTP source test replaces MCP_BACKEND with a fake, so its success assertions do not establish the real bearer-to-backend Project-context handoff."
+      },
+      {
+        "file": "apps/api/src/mcp/mcp-daemon-read.fixture.ts",
+        "line": 130,
+        "description": "The adapter fixture substitutes McpProjectContext with a fixed Project, leaving production async-context propagation untested by that fixture."
+      },
+      {
+        "file": "apps/daemon/src/observations.ts",
+        "line": 141,
+        "description": "The diagnosis path supplies service, 300 lines and the Event Project to its logs callback, then uses the returned logs in the Project-scoped diagnosis."
+      },
+      {
+        "file": "apps/daemon/src/main.ts",
+        "line": 121,
+        "description": "The production observation logs callback accepts only service and lines and calls the same Projectless ReadRuntime.logs method, dropping the Event Project."
+      },
+      {
+        "file": "packages/diagnoser/src/context.ts",
+        "line": 36,
+        "description": "Fetched logs become prepared diagnosis evidence; redaction and quotation validation do not add an ownership predicate."
+      },
+      {
+        "file": "packages/gateway/src/gateway.ts",
+        "line": 96,
+        "description": "The model adapter receives the prepared log context for the active diagnosis, establishing a source-visible alternate output path from the same wrongly scoped reader."
+      }
+    ],
+    "blockers": [
+      "No target code, tests, fixtures, builds or services were executed. Complete OS-enforced memory and cumulative-disk sandbox controls are unavailable, so the assignment prohibits the bounded behavioral check needed for confirmation.",
+      "The production bearer-guard-to-HttpMcpBackend AsyncLocalStorage Project handoff must be observed with the actual guard and context. Existing inspected tests replace either MCP_BACKEND (apps/api/test/mcp-http.e2e.test.ts:52) or McpProjectContext (apps/api/src/mcp/mcp-daemon-read.fixture.ts:130); a failed handoff could deny the call before the claimed disclosure.",
+      "No live collector configuration, workload ownership or deployment routing was inspected. The claimed cross-Project result needs a dummy fixture that explicitly reserves one collector service or metric job for one Project and grants a different Project access to the same daemon.",
+      "The Event-driven variant needs a separate dummy prompt-capture check. It does not depend on the MCP HTTP AsyncLocalStorage handoff; a return of that context through an actual model is not established or required by the minimum claimed prompt-placement result."
+    ],
+    "validation_plan": {
+      "local": "Once the parent establishes a complete OS sandbox, use two dummy numeric Projects, 1 and 2, in the daemon grant. Bind a dummy collector resource private-a and one nonsecret log sentinel to Project 1, then invoke the normal MCP HTTP path with a Project-2 Credential holding logs:read and tail_logs arguments {service:private-a,lines:1}. Keep McpBearerGuard, McpProjectContext, HttpMcpBackend, createReadHandler and createReadRuntime real; replace only infrastructure I/O and durable repositories with non-network dummy adapters. First verify the actual Project arriving at the daemon; if the context handoff fails closed, stop and do not claim disclosure. Otherwise assert that Project 2 receives no Project-1 sentinel. Repeat the same ownership invariant for list_services and a Project-2 metrics:read call using the exact configured query min(up{job=\"private-a\"}) with a distinct dummy numeric sample. Use no external network, no host sockets, an empty allowlisted environment, a read-only target/toolchain, scratch-only writes and low memory, CPU, process, file-size, cumulative-disk and wall-clock limits; stop after one wrong returned record or value. Independently exercise the Event-driven variant with a Project-2 runtime.oom Event naming the Project-1 workload, real observation/log-read composition and a fake model adapter. Stop when a Project-1 nonsecret private-log marker appears in the Project-2 adapter request; no real provider is called.",
+      "deployment": "The owner should inspect daemon Project grants, Collector startup ownership and the configured Docker/Kubernetes inventory offline to determine whether mutually private workloads share this evidence reader. Do not read real workload logs or send telemetry to a deployed instance for this check."
+    }
+  }
+}

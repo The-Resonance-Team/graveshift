@@ -1,16 +1,17 @@
 # Diagnoser + LLM — Design
 
 ## Interfaces
-- `LlmGateway.run(task, schema, input): LlmResult` — redact input, check budget, try providers in chain, validate schema + evidence, retry once, audit.
-- `LlmProvider` — `available()`, `generateObject()`.
-- `buildContext(incident): ContextBundle` — enforces size caps.
+- `diagnose({ gateway, agent }, input)` sends the context and selected Agent name to the gateway.
+- `Gateway.run(task)` redacts model input, applies budgets, calls the Agent model, validates the result and emits an audit event.
+- `buildContext(input)` keeps context within the size limits.
 
 ## Data flow
-Incident → redacted, bounded context → gateway → provider chain → schema + evidence validator → Diagnosis (or `needs_human`).
+Incident → redacted context → Agent model through the gateway → schema and evidence checks → Diagnosis.
 
 ## Error handling
-- Provider timeout/error → next in chain; schema-invalid output → one retry → `needs_human`.
-- Prompt content is data inside `<untrusted_*>` tags, never instructions.
+- Transport failures get the configured retries. Schema or evidence failures get one validation retry if budget remains.
+- Diagnosis uses rules-only when the model is unavailable, the budget is exhausted or output stays invalid. It returns `needs_human` if the fallback fails.
+- The model treats content inside `<untrusted_*>` tags as data.
 
 ## Testing
-- Recorded provider fixtures; schema-conformance per adapter; context-boundary tests; rules-only fallback test.
+- Replay recorded output through the gateway adapter with a local fetch fake. Check schema, context limits and rules-only fallback.

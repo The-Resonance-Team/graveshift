@@ -1,0 +1,69 @@
+{
+  "name": "wrong-potion",
+  "input": {
+    "incident": {
+      "id": "inc-1",
+      "service": "api",
+      "state": "diagnosing",
+      "signalIds": ["runtime.unhealthy:api:1", "log.error-burst:api:2"],
+      "openedAt": "2026-11-20T10:00:00.000Z",
+      "updatedAt": "2026-11-20T10:00:05.000Z"
+    },
+    "detections": [
+      {
+        "id": "runtime.unhealthy:api:1",
+        "rule": "runtime.unhealthy",
+        "service": "api",
+        "severity": "critical",
+        "fingerprint": "api:runtime.unhealthy",
+        "message": "3 consecutive failed health checks",
+        "observedAt": "2026-11-20T10:00:00.000Z"
+      },
+      {
+        "id": "log.error-burst:api:2",
+        "rule": "log.error-burst",
+        "service": "api",
+        "severity": "critical",
+        "fingerprint": "api:log.error-burst",
+        "message": "5 error lines in 60 s",
+        "observedAt": "2026-11-20T10:00:00.000Z"
+      }
+    ],
+    "logs": [
+      "DATABASE_URL_STALE=postgres://candy:s3cretpw9@postgres:5432/candy_stale",
+      "{\"level\": \"error\", \"message\": \"error: database \\\"candy_stale\\\" does not exist\", \"time\": \"2026-11-20T10:00:00.000Z\"}",
+      "{\"level\": \"error\", \"message\": \"error: database \\\"candy_stale\\\" does not exist\", \"time\": \"2026-11-20T10:00:01.000Z\"}",
+      "{\"level\": \"error\", \"message\": \"error: database \\\"candy_stale\\\" does not exist\", \"time\": \"2026-11-20T10:00:02.000Z\"}",
+      "{\"level\": \"error\", \"message\": \"error: database \\\"candy_stale\\\" does not exist\", \"time\": \"2026-11-20T10:00:03.000Z\"}",
+      "{\"level\": \"error\", \"message\": \"error: database \\\"candy_stale\\\" does not exist\", \"time\": \"2026-11-20T10:00:04.000Z\"}"
+    ],
+    "files": [
+      {
+        "path": "src/config.ts",
+        "content": "if (scenario === 'wrong-potion') {\n  return env.DATABASE_URL_STALE ?? 'postgres://stale:stale@postgres:5432/stale';\n}"
+      }
+    ],
+    "commits": [
+      {
+        "sha": "d4e5f6a",
+        "message": "chore: point the api at the staging database"
+      }
+    ]
+  },
+  "llmResponse": {
+    "category": "config_error",
+    "rootCause": "The api uses a stale DATABASE_URL pointing at a database that does not exist.",
+    "confidence": 0.82,
+    "evidence": [
+      {
+        "ref": "log:2",
+        "excerpt": "database \"candy_stale\" does not exist"
+      },
+      {
+        "ref": "signal:1",
+        "excerpt": "3 consecutive failed health checks"
+      }
+    ]
+  },
+  "expectedCategory": "config_error"
+}

@@ -1,0 +1,457 @@
+[
+  {
+    "agent_id": "recon-1a",
+    "phase": 1,
+    "session_id": "ses_dec7ad7d2ffeucFBTTykbU7uXx"
+  },
+  {
+    "agent_id": "recon-1b",
+    "phase": 1,
+    "session_id": "ses_dec7ad7d0ffeewy5Fs6NV1iUXN"
+  },
+  {
+    "agent_id": "recon-1c",
+    "phase": 1,
+    "session_id": "ses_dec7ad6dfffepg7umfpDoJ6Ytc"
+  },
+  {
+    "agent_id": "recon-1d",
+    "phase": 1,
+    "session_id": "ses_dec7ad6deffe89KRLAcYUaLr1w"
+  },
+  {
+    "agent_id": "hunt-identity",
+    "phase": 2,
+    "session_id": "ses_dec6fb6efffeYHkwz8CZjfCHIl"
+  },
+  {
+    "agent_id": "hunt-credentials",
+    "phase": 2,
+    "session_id": "ses_dec6fb6dfffe30eBHPOctApp52"
+  },
+  {
+    "agent_id": "hunt-ingest",
+    "phase": 2,
+    "session_id": "ses_dec6fb60dffe1mWju3plE7sIFL"
+  },
+  {
+    "agent_id": "hunt-data-work",
+    "phase": 2,
+    "session_id": "ses_dec6fb60dffdv4yxJqJlByhLyn"
+  },
+  {
+    "agent_id": "hunt-mcp-read",
+    "phase": 2,
+    "session_id": "ses_dec6fb608ffecoh5IcK8aWTfys"
+  },
+  {
+    "agent_id": "hunt-events-sources",
+    "phase": 2,
+    "session_id": "ses_dec6fb601ffepfnxO55Ziki9JC"
+  },
+  {
+    "agent_id": "hunt-model",
+    "phase": 2,
+    "session_id": "ses_dec6fb5cbffdFSsBR7xIsUJYMV"
+  },
+  {
+    "agent_id": "hunt-patch-fixer",
+    "phase": 2,
+    "session_id": "ses_dec6fb5c5ffds83ZTCNIp0pISL"
+  },
+  {
+    "agent_id": "hunt-actuator",
+    "phase": 2,
+    "session_id": "ses_dec6fb5bdffenwTipFAqVCOT14"
+  },
+  {
+    "agent_id": "hunt-supply-deploy",
+    "phase": 2,
+    "session_id": "ses_dec6fb5b3ffe2BkexWMl5dAhZv"
+  },
+  {
+    "agent_id": "hunt-baseline",
+    "phase": 2,
+    "session_id": "ses_dec6fb509ffeFPP1W4F7AvQx9t"
+  },
+  {
+    "agent_id": "critic-wave1",
+    "phase": 2,
+    "session_id": "ses_deae76510ffezYPXWn0BpwGFc2"
+  },
+  {
+    "agent_id": "hunt-kiro-hooks",
+    "phase": 2,
+    "session_id": "ses_deae7096cffedOYL5011rSBxfR"
+  },
+  {
+    "agent_id": "critic-final",
+    "phase": 2,
+    "session_id": "ses_deae3a86affemPnSgZlqpXtRq8"
+  },
+  {
+    "agent_id": "validate-01",
+    "phase": 3,
+    "session_id": "ses_deae3a869ffeFuku67B2aJZwJo"
+  },
+  {
+    "agent_id": "validate-02",
+    "phase": 3,
+    "session_id": "ses_deae3a856ffe9j1Jf7CFHYsjhM"
+  },
+  {
+    "agent_id": "validate-03",
+    "phase": 3,
+    "session_id": "ses_deae3a854ffeFfaEYMKnK8ENoE"
+  },
+  {
+    "agent_id": "validate-04",
+    "phase": 3,
+    "session_id": "ses_deae3a853ffePtpEEgl5P9oF5T"
+  },
+  {
+    "agent_id": "validate-05",
+    "phase": 3,
+    "session_id": "ses_deae3a84affeaOnL10Syc3hr7o"
+  },
+  {
+    "agent_id": "validate-06",
+    "phase": 3,
+    "session_id": "ses_deae3a849ffeu57Bv5YjnrSeVb"
+  },
+  {
+    "agent_id": "validate-07",
+    "phase": 3,
+    "session_id": "ses_deae3a849ffdz5whB25O42AG3t"
+  },
+  {
+    "agent_id": "validate-08",
+    "phase": 3,
+    "session_id": "ses_deae3a844ffe3Fa74S7rHs5uJ9"
+  },
+  {
+    "agent_id": "validate-09",
+    "phase": 3,
+    "session_id": "ses_deae3a843ffepmyTNDO4H89uO0"
+  },
+  {
+    "agent_id": "validate-10",
+    "phase": 3,
+    "session_id": "ses_deae3a843ffdr8wjiYlmCaNiNk"
+  },
+  {
+    "agent_id": "validate-11",
+    "phase": 3,
+    "session_id": "ses_deae3a83effei2F7dCIgUdzWlc"
+  },
+  {
+    "agent_id": "validate-12",
+    "phase": 3,
+    "session_id": "ses_deae3a83dffeIwBZhCz1BPkDi7"
+  },
+  {
+    "agent_id": "validate-13",
+    "phase": 3,
+    "session_id": "ses_deae3a83dffdE8nMyeXuTbOFUy"
+  },
+  {
+    "agent_id": "validate-14",
+    "phase": 3,
+    "session_id": "ses_deae3a839ffet4K7LRehHfGH4m"
+  },
+  {
+    "agent_id": "validate-15",
+    "phase": 3,
+    "session_id": "ses_deae3a839ffdPLnIJ0cdk9Ky7c"
+  },
+  {
+    "agent_id": "validate-16",
+    "phase": 3,
+    "session_id": "ses_deae3a838ffe0NI4izyfso8ZPM"
+  },
+  {
+    "agent_id": "validate-17",
+    "phase": 3,
+    "session_id": "ses_deae3a834ffeJely1DGGkv8tj9"
+  },
+  {
+    "agent_id": "validate-18",
+    "phase": 3,
+    "session_id": "ses_deae3a833ffe3P1rComXestruF"
+  },
+  {
+    "agent_id": "validate-19",
+    "phase": 3,
+    "session_id": "ses_deae3a833ffdbj0AXPTA9F1XLh"
+  },
+  {
+    "agent_id": "record-01",
+    "phase": 5,
+    "session_id": "ses_deadfde44ffeOYzRmFanKkq7uU"
+  },
+  {
+    "agent_id": "record-02",
+    "phase": 5,
+    "session_id": "ses_deadfde42ffeWpqaNmJHvI13aa"
+  },
+  {
+    "agent_id": "record-03",
+    "phase": 5,
+    "session_id": "ses_deadfde3affeNrLarT5KJY2dRN"
+  },
+  {
+    "agent_id": "record-04",
+    "phase": 5,
+    "session_id": "ses_deadfde39ffejGMvQe9UCNJ4R3"
+  },
+  {
+    "agent_id": "record-05",
+    "phase": 5,
+    "session_id": "ses_deadfde38ffe0Zdy4VdVlHqwmO"
+  },
+  {
+    "agent_id": "record-06",
+    "phase": 5,
+    "session_id": "ses_deadfde2fffeMoRlygrPO2LXf3"
+  },
+  {
+    "agent_id": "record-07",
+    "phase": 5,
+    "session_id": "ses_deadfde2effeGZeeimd1EfrQd6"
+  },
+  {
+    "agent_id": "record-08",
+    "phase": 5,
+    "session_id": "ses_deadfde2dffez83Xlgyhp3eqQS"
+  },
+  {
+    "agent_id": "record-09",
+    "phase": 5,
+    "session_id": "ses_deadfde26ffe9nUgv4mnBUfg62"
+  },
+  {
+    "agent_id": "record-10",
+    "phase": 5,
+    "session_id": "ses_deadfde25ffe12tDgXlnX6iRV5"
+  },
+  {
+    "agent_id": "record-11",
+    "phase": 5,
+    "session_id": "ses_deadfde25ffdt4MaZCCPE9ctxu"
+  },
+  {
+    "agent_id": "record-12",
+    "phase": 5,
+    "session_id": "ses_deadfde1fffe1hrg04ydx1njU3"
+  },
+  {
+    "agent_id": "record-13",
+    "phase": 5,
+    "session_id": "ses_deadfde1fffdeL76EeUl6jOmkJ"
+  },
+  {
+    "agent_id": "record-14",
+    "phase": 5,
+    "session_id": "ses_deadfde1effe534poCEQNesWfr"
+  },
+  {
+    "agent_id": "record-15",
+    "phase": 5,
+    "session_id": "ses_deadfde1affeXfB60XGnzk5CL5"
+  },
+  {
+    "agent_id": "record-16",
+    "phase": 5,
+    "session_id": "ses_deadfde1affdgHIBP8tY8jkP1Y"
+  },
+  {
+    "agent_id": "record-17",
+    "phase": 5,
+    "session_id": "ses_deadfde19ffeUpursHHDJolfTF"
+  },
+  {
+    "agent_id": "record-18",
+    "phase": 5,
+    "session_id": "ses_deadfde15ffez7r81UXwxRSsmi"
+  },
+  {
+    "agent_id": "record-19",
+    "phase": 5,
+    "session_id": "ses_deadfde15ffdgC7v4N27IRNo3A"
+  },
+  {
+    "agent_id": "record-15b",
+    "phase": 5,
+    "session_id": "ses_deade3387ffeDauZRjZarmrmIw"
+  },
+  {
+    "agent_id": "harness-identity",
+    "phase": 6,
+    "session_id": "ses_deada77e9ffeYu9WH4wRM91wS5"
+  },
+  {
+    "agent_id": "harness-mcp-actuator",
+    "phase": 6,
+    "session_id": "ses_deada77e4ffe6H3nZTjGnuCzmy"
+  },
+  {
+    "agent_id": "harness-events-resource",
+    "phase": 6,
+    "session_id": "ses_deada77d9ffe0DO7jqHb2RwpaJ"
+  },
+  {
+    "agent_id": "harness-daemon",
+    "phase": 6,
+    "session_id": "ses_deada77d8ffeYmyylL9YP6NtFf"
+  },
+  {
+    "agent_id": "harness-publication",
+    "phase": 6,
+    "session_id": "ses_deada77d7ffeNw5d3pevWIuRvP"
+  },
+  {
+    "agent_id": "confirm-10",
+    "phase": 7,
+    "session_id": "ses_dead4df68ffeAq54Otgfj9Q5Po"
+  },
+  {
+    "agent_id": "confirm-11",
+    "phase": 7,
+    "session_id": "ses_dead4df66ffe01IUPC03J1XhTi"
+  },
+  {
+    "agent_id": "confirm-12",
+    "phase": 7,
+    "session_id": "ses_dead4df65ffeoYxT6ynNChl9eN"
+  },
+  {
+    "agent_id": "confirm-13",
+    "phase": 7,
+    "session_id": "ses_dead4df4effeQ1RhsCeO12t8kb"
+  },
+  {
+    "agent_id": "confirm-14",
+    "phase": 7,
+    "session_id": "ses_dead4df4dffeaU5CD86VWGvske"
+  },
+  {
+    "agent_id": "confirm-15",
+    "phase": 7,
+    "session_id": "ses_dead4df4cffeGVfsi9027Z3rwk"
+  },
+  {
+    "agent_id": "confirm-16",
+    "phase": 7,
+    "session_id": "ses_dead4df29ffeoscN9sRHF0HVLW"
+  },
+  {
+    "agent_id": "confirm-17",
+    "phase": 7,
+    "session_id": "ses_dead4df29ffdlNRoCu2WGNTP0F"
+  },
+  {
+    "agent_id": "confirm-18",
+    "phase": 7,
+    "session_id": "ses_dead4df28ffePSS1lRLdI6v8qz"
+  },
+  {
+    "agent_id": "confirm-19",
+    "phase": 7,
+    "session_id": "ses_dead4de01ffe4ki2pOsk4036kO"
+  },
+  {
+    "agent_id": "confirm-01",
+    "phase": 7,
+    "session_id": "ses_dead4e061ffeMM0ZJ2YiQuxT8T"
+  },
+  {
+    "agent_id": "confirm-02",
+    "phase": 7,
+    "session_id": "ses_dead4e05fffe4Dd3plet5rYffM"
+  },
+  {
+    "agent_id": "confirm-03",
+    "phase": 7,
+    "session_id": "ses_dead4e059ffeEcujQyxS2Y4FES"
+  },
+  {
+    "agent_id": "confirm-04",
+    "phase": 7,
+    "session_id": "ses_dead4e059ffdeno2cBm0MWPolu"
+  },
+  {
+    "agent_id": "confirm-05",
+    "phase": 7,
+    "session_id": "ses_dead4e058ffewWIOjy50mgzL99"
+  },
+  {
+    "agent_id": "confirm-06",
+    "phase": 7,
+    "session_id": "ses_dead4e049ffeMWIl6Mr9SZ3iec"
+  },
+  {
+    "agent_id": "confirm-07",
+    "phase": 7,
+    "session_id": "ses_dead4e048ffebsLjBn6bsfoAg7"
+  },
+  {
+    "agent_id": "confirm-08",
+    "phase": 7,
+    "session_id": "ses_dead4e048ffdL0vhtGmKn32LbX"
+  },
+  {
+    "agent_id": "confirm-09",
+    "phase": 7,
+    "session_id": "ses_dead4df6affesgclgk1yBNW94z"
+  },
+  {
+    "agent_id": "confirm-10b",
+    "phase": 7,
+    "session_id": "ses_dead3990cffeMhbK3kbSeonNcA"
+  },
+  {
+    "agent_id": "confirm-14b",
+    "phase": 7,
+    "session_id": "ses_dead3990cffdQ0UWcP2h2YrJoq"
+  },
+  {
+    "agent_id": "confirm-16b",
+    "phase": 7,
+    "session_id": "ses_dead3990bffe9vv1QxShQe7sux"
+  },
+  {
+    "agent_id": "confirm-17b",
+    "phase": 7,
+    "session_id": "ses_dead39827ffep89cHLeltv8HCK"
+  },
+  {
+    "agent_id": "confirm-19b",
+    "phase": 7,
+    "session_id": "ses_dead39826ffeOYBL063N8c7mg4"
+  },
+  {
+    "agent_id": "confirm-01b",
+    "phase": 7,
+    "session_id": "ses_dead3991effer9m2tDEIdDUQtU"
+  },
+  {
+    "agent_id": "confirm-02b",
+    "phase": 7,
+    "session_id": "ses_dead3991dffeg5XOppW7evFLmV"
+  },
+  {
+    "agent_id": "confirm-03b",
+    "phase": 7,
+    "session_id": "ses_dead3991bffelxnJrAJkv5vPNJ"
+  },
+  {
+    "agent_id": "confirm-04b",
+    "phase": 7,
+    "session_id": "ses_dead3991affeHPbILEF4V1WV88"
+  },
+  {
+    "agent_id": "confirm-07b",
+    "phase": 7,
+    "session_id": "ses_dead3991affdyIWpjgf35z58RN"
+  }
+]

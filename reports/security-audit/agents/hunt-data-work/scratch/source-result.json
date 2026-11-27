@@ -1,0 +1,669 @@
+{
+  "units": [
+    {
+      "coverage_id": "apps%2Fapi%2Fprisma%2Fmigrations%23identity-and-architecture-migrations::apps%2Fapi%2Fsrc%2Finternal%2Fproject-grant.ts%23ProjectGrant::apps%2Fapi%2Fsrc%2Fwork-items::DATA-ISOLATION-AND-LIFECYCLE.md%23Migration%20default%20and%20ownership%20confusion",
+      "disposition": "blocked",
+      "reviewed_paths": [
+        "apps/api/prisma/migrations/20261121052714_init/migration.sql",
+        "apps/api/prisma/migrations/20261122000000_architecture/migration.sql",
+        "apps/api/prisma/migrations/20261122010000_identity/migration.sql",
+        "apps/api/prisma/migrations/20261122120000_v3_deployments/migration.sql",
+        "apps/api/prisma/schema.prisma",
+        "apps/api/src/identity/repo/identity.repo.ts",
+        "apps/api/src/identity/services/identity.service.ts",
+        "apps/api/src/main.ts",
+        "apps/api/src/internal/project-grant.ts",
+        "apps/api/test/database/identity-migration.db.test.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-data-work",
+          "reviewed_paths": [
+            "apps/api/prisma/migrations/20261121052714_init/migration.sql",
+            "apps/api/prisma/migrations/20261122000000_architecture/migration.sql",
+            "apps/api/prisma/migrations/20261122010000_identity/migration.sql",
+            "apps/api/prisma/migrations/20261122120000_v3_deployments/migration.sql",
+            "apps/api/prisma/schema.prisma",
+            "apps/api/src/identity/repo/identity.repo.ts",
+            "apps/api/src/identity/services/identity.service.ts",
+            "apps/api/src/main.ts",
+            "apps/api/src/internal/project-grant.ts"
+          ],
+          "invariant": "A completed identity migration preserves distinct Project scopes, assigns an explicit owner and stored integration grant, and admits no legacy or missing-scope fallback.",
+          "method": "source",
+          "result": "The identity SQL builds one sequence-backed numeric mapping from the union of all seven legacy project_id tables, rewrites those tables, creates explicitly owned migrated Projects and a default grant containing their new IDs. Architecture foreign keys bind Fix attempts and receipts to the same Project as their Work item. Root adoption is part of bootstrapRoot's database transaction and main awaits bootstrap before listening. ProjectGrant requires a numeric ID and exact stored-grant membership. The Deployment migration adds a Project foreign key and prevents Organization moves for linked Projects. These completed-state paths do not expose a source-visible default that gives a public caller another Organization's records.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-data-work",
+          "reviewed_paths": [
+            "apps/api/prisma/migrations/20261122010000_identity/migration.sql",
+            "apps/api/test/database/identity-migration.db.test.ts"
+          ],
+          "invariant": "A failed or resumed rewrite must leave Project ownership, grants and append-only audit enforcement in one consistent state.",
+          "method": "source",
+          "result": "The rewrite temporarily removes both audit mutation triggers and later restores them, but its SQL file declares no BEGIN/COMMIT boundary. The source test extracts the rewrite and explicitly supplies its own Prisma transaction, including for its injected late failure. That test source establishes the intended rollback contract, not the transaction behavior of the actual migration runner. No migration or test was executed, so failure/resume atomicity remains a coverage blocker rather than a vulnerability claim.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": [
+        "Establish whether the deployed Prisma migration runner submits the complete identity rewrite as one atomic database unit, including trigger removal/restoration and grant creation, and whether a late failure followed by retry preserves that contract. The SQL file has no explicit transaction boundary and the inspected regression supplies a test-owned transaction. A bounded replay cannot run here because complete memory and cumulative disk sandbox controls are unavailable, target execution is prohibited, and no evidence promotion is permitted."
+      ]
+    },
+    {
+      "coverage_id": "apps%2Fapi%2Fsrc%2Fwork-items%2Fcontrollers%2Fwork-items.controller.ts%23WorkItemsController::apps%2Fapi%2Fsrc%2Finternal%2Fproject-grant.ts%23ProjectGrant::apps%2Fapi%2Fsrc%2Fwork-items::ATTACK-CLASSES.md%23Access%20control",
+      "disposition": "covered",
+      "reviewed_paths": [
+        "apps/api/src/work-items/controllers/work-items.controller.ts",
+        "apps/api/src/auth/oauth-client-credentials.strategy.ts",
+        "apps/api/src/auth/oauth-principal.ts",
+        "apps/api/src/auth/scopes.ts",
+        "apps/api/src/work-items/incidents-read-scope.guard.ts",
+        "apps/api/src/work-items/fix-trigger-scope.guard.ts",
+        "apps/api/src/app.factory.ts",
+        "apps/api/src/work-items/dto/list-work-items-query.dto.ts",
+        "apps/api/src/work-items/dto/triage-request.dto.ts",
+        "apps/api/src/work-items/dto/fix-now-request.dto.ts",
+        "apps/api/src/work-items/dto/answer-request.dto.ts",
+        "apps/api/src/work-items/dto/work-value.ts",
+        "apps/api/src/work-items/work-items.module.ts",
+        "apps/api/src/audit/audit-scope.interceptor.ts",
+        "apps/api/src/fix/audited-work.commands.ts",
+        "apps/api/src/fix/fix.audit.ts",
+        "packages/work/src/routing-summary.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-data-work",
+          "reviewed_paths": [
+            "apps/api/src/work-items/controllers/work-items.controller.ts",
+            "apps/api/src/auth/oauth-client-credentials.strategy.ts",
+            "apps/api/src/auth/oauth-principal.ts",
+            "apps/api/src/auth/scopes.ts",
+            "apps/api/src/work-items/incidents-read-scope.guard.ts",
+            "apps/api/src/work-items/fix-trigger-scope.guard.ts"
+          ],
+          "invariant": "Authentication alone must not authorize Work reads, triage, Fix now or answers; caller identity and Project must come from the verified principal.",
+          "method": "source",
+          "result": "All six public Work methods use the management OAuth strategy, which pins HS256, issuer and audience, checks the current stored client's Project and grants, and requires tokens:manage. List/get/routing additionally require incidents:read. Triage/fix-now/answer additionally require fix:trigger. The controller constructs projectId and actor from request.user and never takes either from a public body. fix:trigger is absent from console-client and Credential issuance catalogs. One-way alias expansion does not add fix:trigger or incidents:read to a canonical scope.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-data-work",
+          "reviewed_paths": [
+            "apps/api/src/app.factory.ts",
+            "apps/api/src/work-items/dto/list-work-items-query.dto.ts",
+            "apps/api/src/work-items/dto/triage-request.dto.ts",
+            "apps/api/src/work-items/dto/fix-now-request.dto.ts",
+            "apps/api/src/work-items/dto/answer-request.dto.ts",
+            "apps/api/src/work-items/dto/work-value.ts",
+            "packages/work/src/routing-summary.ts"
+          ],
+          "invariant": "Public selectors and command bodies cannot replace the principal's Project, actor, worker, attempt fence or repository policy.",
+          "method": "source",
+          "result": "The global ValidationPipe transforms DTOs and rejects undeclared fields. The list DTO accepts only bounded paging and named filters; it has no projectId field to override the repository's Project predicate. Command DTOs expose assignee, note, or a schema-checked answer only. The routing projection returns the saved question and attempt summary without returning Agent params or saved request text. No alternate bulk/import mutation route was found in the assigned controllers.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-data-work",
+          "reviewed_paths": [
+            "apps/api/src/work-items/work-items.module.ts",
+            "apps/api/src/audit/audit-scope.interceptor.ts",
+            "apps/api/src/fix/audited-work.commands.ts",
+            "apps/api/src/fix/fix.audit.ts"
+          ],
+          "invariant": "Every public Fix command must use the audited boundary and match the authenticated Project and actor before crossing to the daemon.",
+          "method": "source",
+          "result": "WORK_COMMANDS resolves to AuditedWorkCommands. Each mutation calls requireFixAuditScope before the inner transport; that function rejects missing/blank scope and mismatched Project or actor. AuditScopeInterceptor binds its immutable request-local scope from the authenticated principal. Controllers do not inject the inner transport directly. Missing audit acknowledgment withholds a returned result.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    },
+    {
+      "coverage_id": "apps%2Fapi%2Fsrc%2Fwork-items%2Fcontrollers%2Fwork-items.controller.ts%23WorkItemsController::apps%2Fapi%2Fsrc%2Finternal%2Fproject-grant.ts%23ProjectGrant::apps%2Fapi%2Fsrc%2Fwork-items::DATA-ISOLATION-AND-LIFECYCLE.md%23Composite-key%20and%20namespace%20collision",
+      "disposition": "covered",
+      "reviewed_paths": [
+        "apps/api/prisma/schema.prisma",
+        "apps/api/src/work-items/work-haunting.mapper.ts",
+        "apps/api/src/work-items/work-item.repo.ts",
+        "apps/api/src/work-items/work-item.state.ts",
+        "apps/api/src/work-items/work-item.mapper.ts",
+        "apps/api/src/work-items/work-item.receipts.ts",
+        "apps/api/src/work-items/work-command-id.pipe.ts",
+        "apps/api/src/audit/audit.repo.ts",
+        "apps/api/src/audit/audit.mapper.ts",
+        "apps/api/src/fix/fix.audit.ts",
+        "apps/api/src/hauntings/haunting.repo.ts",
+        "apps/api/src/deploys/deploy.repo.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-data-work",
+          "reviewed_paths": [
+            "apps/api/prisma/schema.prisma",
+            "apps/api/src/work-items/work-haunting.mapper.ts",
+            "apps/api/src/work-items/work-item.repo.ts"
+          ],
+          "invariant": "Identical incident IDs in different Projects cannot select or create the same current Work item, and relationships cannot cross Projects.",
+          "method": "source",
+          "result": "Current Haunting ingress derives the Work ID from SHA-256 of JSON.stringify([projectId, incidentId]), avoiding delimiter ambiguity and including the Project even though WorkItem.id is globally unique. Lookups still include projectId. FixAttempt and WorkCommand relationships reference the composite [projectId, workItemId] key. Hauntings, Audit entries, command receipts and Deployment buckets have Project-qualified primary or unique keys. A caller cannot provide a replacement Work ID to the ingress DTO.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-data-work",
+          "reviewed_paths": [
+            "apps/api/src/work-items/work-item.repo.ts",
+            "apps/api/src/work-items/work-item.state.ts",
+            "apps/api/src/work-items/work-item.mapper.ts",
+            "apps/api/src/work-items/work-item.receipts.ts",
+            "apps/api/src/work-items/work-command-id.pipe.ts"
+          ],
+          "invariant": "An Idempotency-Key cannot retrieve another actor's result, collide across Projects, or be reused for a different Work item or request.",
+          "method": "source",
+          "result": "Receipt keys and command advisory locks include projectId. commandReceipt also checks workItemId, actor and the canonical request hash before exposing a result. The hash includes Project, actor, expectedVersion, Work ID, kind and body. Public command IDs are bounded and restricted to an ASCII token format. recordResult qualifies related receipts by Project, Work ID and attempt ID before updating their Project-qualified keys. Same-Project key reuse by another actor produces a conflict instead of disclosing the prior result.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-data-work",
+          "reviewed_paths": [
+            "apps/api/src/audit/audit.repo.ts",
+            "apps/api/src/audit/audit.mapper.ts",
+            "apps/api/src/fix/fix.audit.ts",
+            "apps/api/src/hauntings/haunting.repo.ts",
+            "apps/api/src/deploys/deploy.repo.ts"
+          ],
+          "invariant": "Audit deduplication and Deployment identity must not let one Project overwrite or suppress another Project's durable facts.",
+          "method": "source",
+          "result": "Audit dedup uses [projectId, eventKey] and a Project advisory lock; a repeated key with different canonical actor/type/incident/payload facts throws AuditConflict. Haunting event keys are resolved within that same Project chain. Fix outcome keys distinguish attempts from the command fallback namespace. Deployment lookups and the unique constraint include Project, SHA and Environment; redeploys return the original row and do not overwrite it. No cross-Project collision path survived these controls.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    },
+    {
+      "coverage_id": "apps%2Fapi%2Fsrc%2Fwork-items%2Fcontrollers%2Fwork-items.controller.ts%23WorkItemsController::apps%2Fapi%2Fsrc%2Finternal%2Fproject-grant.ts%23ProjectGrant::apps%2Fapi%2Fsrc%2Fwork-items::DATA-ISOLATION-AND-LIFECYCLE.md%23Missing%20tenant%20or%20owner%20enforcement",
+      "disposition": "covered",
+      "reviewed_paths": [
+        "apps/api/src/internal/internal.guard.ts",
+        "apps/api/src/internal/project-grant.ts",
+        "apps/api/src/work-items/controllers/internal-work.controller.ts",
+        "apps/api/src/work-items/controllers/work-ingress.controller.ts",
+        "apps/api/src/work-items/dto/internal-work.dto.ts",
+        "apps/api/src/work-items/work-ingress.service.ts",
+        "apps/api/src/work-items/work-item.repo.ts",
+        "apps/api/src/work-items/work-item.state.ts",
+        "apps/api/src/hauntings/haunting.controller.ts",
+        "apps/api/src/hauntings/haunting.service.ts",
+        "apps/api/src/hauntings/haunting.repo.ts",
+        "packages/core/src/recorded.ts",
+        "apps/api/src/audit/audit.controller.ts",
+        "apps/api/src/audit/audit.repo.ts",
+        "apps/api/src/audit/audit.usage.ts",
+        "apps/api/src/internal/policy-context.service.ts",
+        "apps/api/src/deploys/deploys.controller.ts",
+        "apps/api/src/deploys/guards/deploy-auth.guard.ts",
+        "apps/api/src/deploys/deploys.service.ts",
+        "apps/api/src/deploys/deploy.types.ts",
+        "apps/api/src/deploys/deploy.repo.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-data-work",
+          "reviewed_paths": [
+            "apps/api/src/internal/internal.guard.ts",
+            "apps/api/src/internal/project-grant.ts",
+            "apps/api/src/work-items/controllers/internal-work.controller.ts",
+            "apps/api/src/work-items/controllers/work-ingress.controller.ts",
+            "apps/api/src/work-items/dto/internal-work.dto.ts",
+            "apps/api/src/work-items/work-ingress.service.ts",
+            "apps/api/src/work-items/work-item.repo.ts",
+            "apps/api/src/work-items/work-item.state.ts"
+          ],
+          "invariant": "Private durable-state access needs the internal principal and a stored Project grant, and every Work/attempt/receipt query or mutation must retain that Project.",
+          "method": "source",
+          "result": "Both private Work controllers require InternalGuard's bearer token. WorkItemRepo checks ProjectGrant on reads, replays, creation, counts and every change; the grant denies missing, nonnumeric and unlisted Projects. loadWork binds Work ID plus Project, then binds the active attempt to that Project and Work item. Both mutation fences and all receipt operations include Project. Ingress resolves the Haunting inside input.projectId and ignores caller-supplied Work content. Nested internal DTOs use strict canonical schemas. The internal token represents the configured integration over its stored grant set; no per-Organization account identity was assumed for that trusted integration.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-data-work",
+          "reviewed_paths": [
+            "apps/api/src/hauntings/haunting.controller.ts",
+            "apps/api/src/hauntings/haunting.service.ts",
+            "apps/api/src/hauntings/haunting.repo.ts",
+            "packages/core/src/recorded.ts",
+            "apps/api/src/internal/project-grant.ts"
+          ],
+          "invariant": "Haunting list/get/context/active/upsert paths cannot access another Project or persist foreign Detection ownership.",
+          "method": "source",
+          "result": "Internal authentication precedes HauntingService, which checks the Project grant for every operation. Each repository read has a Project predicate and upsert uses [projectId, incidentId]. Upsert rejects any Detection whose Project differs from the call; the recorded schema also binds each Detection's service and the Diagnosis's incident ID. Derived Diagnosis context queries require Project, service and diagnosisRef together. Sanitized material remains under the same Project-qualified durable record and audit chain.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-data-work",
+          "reviewed_paths": [
+            "apps/api/src/audit/audit.controller.ts",
+            "apps/api/src/audit/audit.repo.ts",
+            "apps/api/src/audit/audit.usage.ts",
+            "apps/api/src/internal/policy-context.service.ts"
+          ],
+          "invariant": "Audit writes and policy counters must not consume another Project's chain, Diagnosis or publication state.",
+          "method": "source",
+          "result": "The private audit append endpoint requires InternalGuard and checks the requested stored Project grant. Audit list, verification and every usage-query subquery include Project. PolicyContextService checks the grant, resolves the Diagnosis in that Project, verifies its service, and requests audit/publication counters for that same Project. SQL parameters are bound. Unknown or malformed usage facts fail closed instead of supplying zero counters.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-data-work",
+          "reviewed_paths": [
+            "apps/api/src/deploys/deploys.controller.ts",
+            "apps/api/src/deploys/guards/deploy-auth.guard.ts",
+            "apps/api/src/deploys/deploys.service.ts",
+            "apps/api/src/deploys/deploy.types.ts",
+            "apps/api/src/deploys/deploy.repo.ts"
+          ],
+          "invariant": "Deployment route selectors must bind to the caller Organization and permitted Project, including org-wide readers and writers.",
+          "method": "source",
+          "result": "DeployAuthGuard verifies the current OAuth principal, requires a route scope, matches the route Organization to the stored client, verifies the route Project's Organization, and restricts bound clients unless an explicit org-wide scope applies. Creation repeats the Project ownership check and allows cross-Project writes only for org:ci; org:read alone cannot widen a project:write grant. Lists always pass the validated route Project to the repository, even for org-wide readers. Existing Deployment lookup and creation use that Project, SHA and Environment. No caller reaches DeployRepo.list's optional unfiltered form through these routes.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    },
+    {
+      "coverage_id": "apps%2Fapi%2Fsrc%2Fwork-items%2Fcontrollers%2Fwork-items.controller.ts%23WorkItemsController::apps%2Fapi%2Fsrc%2Finternal%2Fproject-grant.ts%23ProjectGrant::apps%2Fapi%2Fsrc%2Fwork-items::PROTOCOLS-RPC-AND-MESSAGING.md%23Acknowledgment%2Fcommit%20ordering%20defects",
+      "disposition": "covered",
+      "reviewed_paths": [
+        "apps/api/src/audit/audit.repo.ts",
+        "apps/api/src/audit/audit.transaction.ts",
+        "apps/api/prisma/migrations/20261121052714_init/migration.sql",
+        "apps/api/prisma/migrations/20261122120000_v3_deployments/migration.sql",
+        "apps/api/src/work-items/work-item.repo.ts",
+        "apps/api/src/work-items/work-item.admission.ts",
+        "apps/api/src/work-items/work-item.questions.ts",
+        "apps/api/src/work-items/work-item.publication.ts",
+        "apps/api/src/work-items/work-item.recovery.ts",
+        "apps/api/src/hauntings/haunting.repo.ts",
+        "apps/api/src/hauntings/haunting.service.ts",
+        "apps/api/src/deploys/deploy.repo.ts",
+        "apps/api/src/deploys/deployment-closure.ts",
+        "apps/api/src/fix/audited-work.commands.ts",
+        "apps/daemon/src/publication.ts",
+        "apps/daemon/src/recovery.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-data-work",
+          "reviewed_paths": [
+            "apps/api/src/audit/audit.repo.ts",
+            "apps/api/src/audit/audit.transaction.ts",
+            "apps/api/prisma/migrations/20261121052714_init/migration.sql",
+            "apps/api/src/work-items/work-item.repo.ts",
+            "apps/api/src/work-items/work-item.admission.ts",
+            "apps/api/src/work-items/work-item.questions.ts",
+            "apps/api/src/work-items/work-item.publication.ts",
+            "apps/api/src/work-items/work-item.recovery.ts"
+          ],
+          "invariant": "A returned durable Work transition must commit its receipt, version fence and required audit facts together; transaction retries must not repeat external effects.",
+          "method": "source",
+          "result": "Creation, triage, claim, saved question, applied answer, publication admission, completion, abandon and publication abort await appendInTx inside the same serializable transaction as their durable state. AuditRepo serializes each Project chain, checks dedup facts and appends the next chained entry. The retry helper reruns database-only callbacks for serialization/AuditEntry uniqueness conflicts. Heartbeats intentionally renew only execution ownership and do not represent a new privileged effect. Database triggers reject audit UPDATE and DELETE outside the migration rewrite.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-data-work",
+          "reviewed_paths": [
+            "apps/api/src/hauntings/haunting.repo.ts",
+            "apps/api/src/hauntings/haunting.service.ts",
+            "apps/api/src/deploys/deploy.repo.ts",
+            "apps/api/src/deploys/deployment-closure.ts",
+            "apps/api/prisma/migrations/20261122120000_v3_deployments/migration.sql"
+          ],
+          "invariant": "Haunting acknowledgment and Deployment closure must not lose or duplicate a security-relevant transition after a partial handoff failure.",
+          "method": "source",
+          "result": "Haunting audit append and materialized upsert share a transaction. HauntingService awaits the separate closure before returning. A retry after closure failure reaches the existing Haunting and reapplies the idempotent closeFirst transition. closeFirst updates only an unclosed row matching Project/SHA/Environment and appends its closure audit in the same transaction; creation likewise commits row and audit together. The saved opening pair cannot be moved by a later Event from another Environment. Deployment triggers forbid all other updates and all deletion.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-data-work",
+          "reviewed_paths": [
+            "apps/api/src/work-items/work-item.repo.ts",
+            "apps/api/src/work-items/work-item.publication.ts",
+            "apps/api/src/fix/audited-work.commands.ts",
+            "apps/daemon/src/publication.ts",
+            "apps/daemon/src/recovery.ts"
+          ],
+          "invariant": "A draft publication needs acknowledged pre-effect audit and durable intent, while a known remote reference must survive a later audit or response failure.",
+          "method": "source",
+          "result": "publishFix awaits fix.pr_intent audit and the committed beginPublication response before calling prepared.publish. recordPublication first commits the matching known PR into both Work and attempt state, then performs the later audit handoff. A later audit failure cannot roll back that known reference. Completion validates the reference against saved publication state. Error/replay paths retain the intent, reconcile it before completion and do not call a second publisher. AuditedWorkCommands withholds the final HTTP result on an outcome-audit error. The separate immutable-key outcome concern is recorded as hardening, without claiming an unaudited privileged effect.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    },
+    {
+      "coverage_id": "apps%2Fapi%2Fsrc%2Fwork-items%2Fcontrollers%2Fwork-items.controller.ts%23WorkItemsController::apps%2Fapi%2Fsrc%2Finternal%2Fproject-grant.ts%23ProjectGrant::apps%2Fapi%2Fsrc%2Fwork-items::PROTOCOLS-RPC-AND-MESSAGING.md%23Duplicate%20delivery%20and%20idempotency%20gaps",
+      "disposition": "covered",
+      "reviewed_paths": [
+        "apps/api/src/work-items/work-item.repo.ts",
+        "apps/api/src/work-items/work-item.state.ts",
+        "apps/api/src/work-items/work-item.admission.ts",
+        "apps/api/src/work-items/work-item.questions.ts",
+        "apps/api/src/work-items/work-item.receipts.ts",
+        "apps/api/src/work-items/work-ingress.service.ts",
+        "apps/api/src/hauntings/haunting.repo.ts",
+        "apps/api/src/hauntings/haunting.mapper.ts",
+        "apps/api/src/audit/audit.repo.ts",
+        "apps/api/src/deploys/deploys.service.ts",
+        "apps/api/src/deploys/deploy.repo.ts",
+        "apps/api/src/fix/daemon-work.client.ts",
+        "apps/daemon/src/work-flow.ts",
+        "apps/daemon/src/publication.ts",
+        "apps/daemon/src/recovery.ts"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-data-work",
+          "reviewed_paths": [
+            "apps/api/src/work-items/work-item.repo.ts",
+            "apps/api/src/work-items/work-item.state.ts",
+            "apps/api/src/work-items/work-item.admission.ts",
+            "apps/api/src/work-items/work-item.questions.ts",
+            "apps/api/src/work-items/work-item.receipts.ts"
+          ],
+          "invariant": "Repeated or competing command delivery cannot admit another active attempt or reuse a saved question twice.",
+          "method": "source",
+          "result": "Each change locks the Project/command namespace in a serializable transaction. A matching receipt replays its result or reports COMMAND_IN_PROGRESS; content/actor/item disagreement conflicts. Claims fence the Work version and activeAttemptId before inserting an attempt. A saved triage receipt also requires its saved version. Answer application creates its receipt in the transition transaction and accepts only the current awaiting_answer attempt/question/version; different answer commands race on the same Work and attempt fences. recordResult updates all receipts for that specific Project/Work/attempt so replay returns durable state.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-data-work",
+          "reviewed_paths": [
+            "apps/api/src/work-items/work-ingress.service.ts",
+            "apps/api/src/work-items/work-item.repo.ts",
+            "apps/api/src/hauntings/haunting.repo.ts",
+            "apps/api/src/hauntings/haunting.mapper.ts",
+            "apps/api/src/audit/audit.repo.ts",
+            "apps/api/src/deploys/deploys.service.ts",
+            "apps/api/src/deploys/deploy.repo.ts"
+          ],
+          "invariant": "Redelivered Haunting creation/updates and Deployment registration cannot overwrite prior assignment or multiply the same durable operation.",
+          "method": "source",
+          "result": "Ingress returns existing Work before deriving any replacement content; createMany with skipDuplicates and a deterministic Project-bound ID converges competing creation. Only a newly inserted Work row gets work.created audit. Haunting event-key dedup is Project-local and its applied audit sequence prevents an older acknowledged delivery from overwriting a newer view. Deployment registration checks the Project/SHA/Environment key, recovers the unique-key winner on concurrent insertion, and returns the stored immutable row without another audit entry.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-data-work",
+          "reviewed_paths": [
+            "apps/api/src/fix/daemon-work.client.ts",
+            "apps/daemon/src/work-flow.ts",
+            "apps/daemon/src/publication.ts",
+            "apps/daemon/src/recovery.ts"
+          ],
+          "invariant": "A transport retry after a lost publication response must reconcile saved intent rather than invoke a second remote publication.",
+          "method": "source",
+          "result": "The API transport disables automatic retry and tells the caller to reuse its command ID. Every daemon command consults replayWork before admission. Publishing/uncertain attempts retain an intent and block a fresh claim. Replay recovery reads known publication or calls the recovery lookup, records the matched repo/branch reference and finishes the existing attempt; it contains no publication call. Expired pre-publication work may be abandoned only before an intent exists. No duplicate remote-write path survived the source-visible receipt and intent controls.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [],
+      "unresolved": []
+    },
+    {
+      "coverage_id": "apps%2Fapi%2Fsrc%2Fwork-items%2Fcontrollers%2Fwork-items.controller.ts%23WorkItemsController::apps%2Fapi%2Fsrc%2Finternal%2Fproject-grant.ts%23ProjectGrant::apps%2Fapi%2Fsrc%2Fwork-items::PROTOCOLS-RPC-AND-MESSAGING.md%23Out-of-order%20and%20stale%20message%20acceptance",
+      "disposition": "candidate",
+      "reviewed_paths": [
+        "apps/api/src/work-items/controllers/work-items.controller.ts",
+        "apps/api/src/work-items/fix-trigger-scope.guard.ts",
+        "apps/api/src/work-items/work-item.state.ts",
+        "apps/api/src/work-items/work-item.lease.ts",
+        "apps/api/src/work-items/work-item.questions.ts",
+        "apps/api/src/work-items/work-item.publication.ts",
+        "apps/api/src/work-items/work-item.recovery.ts",
+        "apps/api/src/work-items/work-item.repo.ts",
+        "apps/api/src/internal/policy-context.service.ts",
+        "apps/api/src/hauntings/haunting.repo.ts",
+        "packages/work/src/decisions.ts",
+        "packages/policy/src/evaluation.ts",
+        "packages/policy/src/decide.ts",
+        "packages/policy/src/schema.ts",
+        "apps/daemon/src/work-flow.ts",
+        "apps/daemon/src/fix-context.ts",
+        "apps/daemon/src/run-fix.ts",
+        "apps/daemon/src/publication.ts",
+        "apps/daemon/src/recovery.ts",
+        "apps/daemon/src/attempt-lifetime.ts",
+        "apps/daemon/src/command-lifetime.ts",
+        "apps/daemon/src/command-handler.ts",
+        "apps/daemon/src/main.ts",
+        "apps/api/src/work-items/work-counter.database.spec.ts",
+        "docs/adr/0008-fix-paths-and-safety.md"
+      ],
+      "checks": [
+        {
+          "agent_id": "hunt-data-work",
+          "reviewed_paths": [
+            "apps/api/src/work-items/work-item.state.ts",
+            "apps/api/src/work-items/work-item.lease.ts",
+            "apps/api/src/work-items/work-item.questions.ts",
+            "apps/api/src/work-items/work-item.publication.ts",
+            "apps/api/src/work-items/work-item.recovery.ts",
+            "apps/daemon/src/attempt-lifetime.ts",
+            "apps/daemon/src/recovery.ts"
+          ],
+          "invariant": "A stale worker, expired lease, obsolete attempt fence or old question cannot advance the current Work attempt or replace a known publication.",
+          "method": "source",
+          "result": "activeAttempt checks Work version, active attempt ID, attempt version and allowed state. Mutation fences repeat Project, Work, status/state, version and worker predicates. Pre-publication state changes require the database-clock lease to be live. Heartbeat renews only the same active worker and live attempt; abandon requires an expired claimed/running attempt with no publication. Publication recovery changes workers only after expiry, retains repo/branch/baseSha identity, rejects replacing a known PR and fences the transfer. Saved questions lose execution ownership, and a complete answer creates a fresh lease for the same attempt and trigger. No stale-worker overwrite bypass was established.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-data-work",
+          "reviewed_paths": [
+            "apps/api/src/work-items/work-item.questions.ts",
+            "apps/api/src/hauntings/haunting.repo.ts",
+            "packages/work/src/decisions.ts",
+            "apps/daemon/src/work-flow.ts"
+          ],
+          "invariant": "Resuming a question or accepting an older incident view must retain the selected Agent, current eligibility and immutable incident identity.",
+          "method": "source",
+          "result": "The daemon rechecks assignment and trigger eligibility before applyAnswer. Durable answer handling requires the saved attempt/question/version, accepts declared Agent params only, and hands incomplete answers to a Human. It does not select another Agent. Haunting writes reject a changed service/opening time or an older updatedAt; acknowledged older audit sequence is ignored. These source-visible controls settle the assigned same-record ordering paths.",
+          "artifact": null
+        },
+        {
+          "agent_id": "hunt-data-work",
+          "reviewed_paths": [
+            "apps/api/src/work-items/controllers/work-items.controller.ts",
+            "apps/api/src/work-items/fix-trigger-scope.guard.ts",
+            "apps/api/src/work-items/work-item.repo.ts",
+            "apps/api/src/work-items/work-item.publication.ts",
+            "apps/api/src/internal/policy-context.service.ts",
+            "packages/policy/src/evaluation.ts",
+            "packages/policy/src/decide.ts",
+            "packages/policy/src/schema.ts",
+            "apps/daemon/src/work-flow.ts",
+            "apps/daemon/src/fix-context.ts",
+            "apps/daemon/src/run-fix.ts",
+            "apps/daemon/src/publication.ts",
+            "apps/daemon/src/command-lifetime.ts",
+            "apps/daemon/src/command-handler.ts",
+            "apps/daemon/src/main.ts",
+            "apps/api/src/work-items/work-counter.database.spec.ts",
+            "docs/adr/0008-fix-paths-and-safety.md"
+          ],
+          "invariant": "A Project's maxOpenPrsPerHour policy must still hold when distinct Work attempts publish after reading the same earlier counter.",
+          "method": "source",
+          "result": "The real command handler and drain wrapper permit concurrent commands. PolicyContextService returns WorkItemRepo.publicationCount, which excludes claimed/running attempts until their publication becomes non-null. runOwnedFix evaluates the counter once before routing and patch preparation. beginPublication later validates the individual Work/attempt/lease and saves its intent, but never reads or reserves the shared Project cap; its serializable transaction cannot protect the earlier counter read. Distinct commands have distinct command locks and Work fences. The inspected counter test explicitly expects zero after claim and one only after beginPublication. This leaves a source-grounded stale-policy admission candidate for two different Work items; no race fixture or publisher was executed.",
+          "artifact": null
+        }
+      ],
+      "candidate_fingerprints": [
+        "apps/api/src/work-items/work-item.publication.ts:beginPublication/project-pr-limit"
+      ],
+      "unresolved": [
+        "A deterministic local check must establish whether two distinct eligible Work items in one Project can both cross publication admission under maxOpenPrsPerHour=1 after both read the counter as zero. Target execution is prohibited because complete memory and cumulative disk sandbox controls are unavailable; the promotion allowlist is empty. No behavioral result or severity is claimed."
+      ]
+    }
+  ],
+  "candidates": [
+    {
+      "proposed_verdict": "needs_validation",
+      "fingerprint": "apps/api/src/work-items/work-item.publication.ts:beginPublication/project-pr-limit",
+      "title": "Concurrent Work attempts can reuse a stale Project PR-limit decision",
+      "description": "An OAuth client holding tokens:manage and fix:trigger may start fixes for two distinct eligible Work items in its granted Project. With maxOpenPrsPerHour set to one and no recent publication, both attempts can read zero before either saves an intent. The source evaluates that counter before routing and patch preparation, then admits each publication using only its own Work/attempt/lease checks. The hypothesized result is two draft-publication admissions under the owner's one-per-hour policy. Source review establishes the separate check and use paths; the concurrent result has not been observed.",
+      "claimed_root_cause": "The Project-wide policy count is read and evaluated outside the publication transaction. Claimed/running attempts do not consume publicationCount, and beginPublication neither rechecks the configured maximum nor atomically reserves a Project-wide slot. Serializable transactions, command locks and version fences protect individual commands and Work records after the stale decision, so they do not bind publication to the shared limit that authorized it.",
+      "trace": [
+        {
+          "kind": "entrypoint",
+          "file": "apps/api/src/work-items/controllers/work-items.controller.ts",
+          "line": 159,
+          "scope": "WorkItemsController.fixNow",
+          "description": "An authenticated management client with fix:trigger submits separate Fix now commands for two Work IDs; caller() supplies the principal's Project and actor. The same downstream policy path also handles automatic triage."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/daemon/src/work-flow.ts",
+          "line": 74,
+          "scope": "createWorkCommands.fixNow",
+          "description": "The daemon verifies the caller Project, checks replay and eligibility, claims the selected Work item and invokes runFix. Distinct Work items and command IDs do not share a Work fence."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/daemon/src/run-fix.ts",
+          "line": 90,
+          "scope": "runOwnedFix",
+          "description": "Each live attempt resolves its own context before evaluating policy. No Project-wide publication slot is acquired at this point."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/daemon/src/fix-context.ts",
+          "line": 54,
+          "scope": "contextClient",
+          "description": "The daemon obtains shared policy facts from the API's Project-qualified internal context endpoint."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/api/src/internal/policy-context.service.ts",
+          "line": 31,
+          "scope": "PolicyContextService.resolve",
+          "description": "After the Project grant and Diagnosis checks, resolve requests publicationCount and returns it as counters.openPrsLastHour. This read does not reserve capacity for the attempt."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/api/src/work-items/work-item.repo.ts",
+          "line": 106,
+          "scope": "WorkItemRepo.publicationCount",
+          "description": "Only attempts in the Project with non-null publication and recent updatedAt count. Both claimed/running attempts can therefore observe the same zero while neither has reached beginPublication."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/daemon/src/run-fix.ts",
+          "line": 96,
+          "scope": "runOwnedFix",
+          "description": "The daemon computes one open_pr policy decision from those facts and, after audit acknowledgment, continues on allow through routing and patch preparation without refreshing the PR counter."
+        },
+        {
+          "kind": "propagation",
+          "file": "packages/policy/src/evaluation.ts",
+          "line": 35,
+          "scope": "gate",
+          "description": "The intended control denies an open_pr action when openPrsLastHour is at least maxOpenPrsPerHour. Two earlier zero snapshots both pass a configured maximum of one."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/daemon/src/publication.ts",
+          "line": 45,
+          "scope": "publishFix",
+          "description": "The acknowledged pre-effect audit is followed by runtime.beginPublication. Neither operation refreshes the earlier shared-cap decision."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/api/src/work-items/work-item.repo.ts",
+          "line": 221,
+          "scope": "WorkItemRepo.lockCommand and change",
+          "description": "The publication change runs in a serializable transaction after locking the Project/command pair. Different command IDs have different locks, and the transaction does not include the prior policy-counter read."
+        },
+        {
+          "kind": "propagation",
+          "file": "apps/api/src/work-items/work-item.publication.ts",
+          "line": 29,
+          "scope": "beginPublication",
+          "description": "The durable boundary checks only this Work snapshot, active attempt, owning command, live lease and absence of prior publication; it then saves the publishing intent and audit. It never checks or reserves maxOpenPrsPerHour across other Work items."
+        },
+        {
+          "kind": "sink",
+          "file": "apps/daemon/src/publication.ts",
+          "line": 55,
+          "scope": "publishFix",
+          "description": "Each admitted attempt reaches prepared.publish after its own saved intent. A bounded local fixture should stop at two mock draft-publisher invocations or two durable publication intents under the configured maximum of one."
+        }
+      ],
+      "evidence": [
+        {
+          "file": "docs/adr/0008-fix-paths-and-safety.md",
+          "line": 9,
+          "description": "Both fix triggers require policy allow before a draft pull request; this is an explicit owner policy boundary."
+        },
+        {
+          "file": "packages/policy/src/schema.ts",
+          "line": 35,
+          "description": "maxOpenPrsPerHour is a configured nonnegative integer limit."
+        },
+        {
+          "file": "packages/policy/src/evaluation.ts",
+          "line": 33,
+          "description": "The open_pr gate compares openPrsLastHour against that configured maximum."
+        },
+        {
+          "file": "apps/api/src/work-items/work-item.repo.ts",
+          "line": 109,
+          "description": "The publication counter includes saved intents/known references but excludes attempts with null publication."
+        },
+        {
+          "file": "apps/api/src/work-items/work-counter.database.spec.ts",
+          "line": 108,
+          "description": "The source regression expects zero publications after claiming and one only after beginPublication; the test was read, not executed."
+        },
+        {
+          "file": "apps/daemon/src/run-fix.ts",
+          "line": 96,
+          "description": "Policy is evaluated before routing and execute preparation; publication later uses that decision without another PR-count gate."
+        },
+        {
+          "file": "apps/api/src/work-items/work-item.publication.ts",
+          "line": 29,
+          "description": "The strongest durable publication admission checks ownership, versions, live lease and saved intent, but not shared Project capacity."
+        },
+        {
+          "file": "apps/api/src/work-items/work-item.repo.ts",
+          "line": 221,
+          "description": "Command locks include commandId and the serializable change transaction starts after the remote policy read; neither binds distinct Work publications to a cap reservation."
+        },
+        {
+          "file": "apps/daemon/src/command-lifetime.ts",
+          "line": 8,
+          "description": "The production drain wrapper starts each command promise and tracks it in a pending set; it does not serialize commands. main wires this wrapper to createCommandHandler."
+        },
+        {
+          "file": "apps/daemon/src/publication.ts",
+          "line": 55,
+          "description": "The actual publication sink runs after individual admission, with no additional Project PR-limit check on this path."
+        }
+      ],
+      "blockers": [
+        "No concurrent local result was observed. The parent has not established complete memory and cumulative disk sandbox controls, so all target-controlled code, database fixtures, tests and builds are prohibited. The promotion allowlist is empty and retained-artifact limit is zero; no behavioral evidence can be promoted in this assignment."
+      ],
+      "validation_plan": {
+        "local": "Once the parent provides the complete OS-enforced sandbox and a predeclared evidence-promotion allowance, use one disposable local database and two non-sensitive Work/Haunting fixtures in one dummy Project, with distinct command IDs, a valid bound audit scope, eligible disabled-autoFix Agent assignments, valid deployment SHAs, an allow open_pr rule and maxOpenPrsPerHour=1; set all other gates high enough to remain irrelevant. Use deterministic local model/preparation stubs and mock draft publishers. Barrier both real command/context paths after their publication counts resolve to zero, then release them through the real WorkItemRepo publication admission. Preserve normal per-attempt heartbeat/version/audit behavior. Stop at either two committed publication intents or two mock draft-publisher calls, and record the final publication count; no GitHub, model provider, broker or deployed endpoint is needed. A regression should admit only one Project-wide reservation and deny the second before its publisher, while still allowing independent Projects."
+      }
+    }
+  ],
+  "hardening": [
+    "Add a source regression spanning an initial awaiting_answer or publication_uncertain reply and its later answer/reconciliation through AuditedWorkCommands. fix.audit.ts:62 keys fix.outcome only by attempt/trigger, while AuditRepo rejects different facts under the same key. The later lifecycle result changes those facts, so review whether nonterminal replies should use a separate transition key or defer the terminal outcome entry. This is a response/audit-lifecycle correctness concern here: pre-effect intent and durable Work transition audit remain present, and no unauthorized effect was established.",
+    "Exercise the actual identity-migration runner with overlapping old numeric IDs, a failure after trigger removal, and retry, rather than proving rollback only by wrapping the extracted SQL block in a test-owned transaction. Keep this as a migration-coverage task until an affected unauthorized principal/resource is established.",
+    "Make DeployRepo.list require an explicit Project selector, or expose an explicit separate privileged enumeration operation. Current Deployment routes always pass a verified route Project, so the optional unfiltered repository form is not a current access-control finding."
+  ],
+  "uncovered": []
+}

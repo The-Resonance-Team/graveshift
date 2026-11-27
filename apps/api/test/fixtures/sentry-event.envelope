@@ -1,0 +1,7 @@
+{"event_id":"0123456789abcdef0123456789abcdef","dsn":"https://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa@ingest.invalid/12345"}
+{"type":"client_report"}
+{"discarded_events":[]}
+{"type":"attachment"}
+ignored binary payload
+{"type":"event"}
+{"event_id":"0123456789abcdef0123456789abcdef","level":"warning","timestamp":1795255200,"message":"Request failed for alice@example.com","culprit":"api.handler","fingerprint":["stable","error"],"contexts":{"trace":{"trace_id":"abcdef0123456789abcdef0123456789"}},"exception":{"values":[{"type":"TypeError","value":"invalid value"}]},"request":{"url":"https://example.test/path?token=secret","method":"GET","headers":{"authorization":"Bearer abcdefghijklmnopqrstuvwxyz012345"}}}

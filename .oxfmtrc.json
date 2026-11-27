@@ -1,5 +1,10 @@
 {
   "singleQuote": true,
   "sortPackageJson": false,
-  "ignorePatterns": ["*.md", "**/next-env.d.ts"]
+  "ignorePatterns": [
+    "*.md",
+    "packages/api-contract/src/generated/api.ts",
+    "packages/api-contract/src/openapi.json",
+    "**/next-env.d.ts"
+  ]
 }

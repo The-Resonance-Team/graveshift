@@ -1,0 +1,5 @@
+{"event_id":"fedcba9876543210fedcba9876543210","sent_at":"2026-11-20T10:00:00.000Z"}
+{"type":"session"}
+{"sid":"session-1","started":"2026-11-20T10:00:00.000Z","status":"ok"}
+{"type":"client_report"}
+{"discarded_events":[]}
