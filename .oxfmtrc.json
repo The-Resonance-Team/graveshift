@@ -8,6 +8,7 @@
     "**/next-env.d.ts",
     "apps/console/src/astryx-themes.ts",
     "apps/console/src/themes/**",
-    "apps/console/themes/graveshift/**"
+    "apps/console/themes/graveshift/**",
+    "reports/security-audit/**"
   ]
 }
