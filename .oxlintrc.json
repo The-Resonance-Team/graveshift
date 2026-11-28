@@ -61,6 +61,10 @@
     "test-results/**",
     ".expo/**",
     "**/next-env.d.ts",
+    // Astryx CLI-generated theme module and build output; regenerate with the CLI, not by hand.
+    "apps/console/src/astryx-themes.ts",
+    "apps/console/src/themes/**",
+    "apps/console/themes/graveshift/**",
     // Immutable security-audit evidence; recorded harnesses are not source under lint.
     "reports/security-audit/**"
   ]

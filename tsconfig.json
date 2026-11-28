@@ -3,6 +3,7 @@
   "include": ["apps/**/*.ts", "packages/**/*.ts", "examples/**/*.ts", "scripts/**/*.ts"],
   "exclude": [
     "apps/api/**",
+    "apps/console/**",
     "apps/daemon/src/platform.database.test.ts",
     "apps/daemon/src/platform.fixture.ts",
     "apps/daemon/src/platform-http.fixture.ts",

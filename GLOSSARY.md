@@ -40,7 +40,9 @@ This file holds system-wide domain terms only. Each area's terms live in the `GL
 
 ## Configuration and integration
 
-- **AI Harness** — the chat surface where agents talk to each other to resolve a task from the user or the system.
+- **Agent Workspace** — the chat surface where an Account works with Agents on a task.
+- **Agent Runtime** — the system that coordinates Agents and their tools to carry out a task.
+- **Conversation** — one thread of messages and activity in the Agent Workspace, scoped to an Account and a Project.
 
 ## Avoid
 
@@ -48,4 +50,5 @@ This file holds system-wide domain terms only. Each area's terms live in the `GL
 - _Avoid_ **Client** for a person — say Account.
 - _Avoid_ **Release** — say Deployment.
 - _Avoid_ **Deploy** as a noun in user-facing copy — say Deployment. Code identifiers keep Deploy.
+- _Avoid_ **AI Harness** when the distinction matters — say Agent Workspace for the chat surface or Agent Runtime for the system that coordinates Agents and tools.
 - _Avoid_ **Subscription** for the event subscription term. That term lives in `apps/api/GLOSSARY.md`.
