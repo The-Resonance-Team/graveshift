@@ -21,6 +21,35 @@ const envelope: EventEnvelope = {
 };
 
 describe('PublishEventDto', () => {
+  test.each([
+    ['2026-11-20T17:00:00.123456+07:00', '2026-11-20T10:00:00.123456Z'],
+    ['2026-11-20T17:00:00.999999999+07:00', '2026-11-20T10:00:00.999999999Z'],
+    ['2026-11-20T23:59:59.999999999-05:00', '2026-11-21T04:59:59.999999999Z'],
+    ['2026-11-20T00:00:00.000000001+07:00', '2026-11-19T17:00:00.000000001Z'],
+    ['2026-11-20T10:00:00.999999999Z', '2026-11-20T10:00:00.999999999Z'],
+  ])('normalizes timestamps without rounding fractional seconds (%#)', (observedAt, expected) => {
+    const dto = plainToInstance(PublishEventDto, {
+      ...envelope,
+      observedAt,
+    });
+    expect(validateSync(dto)).toEqual([]);
+    expect(dto.observedAt).toBe(expected);
+    expect(EventEnvelopeSchema.parse(dto).observedAt).toBe(expected);
+  });
+
+  test.each([
+    '2026-11-20',
+    '2026-11-20T10:00:00',
+    '2026-02-30T10:00:00Z',
+    '2026-11-20T10Z',
+    true,
+    1,
+    null,
+  ])('rejects a timestamp without a valid full time and timezone (%#)', (observedAt) => {
+    const errors = validateSync(plainToInstance(PublishEventDto, { ...envelope, observedAt }));
+    expect(errors.map((error) => error.property)).toContain('observedAt');
+  });
+
   test('accepts the same fields as EventEnvelopeSchema', () => {
     const dto = plainToInstance(PublishEventDto, envelope);
     expect(validateSync(dto)).toEqual([]);

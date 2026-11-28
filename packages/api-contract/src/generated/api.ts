@@ -110,14 +110,40 @@ export interface components {
       clientRules: components["schemas"]["RuleDto"][];
       confirmOverrides?: boolean;
     };
-    RegisterDto: Record<string, never>;
-    LoginDto: Record<string, never>;
-    ChangePasswordDto: Record<string, never>;
-    OnboardingDto: Record<string, never>;
-    CreateOrganizationDto: Record<string, never>;
-    CreateProjectDto: Record<string, never>;
-    AddMemberDto: Record<string, never>;
-    CreateOAuthClientDto: Record<string, never>;
+    RegisterDto: {
+      /** Format: email */
+      email: string;
+      password: string;
+    };
+    LoginDto: {
+      /** Format: email */
+      email: string;
+      password: string;
+    };
+    ChangePasswordDto: {
+      currentPassword: string;
+      newPassword: string;
+    };
+    OnboardingDto: {
+      name: string;
+      slug: string;
+    };
+    CreateOrganizationDto: {
+      name: string;
+      slug: string;
+    };
+    CreateProjectDto: {
+      name: string;
+      slug: string;
+    };
+    AddMemberDto: {
+      /** Format: email */
+      email: string;
+    };
+    CreateOAuthClientDto: {
+      projectId: string;
+      scopes: ("org:read" | "project:read" | "project:write" | "event:read" | "org:ci" | "incidents:read" | "diagnoses:read" | "audit:read" | "logs:read" | "metrics:read" | "fix:propose" | "events:publish")[];
+    };
     CreateDeployDto: {
       /**
        * @description The 40-hex deployed commit SHA.
@@ -143,7 +169,7 @@ export interface components {
        * Format: date-time
        * @example 2026-11-22T07:05:00.000Z
        */
-      dateFinished?: string;
+      dateFinished?: string | null;
       /** @example https://ci.example.test/runs/42 */
       url?: string;
     };
@@ -531,6 +557,11 @@ export interface operations {
     };
   };
   OrganizationsController_projects: {
+    parameters: {
+      path: {
+        orgId: string;
+      };
+    };
     responses: {
       /** @description The Projects in one Organization. */
       200: {
@@ -548,6 +579,11 @@ export interface operations {
     };
   };
   OrganizationsController_createProject: {
+    parameters: {
+      path: {
+        orgId: string;
+      };
+    };
     requestBody: {
       content: {
         "application/json": components["schemas"]["CreateProjectDto"];
@@ -570,6 +606,11 @@ export interface operations {
     };
   };
   OrganizationsController_addMember: {
+    parameters: {
+      path: {
+        orgId: string;
+      };
+    };
     requestBody: {
       content: {
         "application/json": components["schemas"]["AddMemberDto"];
@@ -582,6 +623,11 @@ export interface operations {
     };
   };
   OrganizationsController_createOAuthClient: {
+    parameters: {
+      path: {
+        orgId: string;
+      };
+    };
     requestBody: {
       content: {
         "application/json": components["schemas"]["CreateOAuthClientDto"];
@@ -881,7 +927,9 @@ export interface operations {
   WorkItemsController_list: {
     parameters: {
       query?: {
+        /** @description Decimal digits only. */
         offset?: number;
+        /** @description Decimal digits only. */
         limit?: number;
         status?: "todo" | "in_progress" | "in_review" | "done";
         priority?: "low" | "medium" | "high" | "critical";

@@ -7,19 +7,32 @@ import {
   type WorkItemSeverity,
   type WorkItemStatus,
 } from '@graveshift/core';
-import { Type } from 'class-transformer';
+import { Transform } from 'class-transformer';
 import { IsIn, IsInt, IsString, Max, Min, MinLength, ValidateIf } from 'class-validator';
 
-// Query values arrive as strings. @Type coerces them; the initial values keep the old defaults.
+const decimalInteger = ({ value }: { value: unknown }) =>
+  typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : Number.NaN;
+
 export class ListWorkItemsQueryDto {
-  @ApiPropertyOptional({ type: Number, minimum: 0, default: 0 })
-  @Type(() => Number)
+  @ApiPropertyOptional({
+    type: Number,
+    minimum: 0,
+    default: 0,
+    description: 'Decimal digits only.',
+  })
+  @Transform(decimalInteger, { toClassOnly: true })
   @IsInt()
   @Min(0)
   offset = 0;
 
-  @ApiPropertyOptional({ type: Number, minimum: 1, maximum: 100, default: 20 })
-  @Type(() => Number)
+  @ApiPropertyOptional({
+    type: Number,
+    minimum: 1,
+    maximum: 100,
+    default: 20,
+    description: 'Decimal digits only.',
+  })
+  @Transform(decimalInteger, { toClassOnly: true })
   @IsInt()
   @Min(1)
   @Max(100)
