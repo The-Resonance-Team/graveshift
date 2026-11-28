@@ -1,5 +1,9 @@
 ## Agent skills
 
+### Design
+
+For console UI, components, styling or user-facing copy, read `DESIGN.md`. For ads or product-demo video, also read `MOTION.md`.
+
 ### Issue tracker
 
 Issues and specs live as GitHub issues in this repo (uses the `gh` CLI). See `docs/agents/issue-tracker.md`.

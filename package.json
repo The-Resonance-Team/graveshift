@@ -6,6 +6,7 @@
   "packageManager": "bun@1.4.4",
   "workspaces": [
     "apps/api",
+    "apps/console",
     "apps/daemon",
     "packages/*"
   ],
@@ -13,8 +14,9 @@
     "format": "bun fmt",
     "format:check": "bun fmt --check",
     "build:contracts": "bun run --filter @graveshift/core build && bun run --filter @graveshift/events build",
+    "build:console": "bun run --filter @graveshift/console build",
     "lint": "bun lint --no-script --max-warnings=0 --allow-unsupported",
-    "typecheck": "bun check --no-script apps/api apps/daemon/src/platform.database.test.ts apps/daemon/src/platform.fixture.ts apps/daemon/src/platform-http.fixture.ts apps/daemon/src/command-handler.test.ts apps/daemon/src/fix-audit.test.ts apps/daemon/src/observations.test.ts apps/daemon/src/observations.pending.test.ts apps/daemon/src/reads.test.ts apps/daemon/src/transport.test.ts apps/daemon/src/flow.fixture.ts apps/daemon/src/lease.test.ts apps/daemon/src/model-context.test.ts apps/daemon/src/observations-database.test.ts apps/daemon/src/publication-failure.test.ts apps/daemon/src/recovery.test.ts apps/daemon/src/work-activation.test.ts apps/daemon/src/work-flow.test.ts packages/api-contract/scripts/generate.ts --tsconfig-override apps/api/tsconfig.json && bun check --no-script",
+    "typecheck": "bun check --no-script apps/api apps/daemon/src/platform.database.test.ts apps/daemon/src/platform.fixture.ts apps/daemon/src/platform-http.fixture.ts apps/daemon/src/command-handler.test.ts apps/daemon/src/fix-audit.test.ts apps/daemon/src/observations.test.ts apps/daemon/src/observations.pending.test.ts apps/daemon/src/reads.test.ts apps/daemon/src/transport.test.ts apps/daemon/src/flow.fixture.ts apps/daemon/src/lease.test.ts apps/daemon/src/model-context.test.ts apps/daemon/src/observations-database.test.ts apps/daemon/src/publication-failure.test.ts apps/daemon/src/recovery.test.ts apps/daemon/src/work-activation.test.ts apps/daemon/src/work-flow.test.ts packages/api-contract/scripts/generate.ts --tsconfig-override apps/api/tsconfig.json && bun check --no-script && bun check --no-script -p apps/console",
     "test:check": "bun test --check --tsconfig-override apps/api/tsconfig.json --path-ignore-patterns='apps/api/test/database/**'",
     "test": "bun test --tsconfig-override apps/api/tsconfig.json --path-ignore-patterns='apps/api/test/database/**'",
     "test:database": "bun scripts/test-database.ts",
@@ -22,7 +24,7 @@
     "migrate:drift:check": "bun run --filter @graveshift/api prisma:drift:check",
     "migrate:drift:local": "bun run --filter @graveshift/api prisma:drift:local",
     "mcp:drift:check": "bun run --filter @graveshift/mcp-client drift:check",
-    "build": "bun run build:contracts && bun build apps/daemon/src/main.ts --target=bun --outdir=node_modules/.cache/graveshift-build/daemon && bun build packages/actuator/src/main.ts --target=bun --outdir=node_modules/.cache/graveshift-build/actuator",
+    "build": "bun run build:contracts && bun build apps/daemon/src/main.ts --target=bun --outdir=node_modules/.cache/graveshift-build/daemon && bun build packages/actuator/src/main.ts --target=bun --outdir=node_modules/.cache/graveshift-build/actuator && bun run build:console",
     "verify": "bun run format:check && bun run lint && bun run typecheck && bun run test:check && bun run test",
     "postinstall": "bun run --filter @graveshift/api prisma:generate"
   },

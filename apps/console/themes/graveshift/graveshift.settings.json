@@ -1,0 +1,121 @@
+{
+  "name": "graveshift",
+  "like": "neutral",
+  "mode": "both",
+  "settings": [
+    {
+      "thing": "accent",
+      "value": "#4a996b",
+      "source": "dial"
+    },
+    {
+      "thing": "background-color",
+      "value": "#40845c",
+      "source": "property",
+      "on": "progress-bar-fill",
+      "when": "variant:accent",
+      "mode": "light"
+    },
+    {
+      "thing": "--color-background-body",
+      "value": "#0b0f14",
+      "source": "token",
+      "mode": "dark"
+    },
+    {
+      "thing": "--color-background-surface",
+      "value": "#10151c",
+      "source": "token",
+      "mode": "dark"
+    },
+    {
+      "thing": "--color-background-card",
+      "value": "#10151c",
+      "source": "token",
+      "mode": "dark"
+    },
+    {
+      "thing": "--color-background-muted",
+      "value": "#232d3a",
+      "source": "token",
+      "mode": "dark"
+    },
+    {
+      "thing": "--color-text-primary",
+      "value": "#e6edf3",
+      "source": "token",
+      "mode": "dark"
+    },
+    {
+      "thing": "--color-text-secondary",
+      "value": "#a3adbb",
+      "source": "token",
+      "mode": "dark"
+    },
+    {
+      "thing": "--color-border",
+      "value": "#232d3a",
+      "source": "token",
+      "mode": "dark"
+    },
+    {
+      "thing": "success",
+      "value": "#7CFFB2",
+      "source": "dial"
+    },
+    {
+      "thing": "warning",
+      "value": "#FF7A1A",
+      "source": "dial"
+    },
+    {
+      "thing": "danger",
+      "value": "#E5484D",
+      "source": "dial"
+    },
+    {
+      "thing": "color",
+      "value": "#ffffff",
+      "source": "property",
+      "on": "toast",
+      "when": "type:error",
+      "mode": "dark"
+    },
+    {
+      "thing": "--color-success",
+      "value": "#4a996b",
+      "source": "token",
+      "mode": "light"
+    },
+    {
+      "thing": "--color-warning",
+      "value": "#de6a17",
+      "source": "token",
+      "mode": "light"
+    },
+    {
+      "thing": "background-color",
+      "value": "#40845c",
+      "source": "property",
+      "on": "progress-bar-fill",
+      "mode": "light"
+    },
+    {
+      "thing": "background-color",
+      "value": "#70ae8a",
+      "source": "property",
+      "on": "progress-bar-fill",
+      "mode": "dark"
+    },
+    {
+      "thing": "color",
+      "value": "#c7c7c7",
+      "source": "property",
+      "on": "toast",
+      "when": "type:error",
+      "mode": "light"
+    }
+  ],
+  "lifted": [],
+  "palette": "b42655e7216b75d4a877a887b93518bc25d7d7d3034ac8aea7c34e7aa37c9b60"
+}

@@ -5,6 +5,9 @@
     "*.md",
     "packages/api-contract/src/generated/api.ts",
     "packages/api-contract/src/openapi.json",
-    "**/next-env.d.ts"
+    "**/next-env.d.ts",
+    "apps/console/src/astryx-themes.ts",
+    "apps/console/src/themes/**",
+    "apps/console/themes/graveshift/**"
   ]
 }
