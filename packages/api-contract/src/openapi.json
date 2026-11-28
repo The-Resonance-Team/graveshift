@@ -1187,7 +1187,17 @@
     "/api/organizations/{orgId}/projects": {
       "get": {
         "operationId": "OrganizationsController_projects",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "orgId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "The Projects in one Organization.",
@@ -1236,7 +1246,17 @@
       },
       "post": {
         "operationId": "OrganizationsController_createProject",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "orgId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -1294,7 +1314,17 @@
     "/api/organizations/{orgId}/members": {
       "post": {
         "operationId": "OrganizationsController_addMember",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "orgId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -1318,7 +1348,17 @@
     "/api/organizations/{orgId}/oauth-clients": {
       "post": {
         "operationId": "OrganizationsController_createOAuthClient",
-        "parameters": [],
+        "parameters": [
+          {
+            "name": "orgId",
+            "required": true,
+            "in": "path",
+            "schema": {
+              "minLength": 1,
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -2004,6 +2044,7 @@
             "name": "offset",
             "required": false,
             "in": "query",
+            "description": "Decimal digits only.",
             "schema": {
               "minimum": 0,
               "default": 0,
@@ -2014,6 +2055,7 @@
             "name": "limit",
             "required": false,
             "in": "query",
+            "description": "Decimal digits only.",
             "schema": {
               "minimum": 1,
               "maximum": 100,
@@ -4325,35 +4367,162 @@
       },
       "RegisterDto": {
         "type": "object",
-        "properties": {}
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254
+          },
+          "password": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ]
       },
       "LoginDto": {
         "type": "object",
-        "properties": {}
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254
+          },
+          "password": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ]
       },
       "ChangePasswordDto": {
         "type": "object",
-        "properties": {}
+        "properties": {
+          "currentPassword": {
+            "type": "string"
+          },
+          "newPassword": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 256
+          }
+        },
+        "required": [
+          "currentPassword",
+          "newPassword"
+        ]
       },
       "OnboardingDto": {
         "type": "object",
-        "properties": {}
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "slug": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "name",
+          "slug"
+        ]
       },
       "CreateOrganizationDto": {
         "type": "object",
-        "properties": {}
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "slug": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "name",
+          "slug"
+        ]
       },
       "CreateProjectDto": {
         "type": "object",
-        "properties": {}
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "slug": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+            "maxLength": 80
+          }
+        },
+        "required": [
+          "name",
+          "slug"
+        ]
       },
       "AddMemberDto": {
         "type": "object",
-        "properties": {}
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "maxLength": 254
+          }
+        },
+        "required": [
+          "email"
+        ]
       },
       "CreateOAuthClientDto": {
         "type": "object",
-        "properties": {}
+        "properties": {
+          "projectId": {
+            "type": "string",
+            "pattern": "^\\d{1,20}$"
+          },
+          "scopes": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string",
+              "enum": [
+                "org:read",
+                "project:read",
+                "project:write",
+                "event:read",
+                "org:ci",
+                "incidents:read",
+                "diagnoses:read",
+                "audit:read",
+                "logs:read",
+                "metrics:read",
+                "fix:propose",
+                "events:publish"
+              ]
+            }
+          }
+        },
+        "required": [
+          "projectId",
+          "scopes"
+        ]
       },
       "CreateDeployDto": {
         "type": "object",
@@ -4381,6 +4550,7 @@
           "dateFinished": {
             "format": "date-time",
             "type": "string",
+            "nullable": true,
             "example": "2026-11-22T07:05:00.000Z"
           },
           "url": {

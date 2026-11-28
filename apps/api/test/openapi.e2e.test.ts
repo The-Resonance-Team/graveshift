@@ -50,6 +50,34 @@ describe('OpenAPI document (e2e)', () => {
     expect(JSON.stringify(schemas?.FixNowRequestDto)).toContain('note');
   });
 
+  test.each([
+    ['RegisterDto', ['email', 'password']],
+    ['LoginDto', ['email', 'password']],
+    ['ChangePasswordDto', ['currentPassword', 'newPassword']],
+    ['OnboardingDto', ['name', 'slug']],
+    ['CreateOrganizationDto', ['name', 'slug']],
+    ['CreateProjectDto', ['name', 'slug']],
+    ['AddMemberDto', ['email']],
+    ['CreateOAuthClientDto', ['projectId', 'scopes']],
+  ] as const)('documents the required fields of %s', (name, fields) => {
+    const schema = createOpenApiDocument(app).components?.schemas?.[name];
+    if (schema === undefined || '$ref' in schema) throw new Error(`Missing schema ${name}`);
+    expect(Object.keys(schema.properties ?? {}).sort()).toEqual([...fields].sort());
+    expect(schema.required?.toSorted()).toEqual([...fields].sort());
+  });
+
+  test('keeps the Organization path parameter in the generated contract', () => {
+    const operation = createOpenApiDocument(app).paths['/api/organizations/{orgId}/projects']?.get;
+    expect(operation?.parameters).toContainEqual(
+      expect.objectContaining({
+        name: 'orgId',
+        required: true,
+        in: 'path',
+        schema: expect.objectContaining({ type: 'string' }),
+      }),
+    );
+  });
+
   test('hides the Swagger UI at /docs when NODE_ENV is production', async () => {
     const prodApp = await appWithNodeEnv('production');
     try {

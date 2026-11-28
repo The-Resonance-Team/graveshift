@@ -103,7 +103,13 @@ Wraith takes only Event envelopes. The pure Rule override engine remains distinc
 
 Structured logging is deferred to the production ticket.
 
-Every HTTP request boundary uses `class-validator` DTO classes. The global `ValidationPipe` sets `whitelist`, `forbidNonWhitelisted`, `transform` and 422, so an unknown field fails at the pipe. Zod is used for boot env config, domain schemas and OpenAPI response docs. Business conflicts remain 409 and unknown ids remain 404.
+Ordinary HTTP resource inputs use `class-validator` DTO classes and `class-transformer`. DTOs own request fields, field constraints, nested validation and input normalization. The global `ValidationPipe` sets `whitelist`, `forbidNonWhitelisted`, `transform` and 422, so an unknown field fails at the pipe. Custom DTO validators may delegate to canonical shared domain schemas. Services retain state-dependent checks such as Membership, Project ownership, grant authorization and allowed Work item transitions. Business conflicts remain 409 and unknown ids remain 404.
+
+The owner confirmed these scoped Zod exceptions on 2026-11-28: boot configuration, shared domain contracts (including persisted and outbound daemon data), MCP protocol schemas and OpenAPI response descriptions. MCP arguments and raw Sentry envelopes have protocol-specific validation; they are not ordinary resource DTO bodies. These project exceptions refine the team library baseline's boot-only wording.
+
+Request normalization happens before the service receives the DTO. Email is lowercased. Timestamp fields require complete ISO timestamps with seconds and a timezone (`Z` or an explicit offset), reject date-only, local-time, boolean and numeric inputs, and normalize to UTC. Event envelope normalization preserves fractional precision; Deployment fields become `Date` values. The optional unfinished Deployment timestamp retains its existing null support. Pagination accepts decimal digit strings only, with defaults for absent parameters: offset 0 and limit 20, an offset of at least 0, and a limit from 1 through 100.
+
+This API runs directly on Bun without the Swagger compiler plugin. Request DTOs therefore carry explicit Swagger property metadata so the generated OpenAPI client contract includes their fields and requiredness.
 
 ## Prisma migrations
 

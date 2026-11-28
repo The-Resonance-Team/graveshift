@@ -70,14 +70,13 @@ export class IdentityService {
   }
 
   async register(dto: RegisterDto): Promise<AccountProfile> {
-    const email = dto.email.toLowerCase();
-    if ((await this.repo.findAccountByEmail(email)) !== undefined) {
+    if ((await this.repo.findAccountByEmail(dto.email)) !== undefined) {
       throw new ConflictException('The account already exists');
     }
     let account;
     try {
       account = await this.repo.addAccount({
-        email,
+        email: dto.email,
         passwordHash: await Bun.password.hash(dto.password, { algorithm: 'argon2id' }),
         mustChangePassword: false,
       });
@@ -88,7 +87,7 @@ export class IdentityService {
   }
 
   async login(dto: LoginDto): Promise<{ access_token: string }> {
-    const account = await this.repo.findAccountByEmail(dto.email.toLowerCase());
+    const account = await this.repo.findAccountByEmail(dto.email);
     if (account === undefined || !(await Bun.password.verify(dto.password, account.passwordHash))) {
       throw new UnauthorizedException();
     }
@@ -165,7 +164,7 @@ export class IdentityService {
 
   async addMember(accountId: string, orgId: string, dto: AddMemberDto) {
     await this.requireOwner(accountId, orgId);
-    const account = await this.repo.findAccountByEmail(dto.email.toLowerCase());
+    const account = await this.repo.findAccountByEmail(dto.email);
     if (account === undefined) throw new NotFoundException('The registered Account was not found');
     try {
       await this.repo.addMemberToOrg(account.id, orgId, 'member');

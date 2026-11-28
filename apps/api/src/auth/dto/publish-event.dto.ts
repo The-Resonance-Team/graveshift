@@ -1,5 +1,6 @@
 import { ENVIRONMENT_PATTERN } from '@graveshift/core';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Transform } from 'class-transformer';
 import {
   IsISO8601,
   IsIn,
@@ -9,6 +10,8 @@ import {
   IsString,
   Matches,
 } from 'class-validator';
+
+import { normalizeTimestamp } from '../../common/transformers/timestamp';
 
 export class PublishEventDto {
   @ApiProperty()
@@ -41,7 +44,8 @@ export class PublishEventDto {
   severity!: 'info' | 'warning' | 'critical';
 
   @ApiProperty({ format: 'date-time' })
-  @IsISO8601()
+  @Transform(({ value }: { value: unknown }) => normalizeTimestamp(value), { toClassOnly: true })
+  @IsISO8601({ strict: true, strictSeparator: true })
   observedAt!: string;
 
   @ApiProperty()

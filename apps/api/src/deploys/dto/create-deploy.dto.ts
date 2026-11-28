@@ -1,6 +1,6 @@
 import { ENVIRONMENT_PATTERN } from '@graveshift/core';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { Type } from 'class-transformer';
+import { Transform, Type } from 'class-transformer';
 import {
   IsDate,
   IsOptional,
@@ -10,6 +10,8 @@ import {
   MaxLength,
   MinLength,
 } from 'class-validator';
+
+import { transformTimestampDate } from '../../common/transformers/timestamp';
 
 export const DEPLOYMENT_ID_PATTERN = /^[0-9a-f]{40}$/;
 const NUMERIC_ID = /^\d{1,20}$/;
@@ -58,13 +60,15 @@ export class CreateDeployDto {
   @Matches(ENVIRONMENT_PATTERN)
   environment!: string;
 
-  @ApiProperty({ example: '2026-11-22T07:00:00.000Z' })
+  @ApiProperty({ format: 'date-time', example: '2026-11-22T07:00:00.000Z' })
+  @Transform(transformTimestampDate, { toClassOnly: true })
   @Type(() => Date)
   @IsDate()
   dateStarted!: Date;
 
-  @ApiPropertyOptional({ example: '2026-11-22T07:05:00.000Z' })
+  @ApiPropertyOptional({ format: 'date-time', nullable: true, example: '2026-11-22T07:05:00.000Z' })
   @IsOptional()
+  @Transform(transformTimestampDate, { toClassOnly: true })
   @Type(() => Date)
   @IsDate()
   dateFinished?: Date;
